@@ -173,7 +173,16 @@ let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
 function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; return d; } catch(e){ return {records:[],seq:0,customers:[]}; } }
-function saveDB(db){ localStorage.setItem(dkey(), JSON.stringify(db)); }
+/* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
+   When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
+const SYNC = {
+  url(){ try{ const q=new URL(location.href).searchParams.get("hub"); return q || (typeof window!=="undefined"&&window.CUSTOMPOS_HUB) || localStorage.getItem("custompos_hub") || ""; }catch(e){ return ""; } },
+  get on(){ return !!this.url(); }, applying:false,
+  push(){ if(!this.on) return; try{ fetch(this.url().replace(/\/$/,"")+"/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({db:loadDB()})}).then(r=>r.json()).then(j=>this.adopt(j.db)).catch(()=>{}); }catch(e){} },
+  pull(){ if(!this.on) return; try{ fetch(this.url().replace(/\/$/,"")+"/api/db").then(r=>r.json()).then(j=>this.adopt(j.db)).catch(()=>{}); }catch(e){} },
+  adopt(db){ if(!db) return; this.applying=true; try{ localStorage.setItem(dkey(), JSON.stringify(db)); }catch(e){} this.applying=false; render(); }
+};
+function saveDB(db){ localStorage.setItem(dkey(), JSON.stringify(db)); if(SYNC.on && !SYNC.applying) SYNC.push(); }
 let DB = loadDB();
 
 function setFlow(id){ localStorage.setItem("custompos_flow", id); FLOW=FLOWS[id]; draft=null; pending=null; DB=loadDB(); render(); }
@@ -541,5 +550,6 @@ function renderCheckout(app, station){
 }
 
 window.addEventListener("storage",(e)=>{ if(e.key===dkey()||e.key===skey()||e.key==="custompos_flow") render(); });
+if(SYNC.on){ SYNC.pull(); setInterval(()=>SYNC.pull(), 3000); }   // poll the hub when configured
 render();
 </script>
