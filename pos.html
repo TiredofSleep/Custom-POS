@@ -209,6 +209,8 @@ function firstPerformer(r){ const l=r.lines.find(x=>x.performer); return l?l.per
 // refund reverses every original tender back to itself (card → card, cash → cash) and marks the order REFUNDED
 function refundRecord(r){
   (r.tenders||[]).filter(t=>!t.refund).forEach(t=>{ if(t.type==="card" && payAdapter().refund){ payAdapter().refund(t.ref, Math.round(t.amount*100)); } });
+  // reversing a house-account charge also credits the customer's balance (A/R)
+  if(r.customer){ const cust=(DB.customers||[]).find(x=>x.phone===r.customer.phone); if(cust){ const acct=(r.tenders||[]).filter(t=>!t.refund&&t.type==="account").reduce((s,t)=>s+t.amount,0); if(acct){ cust.balance=+((cust.balance||0)-acct).toFixed(2); if(cust.balance<0) cust.balance=0; } } }
   (r.tenders||[]).filter(t=>!t.refund).slice().forEach(t=>{ r.tenders.push({ type:t.type, amount:+(-t.amount).toFixed(2), refund:true, ref:t.ref }); });
   r.status="REFUNDED"; r.refundedAt=new Date().toISOString().slice(11,16);
 }
@@ -305,12 +307,13 @@ function renderReport(app, station){
       r.lines.forEach(l=>{ items += l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty; }); }
     (r.tenders||[]).forEach(t=>{ byTender[t.type]=(byTender[t.type]||0)+t.amount; });   // refund pushes offsetting negative tenders, so this nets
   });
-  const collected=Object.values(byTender).reduce((s,v)=>s+v,0);
+  const onAccount=byTender.account||0;   // charged to house accounts today — money owed, not money collected
+  const collected=Object.keys(byTender).filter(k=>k!=="account").reduce((s,k)=>s+byTender[k],0);
   const sum=document.createElement("div"); sum.className="card";
   sum.innerHTML="<div class='row'><b>Sales summary</b></div>"
     + L("Orders", String(orders)) + L("Items sold", String(items))
     + L("Net sales", money(net)) + (disc?L("Discounts","−"+money(disc)):"") + L("Tax collected", money(tax)) + (tips?L("Tips", money(tips)):"") + (refunds?L("Refunds","−"+money(refunds)):"")
-    + L("Total collected", money(collected), true);
+    + L("Total collected", money(collected), true) + (onAccount?L("On account (A/R)", money(onAccount)):"");
   app.appendChild(sum);
   if(Object.keys(byTender).length){ const tc=document.createElement("div"); tc.className="card"; tc.innerHTML="<div class='row'><b>By tender</b></div>"+Object.keys(byTender).map(k=>L(k[0].toUpperCase()+k.slice(1), money(byTender[k]))).join(""); app.appendChild(tc); }
   if(Object.keys(byCat).length){ const cc=document.createElement("div"); cc.className="card"; cc.innerHTML="<div class='row'><b>By category</b></div>"+Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]).map(k=>L(k, money(byCat[k]))).join(""); app.appendChild(cc); }
@@ -344,6 +347,20 @@ function renderReport(app, station){
       rb.onclick=()=>{ const n=Number(qty.value); if(!n) return; DB.received=DB.received||{}; DB.received[item.id]=(DB.received[item.id]||0)+n; saveDB(DB); render(); };
       row.appendChild(qty); row.appendChild(rb); ic.appendChild(row); });
     app.appendChild(ic);
+  }
+  // ---- house accounts (A/R): who owes, with a record-payment to settle ----
+  if((FLOW.endpoints.payment.tenders||[]).includes("account")){
+    const owing=(DB.customers||[]).filter(c=>(c.balance||0)>0.0001);
+    const totalAR=owing.reduce((s,c)=>s+(c.balance||0),0);
+    const hc=document.createElement("div"); hc.className="card"; hc.innerHTML="<div class='row'><b>House accounts</b>"+(totalAR>0.0001?" <span class='pill flag'>"+money(totalAR)+" owed</span>":"")+"</div>";
+    if(!owing.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="No outstanding balances."; hc.appendChild(e); }
+    owing.forEach(c=>{ const row=document.createElement("div"); row.className="line";
+      row.innerHTML="<span>"+(c.name||c.phone)+" <small class='muted'>"+c.phone+"</small></span><span class='spacer'></span><span class='muted'>"+money(c.balance)+" owed</span>";
+      const amt=document.createElement("input"); amt.type="number"; amt.placeholder="$"; amt.style.width="70px"; amt.style.margin="0 6px"; amt.className="arpay"; amt.dataset.phone=c.phone;
+      const pb=document.createElement("button"); pb.textContent="Record payment"; pb.style.padding="4px 10px";
+      pb.onclick=()=>{ const n=Number(amt.value)||c.balance; const pay=Math.min(n, c.balance); c.balance=+((c.balance||0)-pay).toFixed(2); if(c.balance<=0.0001) c.balance=0; saveDB(DB); render(); };
+      row.appendChild(amt); row.appendChild(pb); hc.appendChild(row); });
+    app.appendChild(hc);
   }
   // ---- refunds (back-office: reverse a paid order to its original tender) ----
   const refundable=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED") && recordPaid(r)>0.0001);
@@ -768,6 +785,11 @@ function renderCheckout(app, station){
         const cb=document.createElement("button"); cb.textContent=(r.splitWays?"Share by card ":"Pay by card ")+money(payAmt); cb.style.margin="10px 0 0 8px";
         cb.onclick=()=>{ const res=payAdapter().charge(Math.round(payAmt*100)); if(res.status==="approved"){ r.tenders.push({type:"card",amount:payAmt,last4:res.last4,brand:res.brand,ref:res.ref}); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { flash("Card "+(res.message||"declined")); } };
         c.appendChild(cb);
+      }
+      // house account: put it on the customer's tab (A/R) — settles the order now, they pay it later
+      if((FLOW.endpoints.payment.tenders||[]).includes("account") && r.customer && r.customer.phone){
+        const ab=document.createElement("button"); ab.textContent="Charge to account "+money(payAmt); ab.style.margin="10px 0 0 8px";
+        ab.onclick=()=>{ r.tenders.push({type:"account",amount:payAmt}); const cust=DB.customers.find(x=>x.phone===r.customer.phone); if(cust){ cust.balance=+((cust.balance||0)+payAmt).toFixed(2); } if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); }; c.appendChild(ab);
       }
     }
     else if(r.status==="READY"){ const b=document.createElement("button"); b.className="good"; b.textContent="Complete (paid)"; b.style.marginTop="10px"; b.onclick=()=>{ r.status="PAID"; onPaid(r); saveDB(DB); render(); }; c.appendChild(b); }   // fully covered by deposit/gift/loyalty
