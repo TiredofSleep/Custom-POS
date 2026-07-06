@@ -279,6 +279,11 @@ function itemEditor(i){
       h('span',{class:'flab'},['86 limit']), h('input',{class:'sm',type:'number',value:it.par!=null?it.par:'', placeholder:'∞', oninput:e=>{ const v=Number(e.target.value); if(e.target.value===''||v<=0) delete it.par; else it.par=v; }}),
       h('span',{class:'flab'},['Taxable']), h('button',{class:(it.taxable!==false)?'on':'', onclick:()=>{ if(it.taxable===false) delete it.taxable; else it.taxable=false; render(); }},[(it.taxable!==false)?'✓ taxed':'tax-exempt'])
     ]),
+    h('div',{class:'fld'},[
+      h('span',{class:'flab'},['In stock']), h('input',{class:'sm',type:'number',value:it.stock!=null?it.stock:'', placeholder:'∞', oninput:e=>{ const v=e.target.value; if(v==='') delete it.stock; else it.stock=Number(v)||0; }}),
+      h('span',{class:'flab'},['Reorder at']), h('input',{class:'sm',type:'number',value:it.reorderAt!=null?it.reorderAt:'', placeholder:'0', oninput:e=>{ const v=e.target.value; if(v==='') delete it.reorderAt; else it.reorderAt=Number(v)||0; }}),
+      h('span',{class:'hint'},['track on-hand — warns when low, blocks when out'])
+    ]),
     h('div',{style:'margin-top:12px'},[ h('button',{class:'danger', onclick:()=>removeItem(i)},['Delete item']), h('button',{onclick:()=>{selItem=-1;render();}},['Done']) ])
   ]);
 }
