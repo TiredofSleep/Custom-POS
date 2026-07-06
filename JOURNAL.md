@@ -460,4 +460,18 @@ POS: one ticket, and the burger showed up at the grill while the onion rings sho
 Arkadelphia restaurant, running on the same engine as the cleaner and the salon, from a template you can edit and
 own. Sixteen test suites, all green.
 
+### The boring parts that actually run a business
+*"Keep going with everything you know to do to help small businesses."* The fun primitives were done — routing,
+timers, flags, loyalty — but a POS that can't compute sales tax, print a receipt, or close out the drawer at
+night isn't a POS an owner can trust with the register. So we built the table stakes. **Sales tax** that applies
+to the *discounted* base (discount a $100 ticket 10% and the tax lands on $99, not $100), with per-line `taxable`
+so a gift card or a non-taxable service is left out of the math. **Discount buttons** the owner opts into. A
+**printable receipt** that itemizes subtotal, discount, tax, and total and says thank you. And the one every
+owner asks for on day one: an **end-of-day Z-report.** Bind any workstation as an *Office* and it totals the
+day — orders, items, net sales, discounts, tax collected, tips, total collected — then breaks it down **by
+tender** (cash vs card) and **by category**, and finishes with a **cash-drawer count**: here's the cash you
+should have, type in what you actually counted, and it tells you *balanced ✓*, *over +$2.00*, or *short $2.00*.
+All of it is still pure config — the report reads whatever the engine already recorded, so the cleaner, the
+café, and the burger joint each get their own Z-report for free. Eighteen suites, all green.
+
 *— to be continued —*
