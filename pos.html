@@ -74,6 +74,7 @@ const FLOWS = {
     branding:{ name:"Demo Counter", brandColor:"#1f6feb" },
     endpoints:{ customer:{persist:false}, payment:{tenders:["cash"], closeGate:"balanceLE0"} },
     timer:{ mode:"aging", warnSec:300, badSec:600, label:"prep" },   // ticket ages green->yellow->red
+    capacity:{ perOrderMins:4, max:3 },                              // live wait + cap on orders in the queue
     catalog:[
       {id:"c1", name:"Coffee", price:3.50, category:"drink", path:["bar"]},
       {id:"c2", name:"Latte",  price:4.75, category:"drink", path:["bar"],
@@ -126,7 +127,7 @@ const FLOWS = {
       {id:"counter",  type:"central",    label:"Front Counter",     view:{money:true}},
       {id:"diagnose", type:"production",  label:"Diagnostics",      view:{money:false}},
       {id:"repair",   type:"production",  label:"Repair Bench",     view:{money:false}},
-      {id:"ready",    type:"staging",     label:"Ready Shelf",      view:{money:false}},
+      {id:"ready",    type:"staging",     label:"Ready Shelf",      view:{money:false}, checklist:["Powered on & tested","Cleaned","Case sealed"]},
       {id:"board",    type:"board",       label:"Job Board",        view:{money:false}},
       {id:"tracker",  type:"tracker",     label:"Customer Tracker", view:{money:false, external:true}}
     ]
@@ -374,7 +375,18 @@ function renderIntake(app, station){
     db.textContent=(draft.takeDeposit?"✓ ":"")+"Take "+dep.pct+"% deposit "+money(amt);
     db.onclick=()=>{ draft.takeDeposit=!draft.takeDeposit; render(); }; app.appendChild(db);
   }
-  const send=document.createElement("button"); send.className="primary"; send.textContent="Send order →"; send.disabled=!draft.lines.length||!!pending; send.onclick=sendDraft; app.appendChild(send);
+  // capacity & pacing: a live wait estimate, and a hard cap on orders in the queue
+  let atCapacity=false;
+  const cap=FLOW.capacity;
+  if(cap){
+    const active=DB.records.filter(r=>r.status==="INPROGRESS").length;
+    atCapacity = active>=cap.max;
+    const info=document.createElement("div"); info.className="muted"; info.style.margin="6px 0";
+    info.textContent = atCapacity ? "⛔ At capacity ("+active+" in the queue) — hold new orders"
+                                  : "~"+(active*cap.perOrderMins)+" min wait · "+active+" in the queue";
+    app.appendChild(info);
+  }
+  const send=document.createElement("button"); send.className="primary"; send.textContent="Send order →"; send.disabled=!draft.lines.length||!!pending||atCapacity; send.onclick=sendDraft; app.appendChild(send);
 }
 
 function configPanel(station){
@@ -450,9 +462,18 @@ function renderPipeline(app, station){
       const flagHtml=(l.flags||[]).map(f=>{ hasFlags=true; return " <span class='pill flag'>⚠ "+f+"</span>"; }).join("");
       const perfHtml=l.performer?" <span class='pill'>"+l.performer+"</span>":"";
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+perfHtml+flagHtml+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"; c.appendChild(row); });
+    // checklist-as-gate: steps at this station must all be done before the record can advance
+    let checksOk=true;
+    if(station.checklist && station.checklist.length){
+      r.checks=r.checks||{}; const done=r.checks[station.id]||{};
+      const wrap=document.createElement("div"); wrap.className="mgroup"; wrap.innerHTML="<div class='lbl'>Checklist (required)</div>";
+      const opts=document.createElement("div"); opts.className="opts";
+      station.checklist.forEach((step,i)=>{ const on=!!done[i]; if(!on) checksOk=false; const bb=document.createElement("button"); if(on) bb.className="sel"; bb.textContent=(on?"✓ ":"○ ")+step; bb.onclick=()=>{ r.checks=r.checks||{}; r.checks[station.id]=r.checks[station.id]||{}; r.checks[station.id][i]=!on; saveDB(DB); render(); }; opts.appendChild(bb); });
+      wrap.appendChild(opts); c.appendChild(wrap);
+    }
     const needAck = hasFlags && !r.acked;   // acknowledged once per record; persists + broadcasts
     if(needAck){ const a=document.createElement("button"); a.className="primary"; a.textContent="⚠ Acknowledge & continue"; a.style.marginTop="10px"; a.onclick=()=>{ r.acked=true; saveDB(DB); render(); }; c.appendChild(a); }
-    else { const b=document.createElement("button"); b.className="good"; b.textContent="Mark done here"; b.style.marginTop="10px"; b.onclick=()=>{ mine.forEach(l=>l.stage++); afterChange(r); render(); }; c.appendChild(b); }
+    else { const b=document.createElement("button"); b.className="good"; b.textContent="Mark done here"; b.style.marginTop="10px"; b.disabled=!checksOk; b.onclick=()=>{ mine.forEach(l=>l.stage++); afterChange(r); render(); }; c.appendChild(b); }
     app.appendChild(c); });
 }
 

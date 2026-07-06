@@ -38,8 +38,11 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   const benchSeesBoth = /Phone screen/.test(bench) && /Battery/.test(bench);
   await pickBtn(/Mark done here/);        // already acknowledged at diagnostics (once per ticket) -> no re-gate
 
-  // Ready Shelf: finish -> READY
+  // Ready Shelf: a QC checklist gates completion — tick all steps, then finish -> READY
   await changeTo(/Ready Shelf/);
+  await p.getByRole('button',{name:/Powered on/}).click();
+  await p.getByRole('button',{name:/Cleaned/}).click();
+  await p.getByRole('button',{name:/Case sealed/}).click();
   await pickBtn(/Mark done here/);
 
   // Front Counter: balance after 50% deposit, take balance, close
