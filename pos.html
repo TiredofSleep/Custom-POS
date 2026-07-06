@@ -181,7 +181,7 @@ function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FL
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[]}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[]}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -644,6 +644,20 @@ function renderIntake(app, station){
     app.appendChild(info);
   }
   const send=document.createElement("button"); send.className="primary"; send.textContent="Send order →"; send.disabled=!draft.lines.length||!!pending||atCapacity; send.onclick=sendDraft; app.appendChild(send);
+  // quotes / estimates: save the current draft to come back to, or load a saved one into the order
+  if(FLOW.endpoints.quotes){
+    const sq=document.createElement("button"); sq.textContent="Save as quote"; sq.style.margin="0 0 0 8px"; sq.disabled=!draft.lines.length||!!pending;
+    sq.onclick=()=>{ DB=loadDB(); DB.quoteSeq=(DB.quoteSeq||0)+1; DB.quotes.push({ id:"Q"+DB.quoteSeq, num:DB.quoteSeq, lines:draft.lines.map(l=>({...l})), customer:draft.customer||null, total:+draft.lines.reduce((s,l)=>s+l.price*l.qty,0).toFixed(2), createdAt:new Date().toISOString().slice(11,16) }); draft={lines:[]}; saveDB(DB); render(); }; app.appendChild(sq);
+    const quotes=DB.quotes||[];
+    if(quotes.length){ const qc=document.createElement("div"); qc.className="card"; qc.style.marginTop="12px"; qc.innerHTML="<div class='row'><b>Saved quotes</b></div>";
+      quotes.forEach(q=>{ const row=document.createElement("div"); row.className="line";
+        row.innerHTML="<span>Quote #"+q.num+" · "+q.lines.length+" item(s) · "+money(q.total)+(q.customer?" <small class='muted'>"+(q.customer.name||q.customer.phone)+"</small>":"")+"</span><span class='spacer'></span>";
+        const load=document.createElement("button"); load.className="good"; load.textContent="Load"; load.style.padding="4px 10px";
+        load.onclick=()=>{ draft={ lines:q.lines.map(l=>({...l, stage:0})), customer:q.customer||undefined }; DB=loadDB(); DB.quotes=DB.quotes.filter(x=>x.id!==q.id); saveDB(DB); render(); }; row.appendChild(load);
+        const del=document.createElement("button"); del.textContent="×"; del.style.padding="4px 10px"; del.style.marginLeft="6px"; del.onclick=()=>{ DB=loadDB(); DB.quotes=DB.quotes.filter(x=>x.id!==q.id); saveDB(DB); render(); }; row.appendChild(del);
+        qc.appendChild(row); });
+      app.appendChild(qc); }
+  }
 }
 
 function configPanel(station){
