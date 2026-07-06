@@ -102,6 +102,55 @@ salon, an auto-repair shop, a bakery with custom cakes, a farmers-market craft b
 phone/computer repair shop, and a pet groomer — *through* the interview as role-played owners, each answering
 honestly and then critiquing hard: where did it fail them, what did their trade need that no question asked,
 what wording assumed a different kind of business? The point was to find the gaps *before* writing anything in
-stone. (Findings and the design changes they drove: next entry.)
+stone.
+
+### What 12 businesses taught us
+The result was humbling in the best way. The scorecard: the **dry cleaner** (the trade the tool grew from)
+scored *mostly works*. The **full-service restaurant** scored a flat *no* — it can't run table service at all.
+The **other ten all scored "partly,"** and every one of them said the same thing in different words: *I had to
+force myself into a box that isn't my business, and doing so quietly turned off the things I actually run on.*
+
+Three root problems, and they were structural, not cosmetic:
+
+1. **The defining question was pick-ONE, but almost every real business runs two or more lifecycles at once.**
+   A salon does services *and* sells retail product. A bakery has a walk-in case *and* custom-cake orders with
+   deposits. A repair shop has a workbench *and* an accessory counter. A bookstore sells off the shelf *and*
+   special-orders titles you come back for. Forcing a single choice silently deleted half of each business.
+
+2. **The three "what you sell" options missed whole worlds:** made-to-order food (cook it in a minute, hand it
+   over), dine-in with **open tabs** that stay open for an hour and get split, **booked appointments** with a
+   real calendar, and **service + parts** repair (estimate → authorize → order parts → bill labor → invoice).
+   None of those fit "sell from stock," "perform a service," or "take an item in and return it."
+
+3. **The tool's own origin was leaking.** Words like *garment, rack, heat-seal, bag-split, assemble* showed up
+   for businesses that have none of those things — and every non-cleaner said the same: it made them distrust
+   that the tool was built for them. A restaurant doesn't have garments; it has *tickets, tabs, covers, courses,
+   fire, 86, comp, cashout.* The vocabulary has to be theirs, not ours.
+
+And a pile of features turned out to be **near-universal, not niche** — priced modifiers, discounts/markdowns,
+deposits, tips, gift cards, loyalty, product variants (size × color), mixed tax on one ticket, and **offline
+card payments** (existential for the cart and the market booth, do-or-die for a restaurant mid-rush). We'd
+buried these as afterthoughts or missed them entirely.
+
+### The redesign it drove
+The clean "three rings stacked in a line" model was really the *dry cleaner's* shape wearing a general costume.
+The test replaced it with something truer:
+
+- **A lean core** (ring up, record, own & export your data — unchanged).
+- **A shared "common commerce" layer** every business can draw from — modifiers, discounts, deposits, tips,
+  gift cards, loyalty, variants, mixed / tax-included pricing, refunds — because the test proved these aren't
+  vertical, they're universal.
+- **Lifecycle-family "packs"** you can enable *more than one of at once:* Retail, Food & Hospitality,
+  Appointments & Services, Take-in Service & Repair (the cleaner's world, generalized to also cover auto,
+  device repair, and pet grooming), and Make-to-Order / Special-Order.
+- **A trade-first wizard:** you pick the closest trade ("food cart," "café," "salon," "repair shop"…), which
+  preloads *your* vocabulary and a sensible default set, then a short multi-select interview adjusts it. One
+  click as "mobile food cart" now hides every irrelevant question instead of making you wade through laundry
+  ones.
+
+The meta-lesson, written down so we don't forget it: **a tool built for one trade quietly assumes that trade.**
+The only way to build something genuinely general is to keep dragging it in front of businesses that aren't the
+one it came from — and to believe them when they tell you it doesn't fit. Twelve fake owners just saved us from
+shipping a dry-cleaner-shaped "universal" POS. We'll keep doing this every time the design moves.
 
 *— to be continued —*
