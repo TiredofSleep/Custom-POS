@@ -634,4 +634,12 @@ Clock, and ready-texts. Pick a trade, type your name, hit build, and the POS you
 kind of shop works — every one of the six templates builds and runs its live preview with zero console errors.
 Thirty-one suites, all green.
 
+### Bring your own list
+The scariest sentence in switching POS systems is *"and then re-type your two thousand items."* So the builder
+learned to **import**. Open the items step, paste a CSV — `name, price, category, barcode`, one per line — hit
+Import, and they're all in your catalog. It auto-detects and skips a header row, defaults a missing price to
+zero and a missing category to "item", and treats the barcode as optional, so whatever a shop can export from
+its old till or a spreadsheet drops straight in. It's the answer to one of the trust questions the whole project
+is built around — *how do I move my existing data in?* — and now it's a paste away. Thirty-two suites, all green.
+
 *— to be continued —*

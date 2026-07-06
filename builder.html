@@ -169,7 +169,22 @@ const STATION_TYPES = [
 const PATH_TYPES = ["production","staging"];   // the station types an item can flow THROUGH
 
 /* ---- wizard state ---- */
-let step=1, tradeKey=null, cfg=null, selStation=-1, selItem=-1;
+let step=1, tradeKey=null, cfg=null, selStation=-1, selItem=-1, showImport=false;
+function flashB(msg){ let t=document.getElementById('bToast'); if(!t){ t=document.createElement('div'); t.id='bToast'; t.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1f6feb;color:#fff;padding:10px 16px;border-radius:8px;z-index:99;font-weight:600'; document.body.appendChild(t); } t.textContent=msg; t.style.display='block'; }
+// bulk item import: parse "name, price, category, barcode" rows (header auto-detected) into the catalog
+function importItemsCSV(text){
+  const rows=(text||'').split(/\r?\n/).map(r=>r.trim()).filter(Boolean);
+  let added=0;
+  rows.forEach((row,i)=>{
+    const c=row.split(',').map(s=>s.trim());
+    if(i===0 && /name/i.test(c[0]) && (/(price|cost)/i.test(c[1]||''))) return;   // skip a header row
+    if(!c[0]) return;
+    const it={ id:uid(), name:c[0], price:Number(c[1])||0, category:c[2]||'item', path:[] };
+    if(c[3]) it.barcode=c[3];
+    cfg.catalog.push(it); added++;
+  });
+  return added;
+}
 function chooseTrade(k){ tradeKey=k; cfg=JSON.parse(JSON.stringify(TEMPLATES[k])); selStation=-1; selItem=-1; step=2; render(); }
 
 /* ---- flow preview (clickable stations) ---- */
@@ -436,7 +451,19 @@ function render(){
     // Items
     app.appendChild(h('h2',{},['Items & services — click one to set what follows it']));
     const iChips=h('div',{class:'chips'}, cfg.catalog.map((it,i)=>h('div',{class:'chip'+(selItem===i?' sel':''), onclick:()=>selectItem(i)},[ it.name, h('span',{class:'t'},['$'+it.price+(it.path&&it.path.length?' · '+it.path.length+' steps':'')]) ])));
-    app.appendChild(iChips); app.appendChild(h('button',{onclick:addItem},['+ Add item']));
+    app.appendChild(iChips);
+    app.appendChild(h('button',{onclick:addItem},['+ Add item']));
+    app.appendChild(h('button',{onclick:()=>{ showImport=!showImport; render(); }, style:'margin-left:8px'},[showImport?'Close import':'⇪ Import items (CSV)']));
+    if(showImport){
+      app.appendChild(h('div',{class:'panel', style:'margin-top:10px'},[
+        h('div',{class:'fld'},[ h('span',{class:'flab'},['Paste CSV']), h('span',{class:'hint'},['one item per line: name, price, category, barcode — a header row is detected and skipped'])]),
+        h('textarea',{id:'csvBox', class:'nm', style:'width:100%;min-height:96px', placeholder:'Apple, 1.00, produce, 1001\nBanana, 0.50, produce, 1002'}, []),
+        h('div',{style:'margin-top:8px'},[
+          h('button',{class:'primary', onclick:()=>{ const n=importItemsCSV(document.getElementById('csvBox').value); flashB(n?('Imported '+n+' item'+(n>1?'s':'')):'Nothing to import — check the format'); showImport=false; render(); }},['Import']),
+          h('span',{class:'hint', style:'margin-left:10px'},['price defaults to 0, category to "item"; barcode is optional'])
+        ])
+      ]));
+    }
     if(selItem>=0 && cfg.catalog[selItem]) app.appendChild(itemEditor(selItem));
     // Build
     app.appendChild(h('div',{style:'margin-top:18px'},[
