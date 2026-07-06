@@ -85,7 +85,8 @@ const FLOWS = {
       {id:"order",    type:"intake",      label:"Order Counter", view:{money:true}},
       {id:"bar",      type:"production",  label:"Bar",           view:{money:false}},
       {id:"kitchen",  type:"production",  label:"Kitchen",       view:{money:false}},
-      {id:"checkout", type:"fulfillment", label:"Checkout",      view:{money:true}}
+      {id:"checkout", type:"fulfillment", label:"Checkout",      view:{money:true}},
+      {id:"board",    type:"board",       label:"Expo Board",    view:{money:false}}
     ]
   },
   cleaners: {
@@ -101,12 +102,25 @@ const FLOWS = {
       {id:"g3", name:"Wash & Fold", price:2.75, category:"wf", path:["rack"]}
     ],
     stations:[
-      {id:"counter",  type:"central",    label:"Front Counter", view:{money:true}},
-      {id:"assembly", type:"production",  label:"Assembly",     view:{money:false}},
-      {id:"rack",     type:"staging",     label:"Rack",         view:{money:false}}
+      {id:"counter",  type:"central",    label:"Front Counter",    view:{money:true}},
+      {id:"assembly", type:"production",  label:"Assembly",        view:{money:false}},
+      {id:"rack",     type:"staging",     label:"Rack",            view:{money:false}},
+      {id:"board",    type:"board",       label:"Status Board",    view:{money:false}},
+      {id:"tracker",  type:"tracker",     label:"Customer Tracker", view:{money:false, external:true}}
     ]
   }
 };
+
+/* Module registry: enabling a station of a type auto-enables its module (the module contract). */
+const MODULES = {
+  core:    { label:"Core (intake/checkout)", stationTypes:["intake","fulfillment","central"] },
+  makers:  { label:"Production / kitchen",    stationTypes:["production"] },
+  staging: { label:"Staging / rack",          stationTypes:["staging"] },
+  board:   { label:"Status board",            stationTypes:["board"] },
+  portal:  { label:"Customer tracker",        stationTypes:["tracker"] }
+};
+function enabledModules(flow){ const types=new Set(flow.stations.map(s=>s.type)); return Object.keys(MODULES).filter(m=>MODULES[m].stationTypes.some(t=>types.has(t))); }
+const STATUS_LABEL = { INPROGRESS:"In progress", READY:"Ready for pickup", PAID:"Ready for pickup", CLOSED:"Picked up" };
 
 /* ============================================================================ ENGINE */
 function flowId(){ return localStorage.getItem("custompos_flow") || "counter"; }
@@ -166,6 +180,36 @@ function render(){
   else if(station.type==="production" || station.type==="staging") renderPipeline(app, station);
   else if(station.type==="fulfillment") renderCheckout(app, station);
   else if(station.type==="central"){ renderIntake(app, station); renderCheckout(app, station); }
+  else if(station.type==="board")       renderBoard(app, station);
+  else if(station.type==="tracker")     renderTracker(app, station);
+}
+
+/* STATUS BOARD — internal broadcast: every live record by status, read-only, with location + clock */
+function renderBoard(app, station){
+  app.innerHTML="<h2>"+station.label+"</h2>";
+  ["In progress","Ready","Completed"].forEach(lbl=>{
+    const sts = lbl==="In progress"?["INPROGRESS"]:lbl==="Ready"?["READY","PAID"]:["CLOSED"];
+    const recs=DB.records.filter(r=>sts.includes(r.status));
+    const h=document.createElement("h2"); h.textContent=lbl+" ("+recs.length+")"; h.style.fontSize="13px"; app.appendChild(h);
+    if(!recs.length){ const e=document.createElement("div"); e.className="muted"; e.style.margin="0 0 8px"; e.textContent="—"; app.appendChild(e); }
+    recs.forEach(r=>{ const c=document.createElement("div"); c.className="card";
+      c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+      r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const loc=lineComplete(l)?"ready":"at "+l.path[l.stage];
+        row.innerHTML="<span>"+l.qty+"× "+l.name+"</span><span class='spacer'></span><span class='muted'>"+loc+"</span>"; c.appendChild(row); });
+      app.appendChild(c); });
+  });
+}
+
+/* CUSTOMER TRACKER — external projection: order # + status label + item names ONLY. No money, no internal detail. */
+function renderTracker(app, station){
+  app.innerHTML="<h2>"+station.label+"</h2><p class='muted'>Your order status</p>";
+  const recs=DB.records.filter(r=>r.status!=="CLOSED");
+  if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No active orders."; app.appendChild(e); }
+  recs.forEach(r=>{ const c=document.createElement("div"); c.className="card";
+    const ready=(r.status==="READY"||r.status==="PAID");
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b><span class='spacer'></span><span class='pill "+(ready?"clock good":"")+"'>"+(STATUS_LABEL[r.status]||r.status)+"</span></div>"
+      + "<div class='muted' style='margin-top:6px'>"+r.lines.map(l=>l.qty+"× "+l.name).join(", ")+"</div>";   // items only — no prices
+    app.appendChild(c); });
 }
 
 function renderPicker(app){
@@ -173,6 +217,9 @@ function renderPicker(app){
   const bar=document.createElement("div"); bar.className="flowsel";
   Object.keys(FLOWS).forEach(id=>{ const b=document.createElement("button"); if(id===flowId()) b.className="sel";
     b.innerHTML=FLOWS[id].label+" <small class='muted'>("+FLOWS[id].topology+")</small>"; b.onclick=()=>setFlow(id); bar.appendChild(b); });
+  const mods=document.createElement("p"); mods.className="muted"; mods.style.margin="-8px 0 14px";
+  mods.innerHTML="Modules enabled by your stations: <b>"+enabledModules(FLOW).map(m=>MODULES[m].label).join(" · ")+"</b>";
+  fs.appendChild(mods);
   fs.appendChild(bar); app.appendChild(fs);
   const wrap=document.createElement("div"); wrap.className="picker";
   wrap.innerHTML="<h2>Set up this device</h2><p class='muted'>Which workstation is this? Open in another tab/device and pick a different station to watch an order flow between them.</p>";
