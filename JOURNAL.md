@@ -545,4 +545,13 @@ just records the message ships by default so a downloaded POS works offline and 
 (Twilio and friends) does the real send server-side — the browser never holds an API key, same discipline as card
 numbers. The builder exposes it as a one-tap business toggle. Twenty-three suites, all green.
 
+### "Can we split it?"
+The table asks it every night, so the register can now answer. Turn on **split checks** and a ready order offers
+*2 / 3 / 4 ways*; pick three and it shows *3 shares · $10.00 each · 0 of 3 paid*, and the pay button becomes
+*Take share $10.00*. Each tap collects one equal share — and shares don't have to match: one guest pays cash,
+the next by card, the engine just keeps knocking $10 off the balance until it hits zero and closes the ticket.
+The last share always settles to the exact remaining penny, so a $30 split three ways never leaves a stray cent.
+It rides on the same multi-tender balance math the checkout already had; splitting is just a nicer way to reach
+zero. One builder toggle turns it on. Twenty-four suites, all green.
+
 *— to be continued —*
