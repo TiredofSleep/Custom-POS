@@ -30,6 +30,7 @@
   button:hover { border-color:var(--brand); } button:disabled { opacity:.4; cursor:default; }
   button.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
   button.good { background:var(--good); border-color:var(--good); color:#fff; }
+  button.danger { border-color:var(--bad); color:var(--bad); }
   button.sel { border-color:var(--brand); color:var(--brand); background:#1b2536; }
   .tile { display:inline-block; min-width:150px; text-align:left; margin:5px 6px 0 0; }
   .tile small { display:block; color:var(--dim); }
@@ -203,6 +204,12 @@ function recordTotal(r){ return +(lineSubtotal(r) - recordDiscount(r) + recordTa
 function recordPaid(r){ return (r.tenders||[]).reduce((s,t)=> s + t.amount, 0); }
 function recordBalance(r){ return +(recordTotal(r) - recordPaid(r)).toFixed(2); }
 function firstPerformer(r){ const l=r.lines.find(x=>x.performer); return l?l.performer:null; }
+// refund reverses every original tender back to itself (card → card, cash → cash) and marks the order REFUNDED
+function refundRecord(r){
+  (r.tenders||[]).filter(t=>!t.refund).forEach(t=>{ if(t.type==="card" && payAdapter().refund){ payAdapter().refund(t.ref, Math.round(t.amount*100)); } });
+  (r.tenders||[]).filter(t=>!t.refund).slice().forEach(t=>{ r.tenders.push({ type:t.type, amount:+(-t.amount).toFixed(2), refund:true, ref:t.ref }); });
+  r.status="REFUNDED"; r.refundedAt=new Date().toISOString().slice(11,16);
+}
 
 /* Processor-agnostic PAYMENTS interface (matches docs/PAYMENTS-MODULE.md). A simulator adapter ships by
    default so a downloaded POS takes card payments out of the box; the certified CardConnect adapter swaps in
@@ -215,7 +222,8 @@ const PAYMENTS = {
       if(cents%100===13) return { status:"declined", message:"declined (demo: any $_.13 declines)" };  // demo decline path
       const brands=["Visa","Mastercard","Amex"];
       return { status:"approved", ref:"SIM"+cents, auth:"OK", token:"tok_sim", brand:brands[cents%3], last4:String(cents).slice(-4).padStart(4,"0") };
-    }
+    },
+    refund(ref, amountCents){ return { status:"refunded", ref:(ref||"SIM")+"-R", amount:Math.round(amountCents) }; }
   }
 };
 function payAdapter(){ const pr=(FLOW.endpoints.payment&&FLOW.endpoints.payment.provider)||"sim"; return PAYMENTS[pr]||PAYMENTS.sim; }
@@ -268,19 +276,21 @@ function render(){
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
 function renderReport(app, station){
   app.innerHTML="<h2>"+station.label+" — today</h2>";
-  const done=DB.records.filter(r=>r.status==="PAID"||r.status==="CLOSED");
+  const done=DB.records.filter(r=>r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED");
   const L=(lab,val,bold)=>"<div class='line'>"+(bold?"<b>":"<span>")+lab+(bold?"</b>":"</span>")+"<span class='spacer'></span>"+(bold?"<b>":"<span>")+val+(bold?"</b>":"</span>")+"</div>";
-  // ---- daily sales summary ----
-  let net=0, tax=0, tips=0, disc=0, items=0; const byTender={}, byCat={};
-  done.forEach(r=>{ net += lineSubtotal(r)-recordDiscount(r); tax += recordTax(r); tips += r.tip||0; disc += recordDiscount(r);
-    r.lines.forEach(l=>{ items += l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty; });
-    (r.tenders||[]).forEach(t=>{ byTender[t.type]=(byTender[t.type]||0)+t.amount; });
+  // ---- daily sales summary (refund-aware: a refunded order's sale nets out, its reversed tender nets its tenders) ----
+  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0; const byTender={}, byCat={};
+  done.forEach(r=>{ const rf=r.status==="REFUNDED";
+    if(rf){ refunds += recordTotal(r); }
+    else { orders++; net += lineSubtotal(r)-recordDiscount(r); tax += recordTax(r); tips += r.tip||0; disc += recordDiscount(r);
+      r.lines.forEach(l=>{ items += l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty; }); }
+    (r.tenders||[]).forEach(t=>{ byTender[t.type]=(byTender[t.type]||0)+t.amount; });   // refund pushes offsetting negative tenders, so this nets
   });
   const collected=Object.values(byTender).reduce((s,v)=>s+v,0);
   const sum=document.createElement("div"); sum.className="card";
   sum.innerHTML="<div class='row'><b>Sales summary</b></div>"
-    + L("Orders", String(done.length)) + L("Items sold", String(items))
-    + L("Net sales", money(net)) + (disc?L("Discounts","−"+money(disc)):"") + L("Tax collected", money(tax)) + (tips?L("Tips", money(tips)):"")
+    + L("Orders", String(orders)) + L("Items sold", String(items))
+    + L("Net sales", money(net)) + (disc?L("Discounts","−"+money(disc)):"") + L("Tax collected", money(tax)) + (tips?L("Tips", money(tips)):"") + (refunds?L("Refunds","−"+money(refunds)):"")
     + L("Total collected", money(collected), true);
   app.appendChild(sum);
   if(Object.keys(byTender).length){ const tc=document.createElement("div"); tc.className="card"; tc.innerHTML="<div class='row'><b>By tender</b></div>"+Object.keys(byTender).map(k=>L(k[0].toUpperCase()+k.slice(1), money(byTender[k]))).join(""); app.appendChild(tc); }
@@ -293,6 +303,17 @@ function renderReport(app, station){
   const diff=document.createElement("span"); diff.className="muted"; diff.style.marginLeft="10px";
   inp.oninput=()=>{ const c=Number(inp.value); if(inp.value===""){ diff.textContent=""; return; } const d=+(c-(byTender.cash||0)).toFixed(2); diff.textContent = d===0?"balanced ✓":(d>0?"over +"+money(d):"short "+money(-d)); diff.style.color = d===0?"var(--good)":"var(--warn)"; };
   cnt.appendChild(inp); cnt.appendChild(diff); dc.appendChild(cnt); app.appendChild(dc);
+  // ---- refunds (back-office: reverse a paid order to its original tender) ----
+  const refundable=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED") && recordPaid(r)>0.0001);
+  const rc=document.createElement("div"); rc.className="card"; rc.innerHTML="<div class='row'><b>Refund an order</b></div>";
+  if(!refundable.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="No paid orders to refund."; rc.appendChild(e); }
+  refundable.forEach(r=>{ const tl=[...new Set((r.tenders||[]).map(t=>t.type))].join(", ");
+    const row=document.createElement("div"); row.className="line";
+    row.innerHTML="<span>#"+r.number+" · "+money(recordPaid(r))+" <small class='muted'>"+tl+"</small></span><span class='spacer'></span>";
+    const rb=document.createElement("button"); rb.className="danger"; rb.textContent="Refund"; rb.style.padding="4px 10px";
+    rb.onclick=()=>{ if(!confirm("Refund #"+r.number+" "+money(recordPaid(r))+" to "+tl+"?")) return; refundRecord(r); saveDB(DB); render(); };
+    row.appendChild(rb); rc.appendChild(row); });
+  app.appendChild(rc);
   // ---- commission (only when the trade pays commission) ----
   const pct=(FLOW.commission&&FLOW.commission.pct)||0;
   if(FLOW.performers){

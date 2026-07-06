@@ -53,6 +53,14 @@ const FLOW = {
   await p.locator('#cashCount').fill('13');
   const over = /over \+\$2\.00/.test(await T());
 
+  // ---- refund the card order (#2) to its original tender ----
+  p.on('dialog', d => d.accept());   // confirm() → yes
+  await p.getByRole('button',{name:/^Refund$/}).nth(1).click();   // second refundable order = the card one
+  const afterRefund = await T();
+  // one order remains (the cash sale); card nets out; a Refunds −$11 line appears; collected drops to $11
+  const refundOk = /Orders\s*1/.test(afterRefund) && /Refunds\s*−\$11\.00/.test(afterRefund)
+    && /Total collected\s*\$11\.00/.test(afterRefund) && /Card\s*\$0\.00/.test(afterRefund);
+
   await b.close();
   console.log('report:', rep.replace(/\n+/g,' | '));
   console.log('\n=== RESULTS ===');
@@ -63,6 +71,7 @@ const FLOW = {
   console.log('counted = expected -> balanced:', balanced);
   console.log('counted short -> "short $2.00":', short);
   console.log('counted over -> "over +$2.00":', over);
+  console.log('refund reverses card order (orders 1, refunds −$11, card nets $0, collected $11):', refundOk);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!salesOk||!tenderOk||!catOk||!drawerOk||!balanced||!short||!over?1:0);
+  process.exit(errors.length||!salesOk||!tenderOk||!catOk||!drawerOk||!balanced||!short||!over||!refundOk?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });

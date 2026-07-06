@@ -474,4 +474,15 @@ should have, type in what you actually counted, and it tells you *balanced ✓*,
 All of it is still pure config — the report reads whatever the engine already recorded, so the cleaner, the
 café, and the burger joint each get their own Z-report for free. Eighteen suites, all green.
 
+### When the sale has to go the other way
+Every real register has a **Refund** button, and the day the owner needs it is the day a customer is standing
+at the counter unhappy — so it has to be dead simple and it has to be honest. We put it in the back-office
+**Office** station (the manager view), not the front counter: pick a paid order, confirm the amount and tender,
+and the engine reverses **each tender back to itself** — a card sale refunds to card (through the same processor
+adapter that charged it), a cash sale to cash — and marks the order *REFUNDED*. The clever part is what it does
+to the day's numbers: the reversal posts offsetting negative tenders on the same order, so the Z-report's
+by-tender totals *net themselves* (charge $11 to card, refund $11, card shows $0), a **Refunds −$11** line
+appears in the summary, and *Total collected* drops accordingly. No separate ledger, no double-counting — the
+drawer math just tells the truth. Eighteen suites, all green.
+
 *— to be continued —*
