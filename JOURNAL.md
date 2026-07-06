@@ -237,4 +237,33 @@ and no IT project; a spare tablet is the kitchen screen today and the counter to
 double duty — it lays out the path *and* defines the menu of stations every device gets to pick from. Next, the
 bedrock in code: the two endpoints, the flow between, and a device that binds itself to a station.
 
+### The machine underneath — and the first code
+Before writing a line of the engine, we mapped how information *actually* flows through 12 trades — who becomes
+a record, which station sees what slice of it, what each station updates, how it fans out, how it cashes out.
+Then we asked what was common to all of them. The answer was almost startlingly clean:
+
+> **Every one of the 12 businesses is the same machine.** A customer opens one polymorphic *record*; it advances
+> through a *state machine*; at "fire" points it's *routed* — projected, not copied — to *stations* that each see
+> a filtered slice and may fire only certain updates; and it *cashes out* against a payment sink. The apparent
+> differences — a linear taco cart, a fan-out restaurant, a loop-back repair shop, a plant-hub cleaner — are all
+> the same graph with a different number of stations, a different routing key, and the payment pinned at a
+> different point.
+
+That gave us the thing to build: a **Flow** — one JSON document describing the two fixed endpoints, the record,
+the state machine, and the stations (each with a *view-filter* and an *update-whitelist*). The engine executes
+it, the visual builder edits it, the wizard emits it, Claude Code reads it. **One schema, four readers.** Written
+up in [docs/FLOW-SCHEMA.md](docs/FLOW-SCHEMA.md).
+
+And then — after a lot of thinking, deciding, and testing — **customPOS became software.** [`pos.html`](pos.html)
+is the first code: a single self-contained file, no build, no dependencies, that runs the whole spine from a Flow
+object. It has the two endpoints as bedrock, a state-machine interpreter that reads the stages from data (not
+hardcode), one declarative station renderer, and the *"which station is this device?"* setup. We drove it in a
+real browser and watched an order flow **Order Counter → Make Station → Checkout → done**, with the Make station
+correctly showing the items but **hiding the prices** — because a station is genuinely a *projection* of the one
+record, and the engine honored its `money:false` view-filter. Zero console errors.
+
+It's tiny and neutral — a demo counter shop, no vertical baked in. But it's the proof that the whole design holds
+in code: change the Flow, and the same engine is a different POS. Everything from here — the modules, the visual
+builder, the wizard, the trades' deep features — hangs on this bedrock. The fork is now a foundation.
+
 *— to be continued —*
