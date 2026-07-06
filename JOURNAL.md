@@ -266,4 +266,34 @@ It's tiny and neutral — a demo counter shop, no vertical baked in. But it's th
 in code: change the Flow, and the same engine is a different POS. Everything from here — the modules, the visual
 builder, the wizard, the trades' deep features — hangs on this bedrock. The fork is now a foundation.
 
+### 230 features, 14 knobs
+We were a little afraid of this part. Every trade has a deep stack of insider features — a restaurant's fire/hold
+coursing and 86 countdowns, a salon's color-processing timer, a repair shop's waiting-on-parts aging, a pet
+groomer's cage-dryer heat cap. Twelve veterans handed us roughly **230 "can't-run-without-it" features.** If each
+were custom code, "one free engine for every trade" would be a fantasy — you'd be rebuilding vertical software
+twelve times.
+
+They collapse to **~14 primitives.** That color timer, the promise clock, the parts-aging counter, the ticket
+SLA, the dryer heat cap, the hold-shelf expiry, the return-window countdown — *all the same timer service* with a
+different duration source and a different thing that fires at zero. The 86 broadcast, the low-stock warning, the
+sold-out grey-out — one par-count service. Require-a-steak-temp, offer-fries, bond-builder-with-lightening,
+capture-the-passcode-before-the-bench — one require/suggest rule. The differentiation between a taqueria and a
+tailor is **durations, thresholds, rate tables, station maps, flag words, checklist steps, tile layouts** — data,
+not code. Written up in [docs/MODULE-LIBRARY.md](docs/MODULE-LIBRARY.md): a primitives kernel, cross-industry
+packs on top, and a per-trade profile that's mostly settings plus one or two genuinely custom modules.
+
+That reframes the whole build. The engine ships each primitive **once**; a trade is a config file; a feature one
+shop needs becomes a knob every shop can turn. It's also the exact thing that makes it usable by a non-technical
+owner: 86-ing an item or changing a turnaround time is a *setting*, not a developer ticket.
+
+### The order that splits and comes back together
+So we built the next primitive into the engine: **routing fan-out.** The demo order now carries a `route` on each
+line, and on "Send" it splits — drinks to the **Bar**, food to the **Kitchen** — each maker seeing *only its own
+lines*, still money-blind. And the order won't go `Ready` until **both** stations finish; it re-converges on its
+own. We drove it in a browser: the Bar saw the coffee (not the muffin), the Kitchen saw the muffin (not the
+coffee), checkout stayed empty until both were done, then the order appeared, paid, and closed. Zero console
+errors. That's the exact mechanism the restaurant — our worst-scoring trade in round 1 — actually needs, now
+running as a generic primitive on the same 200-line engine. One order, many hands, back to one. The machine is
+starting to breathe.
+
 *— to be continued —*

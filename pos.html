@@ -1,19 +1,15 @@
 <!--
-  customPOS — engine skeleton (v0)
-  =================================
-  The FIRST code. This is the proof that the model from the design docs actually runs:
-  a CUSTOMER-in / PAYMENT-out spine, one shared RECORD advancing through a data-defined
-  STATE MACHINE, one DECLARATIVE STATION renderer (a station is a device + a view-filter +
-  an update-whitelist), a ROUTING primitive, and the device-binds-to-a-station setup.
+  customPOS — engine skeleton (v0.2)
+  ==================================
+  The first code proved the spine (Customer -> state machine -> station -> Payment).
+  v0.2 adds the ROUTING FAN-OUT primitive: one order splits by a line attribute to parallel
+  maker stations (Bar, Kitchen), each seeing ONLY its own lines (money-blind), and the order
+  RE-CONVERGES to Ready only when every station has finished its part. This is the exact
+  mechanism a restaurant needs — proven here on a neutral demo.
 
-  Everything specific to a business lives in the FLOW object below — the engine underneath is
-  generic. Change the FLOW and the same engine becomes a different POS. That is the whole idea.
-
-  Single file, no build, no dependencies, data in localStorage. Open in a browser; open a SECOND
-  tab and set it to a different station to watch one order flow between stations live (localStorage
-  'storage' events stand in for the multi-device hub that comes later).
-
-  Neutral demo config only — no real business data. See docs/ARCHITECTURE.md + docs/THE-MODEL.md.
+  Still: one self-contained file, no build, no deps, data in localStorage. Everything specific
+  lives in the FLOW object; the engine underneath is generic. See docs/FLOW-SCHEMA.md and
+  docs/MODULE-LIBRARY.md. Neutral demo config only — no real business data.
 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -35,19 +31,20 @@
   .row .spacer { flex:1; }
   button { font:inherit; color:var(--ink); background:#222834; border:1px solid var(--line); border-radius:8px; padding:9px 14px; cursor:pointer; }
   button:hover { border-color:var(--brand); }
+  button:disabled { opacity:.45; cursor:default; }
   button.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
   button.good { background:var(--good); border-color:var(--good); color:#fff; }
-  button.ghost { background:transparent; }
   .tile { display:inline-block; min-width:120px; text-align:left; margin:5px 6px 0 0; }
   .tile small { display:block; color:var(--dim); }
   .muted { color:var(--dim); }
   .pill { font-size:12px; padding:2px 8px; border-radius:20px; background:#222834; color:var(--dim); border:1px solid var(--line); }
-  .line { display:flex; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); }
+  .pill.route { border-color:var(--brand); color:var(--brand); }
+  .line { display:flex; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); align-items:center; }
   .line:last-child { border-bottom:0; }
-  .big { font-size:22px; font-weight:700; }
-  .center { text-align:center; }
+  .line.done span.nm { color:var(--dim); text-decoration:line-through; }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
   .empty { color:var(--dim); padding:20px; text-align:center; }
+  .center { text-align:center; }
   .picker button { display:block; width:100%; text-align:left; margin:8px 0; padding:14px; }
   .picker button b { font-size:16px; }
   .picker button small { color:var(--dim); }
@@ -64,98 +61,91 @@
 
 <script>
 /* ============================================================================
-   THE FLOW  —  the single shared definition (Layer 2).
-   The engine below executes this; a visual builder would edit it; a wizard would
-   emit it; Claude Code reads it. Swap this object and the engine becomes a
-   different POS. This demo flow is neutral: a tiny counter shop.
-   Path:  Customer -> [ Order -> Make -> Checkout ] -> Payment
+   THE FLOW — the single shared definition. Swap it and the engine is a different POS.
+   Demo: a counter shop where an order FANS OUT to two makers by each line's `route`.
+   Path:  Customer -> [ Order -> (Bar | Kitchen) -> Checkout ] -> Payment
    ==========================================================================*/
 const FLOW = {
-  flowId: "demo-counter", version: 1,
-  branding: { name: "Demo Counter", brandColor: "#1f6feb", vocabulary: { item:"item", record:"order" } },
+  flowId: "demo-counter", version: 2,
+  branding: { name: "Demo Counter", brandColor: "#1f6feb", vocabulary: { record:"order" } },
 
-  // --- the two FIXED endpoints (bedrock; a builder can never delete these) ---
   endpoints: {
-    customer: { persist:false },                         // ephemeral: no profile kept (like a cart/counter)
+    customer: { persist:false },
     payment:  { tenders:["cash"], points:["at-checkout"], closeGate:"balanceLE0" }
   },
 
-  // neutral demo catalog (Config layer, inlined here for the skeleton)
+  // neutral demo catalog — each item carries a `route` line-attribute (the fan-out key)
   catalog: [
-    { id:"c1", name:"Coffee",    price:3.50 },
-    { id:"c2", name:"Latte",     price:4.75 },
-    { id:"c3", name:"Muffin",    price:3.25 },
-    { id:"c4", name:"Bagel",     price:2.75 }
+    { id:"c1", name:"Coffee", price:3.50, route:"bar" },
+    { id:"c2", name:"Latte",  price:4.75, route:"bar" },
+    { id:"c3", name:"Muffin", price:3.25, route:"kitchen" },
+    { id:"c4", name:"Bagel",  price:2.75, route:"kitchen" }
   ],
 
-  // --- the shared RECORD + its data-defined STATE MACHINE ---
   informationObject: {
     name: "order",
+    lineItem: { routeKey:"route", perLineStatus:true },
     stateMachine: {
       initial: "OPEN",
       states: ["OPEN","MAKING","READY","PAID","CLOSED"],
       transitions: [
         { from:"OPEN",   to:"MAKING", update:"send",       atStation:"order" },
-        { from:"MAKING", to:"READY",  update:"markReady",  atStation:"make" },
+        { from:"MAKING", to:"READY",  update:"allMade",    atStation:"*" },     // auto re-converge when every line is made
         { from:"READY",  to:"PAID",   update:"takeTender", atStation:"checkout", gate:"balanceLE0" },
         { from:"PAID",   to:"CLOSED", update:"close",      atStation:"checkout" }
       ]
     }
   },
 
-  // --- the STATIONS (each = device + view-filter + update-whitelist + role) ---
   stations: [
     { id:"order",    type:"intake",      label:"Order Counter", device:"counter",
-      view:{ money:true  }, updates:["addLine","send"] },
-    { id:"make",     type:"production",  label:"Make Station",  device:"screen",
-      view:{ money:false }, updates:["markReady"] },              // money-blind: prep sees items, not prices
-    { id:"checkout", type:"fulfillment", label:"Checkout",      device:"counter",
-      view:{ money:true  }, updates:["takeTender","close"] }
+      view:{ money:true }, updates:["addLine","send"] },
+    { id:"bar",      type:"production",  label:"Bar",     device:"screen",
+      view:{ money:false, route:"bar" },     updates:["markReady"] },   // sees only bar lines, no prices
+    { id:"kitchen",  type:"production",  label:"Kitchen", device:"screen",
+      view:{ money:false, route:"kitchen" }, updates:["markReady"] },   // sees only kitchen lines, no prices
+    { id:"checkout", type:"fulfillment", label:"Checkout", device:"counter",
+      view:{ money:true }, updates:["takeTender","close"] }
   ],
 
-  // --- ROUTING: one primitive {on, to, carry}; fires on a transition ---
+  // ROUTING primitive: on `send`, partition lines by `route` and fan out to the maker stations.
   routing: [
-    { on:"send",      to:"make",     carry:"lines" },
-    { on:"markReady", to:"checkout", carry:"whole" }
+    { on:"send",    by:"route", to:["bar","kitchen"], carry:"lines" },
+    { on:"allMade", to:["checkout"],                  carry:"whole" }
   ]
 };
 
 /* ============================================================================
-   THE ENGINE  —  generic; knows nothing about coffee. Reads the FLOW.
+   THE ENGINE — generic; reads the FLOW.
    ==========================================================================*/
-const SKEY = "custompos_station_v0";     // which station THIS device is bound to
-const DKEY = "custompos_demo_v0";        // the shared data (stands in for the hub)
-
+const SKEY = "custompos_station_v0";
+const DKEY = "custompos_demo_v0";
 function loadDB(){ try { return JSON.parse(localStorage.getItem(DKEY)) || {records:[],seq:0}; } catch(e){ return {records:[],seq:0}; } }
 function saveDB(db){ localStorage.setItem(DKEY, JSON.stringify(db)); }
 let DB = loadDB();
 
-// state-machine interpreter — all generic, driven by FLOW.informationObject.stateMachine
 const SM = FLOW.informationObject.stateMachine;
 function transitionsAt(stationId){ return SM.transitions.filter(t => t.atStation===stationId); }
-function statesSeenAt(stationId){ return transitionsAt(stationId).map(t => t.from); }   // a station sees records sitting at its 'from' states
 function transitionFor(stationId, update){ return transitionsAt(stationId).find(t => t.update===update); }
 
 function recordTotal(r){ return r.lines.reduce((s,l)=> s + l.price*l.qty, 0); }
 function recordPaid(r){ return (r.tenders||[]).reduce((s,t)=> s + t.amount, 0); }
 function recordBalance(r){ return recordTotal(r) - recordPaid(r); }
 function gateOk(gate, r){ if(gate==="balanceLE0") return recordBalance(r) <= 0.0001; return true; }
-
-// the ONE routing primitive — for this skeleton, routing just moves the record's status onward;
-// the "carry"/projection is what each station's view filter applies at render time.
-function route(on, record){ /* rules could notify/print/fan-out here; state advance already did the move */ }
+function linesFor(r, station){ const rt = station.view && station.view.route; return rt ? r.lines.filter(l=>l.route===rt) : r.lines; }
+function allMade(r){ return r.lines.every(l=>l.made); }
 
 function advance(record, stationId, update){
   const t = transitionFor(stationId, update);
   if(!t) return;
   if(t.gate && !gateOk(t.gate, record)){ flash("Balance must be paid first"); return; }
-  record.status = t.to;
-  saveDB(DB);
-  route(t.update, record);
-  render();
+  record.status = t.to; saveDB(DB); render();
+}
+// automatic re-converge transition (atStation "*"): fire when its 'update' condition holds
+function maybeReconverge(record){
+  if(record.status==="MAKING" && allMade(record)){ record.status="READY"; saveDB(DB); }
 }
 
-/* ---- device binds to a station (the "which screen am I?" setup) ---- */
 function boundStation(){ const id = localStorage.getItem(SKEY); return FLOW.stations.find(s=>s.id===id) || null; }
 function bindStation(id){ localStorage.setItem(SKEY, id); render(); }
 function unbind(){ localStorage.removeItem(SKEY); render(); }
@@ -173,45 +163,37 @@ function render(){
   const station = boundStation();
   document.getElementById("stationLabel").textContent = station ? "· "+station.label : "";
   const chg = document.getElementById("changeStation");
-  chg.style.display = station ? "" : "none";
-  chg.onclick = unbind;
+  chg.style.display = station ? "" : "none"; chg.onclick = unbind;
 
-  const app = document.getElementById("app");
-  app.innerHTML = "";
+  const app = document.getElementById("app"); app.innerHTML = "";
   if(!station){ renderPicker(app); return; }
-  // ONE declarative renderer: dispatch by station.type, honoring view-filter + update-whitelist.
-  if(station.type==="intake")      renderIntake(app, station);
-  else if(station.type==="production") renderQueue(app, station, "MAKING", "markReady", "Mark ready");
+  if(station.type==="intake")           renderIntake(app, station);
+  else if(station.type==="production")  renderProduction(app, station);
   else if(station.type==="fulfillment") renderCheckout(app, station);
 }
 
-/* device setup: pick which station this device is */
 function renderPicker(app){
-  const wrap = document.createElement("div");
-  wrap.className = "picker";
-  wrap.innerHTML = "<h2>Set up this device</h2><p class='muted'>Which station is this? (Open this page on another "
-    + "device — or another tab — and pick a different station to see an order flow between them.)</p>";
+  const wrap = document.createElement("div"); wrap.className = "picker";
+  wrap.innerHTML = "<h2>Set up this device</h2><p class='muted'>Which station is this? Open this page in another "
+    + "tab or device and pick a different station to watch one order fan out and flow between them.</p>";
   FLOW.stations.forEach(s=>{
     const b = document.createElement("button");
-    b.innerHTML = "<b>"+s.label+"</b><small>"+s.type+" · sees records: "+ (statesSeenAt(s.id).join(", ")||"—") +"</small>";
-    b.onclick = ()=> bindStation(s.id);
-    wrap.appendChild(b);
+    const scope = s.view && s.view.route ? "sees only "+s.view.route+" items" : (s.type==="production"?"sees all items":"");
+    b.innerHTML = "<b>"+s.label+"</b><small>"+s.type+(scope?" · "+scope:"")+"</small>";
+    b.onclick = ()=> bindStation(s.id); wrap.appendChild(b);
   });
   app.appendChild(wrap);
 }
 
-/* INTAKE station: build a draft order from the catalog, then Send it down the path */
 let draft = null;
 function renderIntake(app, station){
   if(!draft) draft = { lines:[] };
-  const cat = document.createElement("div");
-  cat.innerHTML = "<h2>New "+FLOW.branding.vocabulary.record+"</h2>";
+  const cat = document.createElement("div"); cat.innerHTML = "<h2>New order</h2>";
   const grid = document.createElement("div"); grid.className="grid";
   FLOW.catalog.forEach(item=>{
     const b=document.createElement("button"); b.className="tile";
     b.innerHTML = item.name + (station.view.money ? "<small>"+money(item.price)+"</small>" : "");
-    b.onclick = ()=>{ addToDraft(item); };
-    grid.appendChild(b);
+    b.onclick = ()=> addToDraft(item); grid.appendChild(b);
   });
   cat.appendChild(grid); app.appendChild(cat);
 
@@ -220,96 +202,76 @@ function renderIntake(app, station){
   else {
     draft.lines.forEach(l=>{
       const row=document.createElement("div"); row.className="line";
-      row.innerHTML = "<span>"+l.qty+"× "+l.name+"</span><span class='spacer'></span>"
+      row.innerHTML = "<span class='nm'>"+l.qty+"× "+l.name+"</span><span class='pill route'>"+l.route+"</span><span class='spacer'></span>"
         + (station.view.money ? "<span>"+money(l.price*l.qty)+"</span>" : "");
       c.appendChild(row);
     });
-    if(station.view.money){
-      const tot=document.createElement("div"); tot.className="line";
-      tot.innerHTML="<b>Total</b><span class='spacer'></span><b>"+money(draft.lines.reduce((s,l)=>s+l.price*l.qty,0))+"</b>";
-      c.appendChild(tot);
-    }
+    const tot=document.createElement("div"); tot.className="line";
+    tot.innerHTML="<b>Total</b><span class='spacer'></span><b>"+money(draft.lines.reduce((s,l)=>s+l.price*l.qty,0))+"</b>";
+    c.appendChild(tot);
   }
   app.appendChild(c);
 
-  if(station.updates.includes("send")){
-    const send=document.createElement("button"); send.className="primary"; send.textContent="Send order →";
-    send.disabled = !draft.lines.length;
-    send.onclick = sendDraft;
-    app.appendChild(send);
-  }
+  const send=document.createElement("button"); send.className="primary"; send.textContent="Send order →";
+  send.disabled = !draft.lines.length; send.onclick = sendDraft; app.appendChild(send);
 }
 function addToDraft(item){
   const ex = draft.lines.find(l=>l.catId===item.id);
-  if(ex) ex.qty++; else draft.lines.push({ id:"L"+Math.round(performance.now()), catId:item.id, name:item.name, price:item.price, qty:1 });
+  if(ex) ex.qty++; else draft.lines.push({ id:"L"+Math.round(performance.now()), catId:item.id, name:item.name, price:item.price, qty:1, route:item.route, made:false });
   render();
 }
 function sendDraft(){
-  DB = loadDB();
-  DB.seq++;
-  const rec = { id:"R"+DB.seq, number:DB.seq, status:SM.initial, lines:draft.lines, tenders:[], createdAt:new Date().toISOString().slice(11,16) };
-  DB.records.push(rec);
-  saveDB(DB);
-  advance(rec, "order", "send");   // OPEN -> MAKING, fires routing to Make
-  draft = null;
-  render();
+  DB = loadDB(); DB.seq++;
+  const rec = { id:"R"+DB.seq, number:DB.seq, status:SM.initial,
+    lines:draft.lines.map(l=>({...l, made:false})), tenders:[], createdAt:new Date().toISOString().slice(11,16) };
+  DB.records.push(rec); saveDB(DB);
+  advance(rec, "order", "send");   // OPEN -> MAKING; routing fans lines to bar + kitchen
+  draft = null; render();
 }
 
-/* PRODUCTION-style queue station (money-blind view honored) */
-function renderQueue(app, station, atState, update, actionLabel){
+/* PRODUCTION station: sees ONLY its routed lines (money-blind); marks them made; order re-converges */
+function renderProduction(app, station){
   app.innerHTML = "<h2>"+station.label+"</h2>";
-  const recs = DB.records.filter(r=> r.status===atState);
+  const recs = DB.records.filter(r=> r.status==="MAKING" && linesFor(r, station).some(l=>!l.made));
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nothing waiting."; app.appendChild(e); }
   recs.forEach(r=>{
+    const myLines = linesFor(r, station);
     const c=document.createElement("div"); c.className="card";
     c.innerHTML = "<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span><span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
-    r.lines.forEach(l=>{
-      const row=document.createElement("div"); row.className="line";
-      // money:false -> prices hidden. Same record, different projection.
-      row.innerHTML = "<span>"+l.qty+"× "+l.name+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":"");
+    myLines.forEach(l=>{
+      const row=document.createElement("div"); row.className="line"+(l.made?" done":"");
+      row.innerHTML = "<span class='nm'>"+l.qty+"× "+l.name+"</span>"; // money:false -> no price shown
       c.appendChild(row);
     });
-    if(station.updates.includes(update)){
-      const b=document.createElement("button"); b.className="good"; b.textContent=actionLabel; b.style.marginTop="10px";
-      b.onclick=()=>advance(r, station.id, update);
-      c.appendChild(b);
-    }
-    app.appendChild(c);
+    const b=document.createElement("button"); b.className="good"; b.textContent="Mark ready"; b.style.marginTop="10px";
+    b.onclick=()=>{ myLines.forEach(l=>l.made=true); saveDB(DB); maybeReconverge(r); render(); };
+    c.appendChild(b); app.appendChild(c);
   });
 }
 
-/* FULFILLMENT station: balance + tender + gated close */
 function renderCheckout(app, station){
   app.innerHTML = "<h2>"+station.label+"</h2>";
   const recs = DB.records.filter(r=> r.status==="READY" || r.status==="PAID");
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No orders ready to check out."; app.appendChild(e); }
   recs.forEach(r=>{
-    const c=document.createElement("div"); c.className="card";
-    const bal = recordBalance(r);
+    const c=document.createElement("div"); c.className="card"; const bal = recordBalance(r);
     c.innerHTML = "<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span><span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
-    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
+    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span class='nm'>"+l.qty+"× "+l.name+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
     const totrow=document.createElement("div"); totrow.className="line"; totrow.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(totrow);
-
-    if(r.status==="READY" && station.updates.includes("takeTender")){
-      if(bal>0.0001){
-        const b=document.createElement("button"); b.className="primary"; b.textContent="Take cash "+money(recordTotal(r)); b.style.marginTop="10px";
-        b.onclick=()=>{ r.tenders.push({type:"cash", amount:recordTotal(r)}); saveDB(DB); advance(r,"checkout","takeTender"); };
-        c.appendChild(b);
-      }
+    if(r.status==="READY" && bal>0.0001){
+      const b=document.createElement("button"); b.className="primary"; b.textContent="Take cash "+money(recordTotal(r)); b.style.marginTop="10px";
+      b.onclick=()=>{ r.tenders.push({type:"cash", amount:recordTotal(r)}); saveDB(DB); advance(r,"checkout","takeTender"); };
+      c.appendChild(b);
     } else if(r.status==="PAID"){
       const b=document.createElement("button"); b.className="good"; b.textContent="Done — close"; b.style.marginTop="10px";
-      b.onclick=()=>advance(r,"checkout","close");
-      c.appendChild(b);
+      b.onclick=()=>advance(r,"checkout","close"); c.appendChild(b);
     }
     app.appendChild(c);
   });
-
   const closed = DB.records.filter(r=>r.status==="CLOSED").length;
   if(closed){ const f=document.createElement("p"); f.className="muted center"; f.textContent=closed+" order(s) completed today."; app.appendChild(f); }
 }
 
-/* live multi-station: another tab/device on a different station updates in real time */
 window.addEventListener("storage", (e)=>{ if(e.key===DKEY || e.key===SKEY) render(); });
-
 render();
 </script>
