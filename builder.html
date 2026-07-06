@@ -75,13 +75,28 @@ const TEMPLATES = {
       {id:"c2",name:"Latte",price:4.75,category:"drink",path:["bar"],modifiers:[{group:"Size",required:true,options:[{name:"Sm",price:0},{name:"Md",price:.5},{name:"Lg",price:1}]}],addons:[{name:"Oat milk",price:.75}]},
       {id:"c3",name:"Sandwich",price:8,category:"food",path:["kitchen"]} ],
     stations:[ {id:"order",type:"intake",label:"Register",view:{money:true}}, {id:"bar",type:"production",label:"Bar",view:{money:false}}, {id:"kitchen",type:"production",label:"Kitchen",view:{money:false}}, {id:"pickup",type:"fulfillment",label:"Pickup",view:{money:true}} ] },
-  cleaner: { flowId:"cleaner", label:"Dry cleaner / Laundry", topology:"hub-and-spoke", blurb:"Take items in, process, return",
+  cleaner: { flowId:"cleaner", label:"Dry cleaner / Laundry", topology:"hub-and-spoke", blurb:"Full dry-clean & laundry — tag, clean, assemble, rack, pickup",
     branding:{ name:"My Cleaners", brandColor:"#2ea043" },
-    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}} },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0"}, loyalty:{earnPerDollar:1,redeemPoints:100,redeemValue:5} },
     timer:{ mode:"due", promiseSec:172800, warnSec:86400, label:"promise" },
-    catalog:[ {id:"g1",name:"Shirt",price:6.5,category:"press",path:["assembly","rack"],flags:["Pre-existing damage"]},
-      {id:"g2",name:"Pants",price:7,category:"press",path:["assembly","rack"]}, {id:"g3",name:"Wash & Fold",price:2.75,category:"wf",path:["rack"]} ],
-    stations:[ {id:"counter",type:"central",label:"Front Counter",view:{money:true}}, {id:"assembly",type:"production",label:"Assembly",view:{money:false}}, {id:"rack",type:"staging",label:"Rack",view:{money:false},checklist:["Piece count matches"]}, {id:"board",type:"board",label:"Status Board",view:{money:false}}, {id:"tracker",type:"tracker",label:"Customer Tracker",view:{money:false,external:true}} ] },
+    catalog:[
+      {id:"shirt",name:"Laundered Shirt",price:2.99,category:"laundry",path:["detail","assembly","rack"],modifiers:[{group:"Starch",required:true,options:[{name:"None",price:0},{name:"Light",price:0},{name:"Medium",price:0},{name:"Heavy",price:0.5}]}],flags:["Pre-existing damage","Stain noted"]},
+      {id:"pants",name:"Pants / Slacks",price:7.5,category:"drycleaning",path:["detail","assembly","rack"]},
+      {id:"suit",name:"2-pc Suit",price:14,category:"drycleaning",path:["detail","assembly","rack"]},
+      {id:"dress",name:"Dress",price:12,category:"drycleaning",path:["detail","assembly","rack"],flags:["Beads / sequins"]},
+      {id:"coat",name:"Coat / Jacket",price:11,category:"drycleaning",path:["detail","assembly","rack"]},
+      {id:"comforter",name:"Comforter",price:25,category:"household",path:["detail","rack"]},
+      {id:"wf",name:"Wash & Fold (per lb)",price:1.75,category:"wf",path:["rack"]},
+      {id:"alter",name:"Alterations",price:0,category:"alteration",path:["detail","rack"]}
+    ],
+    stations:[
+      {id:"counter",type:"central",label:"Front Counter",view:{money:true}},
+      {id:"detail",type:"production",label:"Detail / Tag",view:{money:false}},
+      {id:"assembly",type:"production",label:"Assembly",view:{money:false}},
+      {id:"rack",type:"staging",label:"Rack",view:{money:false},checklist:["Piece count matches in vs out","Spots checked"]},
+      {id:"board",type:"board",label:"Status Board",view:{money:false}},
+      {id:"tracker",type:"tracker",label:"Customer Tracker",view:{money:false,external:true}}
+    ] },
   repair: { flowId:"repair", label:"Repair shop", topology:"hub-and-spoke", blurb:"Intake, estimate, fix, return",
     branding:{ name:"My Repair Shop", brandColor:"#e3893c" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}} },
@@ -94,7 +109,51 @@ const TEMPLATES = {
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}}, loyalty:{earnPerDollar:1,redeemPoints:20,redeemValue:5} },
     performers:["Alex","Sam","Jordan"], commission:{ pct:40 },
     catalog:[ {id:"s1",name:"Haircut",price:35,category:"service",path:["chair"],performer:true}, {id:"s2",name:"Color",price:85,category:"service",path:["chair"],performer:true}, {id:"s3",name:"Product",price:22,category:"retail",path:[]} ],
-    stations:[ {id:"desk",type:"central",label:"Front Desk",view:{money:true}}, {id:"chair",type:"production",label:"Chair",view:{money:false}}, {id:"office",type:"report",label:"Back Office",view:{money:true}} ] }
+    stations:[ {id:"desk",type:"central",label:"Front Desk",view:{money:true}}, {id:"chair",type:"production",label:"Chair",view:{money:false}}, {id:"office",type:"report",label:"Back Office",view:{money:true}} ] },
+  // A REAL restaurant template — the Hamburger Barn menu (Arkadelphia, AR). Public menu; prices are
+  // sensible estimates the owner edits. One order fans out to the grill, the fry station, and the shake bar.
+  burgerbarn: { flowId:"burgerbarn", label:"Hamburger Barn (burger joint)", topology:"hub-and-spoke", blurb:"A real burger-joint menu — grill · fry · shakes",
+    branding:{ name:"Hamburger Barn", brandColor:"#a3312a" },
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}} },
+    timer:{ mode:"aging", warnSec:360, badSec:720, label:"ticket" }, capacity:{ perOrderMins:6, max:15 },
+    catalog:[
+      // ---- BURGERS → grill ----
+      {id:"bubba",name:"Bubba Burger",price:13,category:"burger",path:["grill"],
+        modifiers:[{group:"Patty",required:true,options:[{name:"Single",price:0},{name:"Double",price:3}]}],
+        addons:[{name:"Bacon",price:1.5},{name:"Extra cheese",price:1},{name:"Jalapeños",price:0.5},{name:"Grilled onions",price:0.5}],
+        flags:["Allergy note"]},
+      {id:"mushswiss",name:"Mushroom Swiss Burger",price:12.5,category:"burger",path:["grill"],addons:[{name:"Bacon",price:1.5}]},
+      {id:"gouda",name:"Gouda Burger",price:12.5,category:"burger",path:["grill"]},
+      {id:"chipotle",name:"Chipotle Burger",price:12.5,category:"burger",path:["grill"]},
+      {id:"cheeseburger",name:"Cheeseburger",price:9,category:"burger",path:["grill"],
+        modifiers:[{group:"Cheese",required:true,options:[{name:"American",price:0},{name:"Swiss",price:0},{name:"Cheddar",price:0},{name:"Pepper Jack",price:0}]}]},
+      {id:"cfs",name:"Chicken Fried Steak",price:13,category:"plate",path:["grill"]},
+      {id:"grillchick",name:"Grilled Chicken Sandwich",price:10,category:"sandwich",path:["grill"]},
+      // ---- FRIED APPS & PLATES → fry ----
+      {id:"onionrings",name:"Onion Rings",price:6,category:"app",path:["fry"]},
+      {id:"friedpickles",name:"Fried Pickles",price:6,category:"app",path:["fry"]},
+      {id:"greenbeans",name:"Fried Green Beans",price:6,category:"app",path:["fry"]},
+      {id:"cheesesticks",name:"Big Cheese Sticks",price:7,category:"app",path:["fry"]},
+      {id:"friedmush",name:"Fried Mushrooms",price:6,category:"app",path:["fry"]},
+      {id:"trio",name:"Big Teaser Trio",price:9,category:"app",path:["fry"]},
+      {id:"catfish",name:"3-pc Catfish Plate",price:13,category:"plate",path:["fry"]},
+      {id:"fries",name:"Fries",price:3,category:"side",path:["fry"]},
+      // ---- SHAKES → shake bar ----
+      {id:"shake",name:"Milkshake",price:5,category:"shake",path:["shakes"],
+        modifiers:[{group:"Flavor",required:true,options:[{name:"Vanilla",price:0},{name:"Chocolate",price:0},{name:"Strawberry",price:0}]}]},
+      // ---- DRINKS → handed over at the counter (no path) ----
+      {id:"drink",name:"Fountain Drink",price:2.5,category:"drink",path:[]},
+      {id:"tea",name:"Sweet Tea",price:2.5,category:"drink",path:[]},
+      // ---- daily special with an 86 count ----
+      {id:"special",name:"Blue Plate Special",price:10,category:"plate",path:["grill"],par:10}
+    ],
+    stations:[
+      {id:"counter",type:"central",label:"Front Counter",view:{money:true}},
+      {id:"grill",type:"production",label:"Grill",view:{money:false}},
+      {id:"fry",type:"production",label:"Fry Station",view:{money:false}},
+      {id:"shakes",type:"production",label:"Shake Bar",view:{money:false}},
+      {id:"kds",type:"board",label:"Kitchen Display",view:{money:false}}
+    ] }
 };
 const STATION_TYPES = [
   ["intake","Intake — starts orders"], ["central","Counter — starts & finishes"], ["production","Work station — items pass through"],

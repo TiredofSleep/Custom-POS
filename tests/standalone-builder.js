@@ -17,7 +17,7 @@ const ROOT = path.resolve(__dirname, '..');
   await p.goto(url);   // file:// — no server, so fetch('pos.html') would 404; must use the embedded engine
 
   const engineEmbedded = await p.evaluate(() => typeof window.__ENGINE_SRC__ === 'string' && window.__ENGINE_SRC__.includes('customPOS — engine skeleton'));
-  await p.locator('button.trade').filter({ hasText: 'Take items in' }).click();   // Dry cleaner template
+  await p.locator('button.trade').filter({ hasText: 'Dry cleaner' }).click();   // Dry cleaner template
   await p.locator('#bizName').fill('Sparkle Cleaners');
   await p.getByRole('button',{name:/Build it for me/}).click();
   await p.waitForFunction(() => window.__build && window.__build.html);
