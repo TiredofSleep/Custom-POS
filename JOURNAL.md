@@ -197,7 +197,35 @@ We stopped trying to make a single flow serve everyone. After you pick your trad
 
 The deeper principle we're keeping: **simple by default, deep on demand — and never make the simple owner walk
 through the deep owner's screen to get there.** Two rounds of fake customers, forty-eight imaginary owners, and
-the design is finally shaped like the people who'll use it instead of like the shop it was born in. Next: fold
-these fixes into the build, or run one more quick pass to watch a low-tech owner actually *finish*.
+the design is finally shaped like the people who'll use it instead of like the shop it was born in.
+
+### The meta — "everyone starts with a customer and ends with a payment"
+Two rounds of testing had earned enough. Staring at 48 owners' answers, the shape underneath all of them became
+obvious — and it was much simpler than the packs and layers we'd been drawing:
+
+> **Every business starts the same way (a customer) and ends the same way (a payment). Every question we'd been
+> asking was just resolving the path between those two points.**
+
+That one sentence reorganized the whole product:
+
+- **The engine is two fixed endpoints and a configurable path.** Customer in, Payment out; everything else is
+  the middle. A retailer's middle is short; a dry cleaner's is long; a restaurant's loops. Same spine.
+- **A POS is a flow of information — so the builder should be visual, like a website creator, because it *is*
+  one.** You don't fill out a form; you lay out your path by arranging stations (modules) between Customer and
+  Payment. The wizard questions become just a *fast way to auto-arrange* that flow for people who'd rather not
+  draw it.
+- **The first choice is how involved you want to be** — and we engineer a real path for every level: *build it
+  for me* → *guided* → *draw it yourself* → *open it in your own Claude Code and go limitless.* You can climb the
+  ladder whenever you're ready; the file is the same underneath.
+- **The download hands off to the owner's own Claude.** It ships with a generated guide so their Claude Code
+  "reads into" the project instantly — the software is theirs, and so is the help.
+- **We compile what everyone builds.** Every flow and module a shop makes gets curated into a shared, growing,
+  free library, so the next shop starts ahead of where the last one did. And when someone needs something that
+  doesn't exist, they send it in, we build it with Claude Code, and it becomes everyone's option.
+
+We stopped calling them "lifecycle packs" and started calling them what they are: **paths.** The product is a
+place to draw the path from your customer to your payment, save it as code you own, and keep shaping it — alone
+or with an AI — forever. Written up in [docs/THE-MODEL.md](docs/THE-MODEL.md). Next, we start building the
+bedrock: the two endpoints and the flow that connects them.
 
 *— to be continued —*
