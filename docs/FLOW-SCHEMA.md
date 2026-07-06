@@ -120,10 +120,17 @@ modules — validating the contract against a known-hard vertical.
 ```
 
 ## Build order (from the synthesis)
-1. Two fixed endpoints as bedrock (customer source + payment sink). ✅ *(in `pos.html` v0)*
+1. Two fixed endpoints as bedrock (customer source + payment sink). ✅ *(v0)*
 2. Record runtime + state-machine interpreter reading the flow JSON. ✅ *(v0)*
 3. One declarative station renderer (view-filter + update-whitelist). ✅ *(v0, proven money-blind)*
-4. Routing fan-out as the one `{on,by,to,carry}` primitive. ◻ *(v0 has status-advance routing; fan-out next)*
-5. Module contract `{provides:…}`; enabling a station auto-enables its module. ◻
-6. Extract render()/home-tiles/admin-tabs to be built FROM the station array. ◻
-7. Gate mechanism (balance-paid, manager-auth, waiver) as a first-class transition guard. ◻ *(v0 has closeGate)*
+4. Routing fan-out as the one `{on,by,to,carry}` primitive. ✅ *(v0.2 fan-out; v0.3 per-item paths + re-converge)*
+5. Module contract `{provides:…}`; enabling a station auto-enables its module. ✅ *(v0.7 module registry)*
+6. Extract render()/home-tiles/admin-tabs to be built FROM the station array. ◑ *(picker/board/dispatch driven by the station array; full data-driven screens ongoing)*
+7. Gate mechanism (balance-paid, manager-auth, waiver) as a first-class transition guard. ✅ *(closeGate + flag ack gate, v0.6/0.8)*
+
+## Primitives implemented so far (see [MODULE-LIBRARY.md](MODULE-LIBRARY.md))
+✅ timer/SLA · ✅ par-count/86 · ✅ routing fan-out · ✅ require/suggest modifiers · ✅ flag engine ·
+✅ deposit/balance ledger · ✅ status-broadcast (board + tracker). Three trades (counter / cleaners / repair)
+run on the one engine by config alone; five browser test suites pass with zero console errors.
+**Next:** money-math (tips/commission) · capacity/pacing · profile/entity recall · checklist-as-gate ·
+loyalty · gift cards · hold-and-fire (beyond approval).
