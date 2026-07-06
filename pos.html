@@ -51,6 +51,7 @@
   .flowsel { display:flex; gap:8px; margin:6px 0 18px; }
   .mgroup { margin:10px 0; } .mgroup .lbl { color:var(--dim); font-size:13px; margin-bottom:5px; }
   .mgroup .opts { display:flex; gap:6px; flex-wrap:wrap; }
+  input { font:inherit; color:var(--ink); background:#222834; border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:0 6px 6px 0; }
 </style>
 
 <header>
@@ -166,7 +167,7 @@ function flowId(){ return localStorage.getItem("custompos_flow") || "counter"; }
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
-function loadDB(){ try { return JSON.parse(localStorage.getItem(dkey())) || {records:[],seq:0}; } catch(e){ return {records:[],seq:0}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; return d; } catch(e){ return {records:[],seq:0,customers:[]}; } }
 function saveDB(db){ localStorage.setItem(dkey(), JSON.stringify(db)); }
 let DB = loadDB();
 
@@ -294,8 +295,39 @@ function renderPicker(app){
 /* ---- intake with the rules evaluator (modifiers + 86) ---- */
 let draft = null;      // the order being built
 let pending = null;    // an item being configured (required mods / add-ons / flags)
+function attachCustomer(phone, name){
+  phone=(phone||"").trim(); if(!phone) return;
+  DB=loadDB(); const found=(DB.customers||[]).find(c=>c.phone===phone);
+  draft.customer = found ? {...found} : { phone, name:(name||"").trim()||phone, lastItems:[] };
+  render();
+}
+function renderCustomerBar(app, station){
+  if(!(FLOW.endpoints.customer.persist && station.view.money)) return;   // only where a customer is kept
+  const c=document.createElement("div"); c.className="card";
+  if(draft.customer){
+    const head=document.createElement("div"); head.className="row";
+    head.innerHTML="<b>"+draft.customer.name+"</b> <span class='muted'>"+draft.customer.phone+"</span><span class='spacer'></span>";
+    const clr=document.createElement("button"); clr.textContent="✕"; clr.onclick=()=>{ draft.customer=null; render(); }; head.appendChild(clr);
+    c.appendChild(head);
+    if(draft.customer.lastItems && draft.customer.lastItems.length){
+      const u=document.createElement("button"); u.className="good"; u.style.marginTop="8px";
+      u.textContent="＋ The usual ("+draft.customer.lastItems.map(l=>l.name).join(", ")+")";
+      u.onclick=()=>{ draft.customer.lastItems.forEach(l=>draft.lines.push({...l, id:"L"+Math.round(performance.now())+Math.floor(Math.random()*1e6), stage:0})); render(); };
+      c.appendChild(u);
+    }
+  } else {
+    c.innerHTML="<div class='lbl muted' style='margin-bottom:6px'>Customer (lookup by phone, or add)</div>";
+    const ph=document.createElement("input"); ph.placeholder="phone"; ph.id="custPhone";
+    const nm=document.createElement("input"); nm.placeholder="name (new customer)"; nm.id="custName";
+    const look=document.createElement("button"); look.className="primary"; look.textContent="Look up / attach";
+    look.onclick=()=>attachCustomer(document.getElementById("custPhone").value, document.getElementById("custName").value);
+    c.appendChild(ph); c.appendChild(nm); c.appendChild(look);
+  }
+  app.appendChild(c);
+}
 function renderIntake(app, station){
   if(!draft) draft = { lines:[] };
+  renderCustomerBar(app, station);
   const cat=document.createElement("div"); cat.innerHTML="<h2>New order</h2>";
   const grid=document.createElement("div"); grid.className="grid";
   FLOW.catalog.forEach(item=>{
@@ -316,7 +348,7 @@ function renderIntake(app, station){
   const c=document.createElement("div"); c.className="card";
   if(!draft.lines.length){ c.innerHTML="<div class='empty'>Tap items to build the order.</div>"; }
   else { draft.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
-      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='pill route'>"+(l.path.join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":""); c.appendChild(row); });
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+(l.performer?" <span class='pill'>"+l.performer+"</span>":"")+"</span><span class='pill route'>"+((l.path||[]).join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":""); c.appendChild(row); });
     const tot=document.createElement("div"); tot.className="line"; tot.innerHTML="<b>Total</b><span class='spacer'></span><b>"+money(draft.lines.reduce((s,l)=>s+l.price*l.qty,0))+"</b>"; c.appendChild(tot); }
   app.appendChild(c);
   // deposit control (deposit-balance payment point)
@@ -382,6 +414,13 @@ function sendDraft(){
   rec.status = allComplete(rec) ? "READY" : "INPROGRESS";
   const dep = FLOW.endpoints.payment.deposit;
   if(draft.takeDeposit && dep){ rec.tenders.push({ type:"deposit", amount:+(recordTotal(rec)*dep.pct/100).toFixed(2) }); }
+  if(draft.customer){                          // persist the customer + remember 'the usual'
+    rec.customer={ name:draft.customer.name, phone:draft.customer.phone };
+    let c=DB.customers.find(x=>x.phone===draft.customer.phone);
+    if(!c){ c={ phone:draft.customer.phone, name:draft.customer.name }; DB.customers.push(c); }
+    c.name = draft.customer.name || c.name;
+    c.lastItems = rec.lines.map(l=>({ catId:l.catId, name:l.name, price:l.price, qty:l.qty, category:l.category, path:(l.path||[]).slice(), performer:l.performer||null, modLabel:l.modLabel||"", flags:(l.flags||[]).slice() }));
+  }
   DB.records.push(rec); saveDB(DB); draft=null; render();
 }
 
