@@ -8,9 +8,10 @@
 
 ---
 
-> **Status: early build (day 1).** This repository is the public home of customPOS, a project being
-> generalized from a real, in-production single-file POS running a two-location wet cleaner. The engine,
-> the builder wizard, and the templates are under active construction. Star/watch to follow along.
+> **Status: working product, active build.** The public home of customPOS — generalized from a real,
+> in-production single-file POS running a two-location wet cleaner. A landing page, a builder wizard, six
+> ready-to-run trade templates, a full-featured engine, a sync hub, and a payments seam are all live and
+> tested (**31 browser suites, zero console errors**). Star/watch to follow along.
 
 ## What this is
 
@@ -51,32 +52,46 @@ credentials live only on the business's own server, never in the downloaded file
 
 ## Who it's for
 
-Small businesses that want a real POS without a monthly bill or a vendor holding their data hostage — starting
-with **service shops** (dry cleaners, laundromats, alterations, repair) and **simple retail** (track inventory,
-ring up sales, print a receipt), with more business types to come.
+Small businesses that want a real POS without a monthly bill or a vendor holding their data hostage —
+**service shops** (dry cleaners, laundromats, alterations, repair), **food** (cafés, a real burger joint with a
+kitchen display), **retail** (inventory, barcodes, receipts), and **appointment/service** businesses (salons with
+staff, commission, and a booking calendar). More business types to come.
 
-## Status (working prototype)
+## What's built
 
-- ✅ **Config-driven engine** — [`pos.html`](pos.html), one self-contained file. 14 primitives (routing/fan-out,
-  timers, deposits, flags, modifiers, 86, checklists, capacity, tips/commission, loyalty, gift cards, profile
-  recall, status board + customer tracker…) that four very different trades run on **by config alone**.
-- ✅ **The builder** — [`builder.html`](builder.html): pick a trade, name it, **download your POS** (the engine
-  with your config baked in) plus a generated **`CLAUDE.md`** so your own Claude Code can take over. Live preview.
+- ✅ **Landing page** — [`index.html`](index.html): the customPOS.com front door — the pitch, the honest
+  monetization story, and the trust FAQ every owner asks. One self-contained file, light/dark.
+- ✅ **Config-driven engine** — [`pos.html`](pos.html), one self-contained file. Everything below runs on it **by
+  config alone** — a cleaner, a diner, a shop, and a salon on the exact same code:
+  - **Money:** cash + change, cards (PCI-safe), **house accounts (A/R)**, sales tax, **discounts + coupon codes**,
+    tips + commission, deposits, **split checks**, **refunds/voids**, printable receipts.
+  - **Back office:** **end-of-day Z-report** (by tender / category), **cash-drawer count**, **labor hours**,
+    **sales history** day by day, reorder + A/R statements.
+  - **Operations:** **inventory** (stock, low/out, receive), **barcode scan + search**, **appointments** (book →
+    check-in), **kitchen display** with bump + prep timers, **quotes/estimates**, **checklists**, capacity/pacing,
+    per-item routing & fan-out, timers/SLAs, flags, modifiers, 86 counts.
+  - **People & customers:** **staff time-clock + PIN + clock-in welcome**, roles/tips/commission, customer
+    profiles + "the usual", **loyalty + gift cards**, **text-when-ready**, status board + customer tracker.
+- ✅ **The builder** — [`builder.html`](builder.html): pick a trade, deep-configure clickable workstations & items,
+  **download your POS** plus a generated **`CLAUDE.md`**. Six templates (retail, café, dry cleaner, repair, salon,
+  and the real **Hamburger Barn**) each ship with their trade's features already on. Live preview.
 - ✅ **Payments** — a processor-agnostic interface with a simulator that works out of the box; the certified
   CardConnect/CardPointe adapter ([docs/PAYMENTS-MODULE.md](docs/PAYMENTS-MODULE.md)) swaps in on your own server.
 - ✅ **Multi-device hub** — [`hub.js`](hub.js), a zero-dependency Node sync server so several devices (each a
   different station) share one live POS. Sync is opt-in (`?hub=…`); the downloaded POS is fully local otherwise.
 - ✅ **One-click build** — `node build.js` → `dist/custompos.html`, a single self-contained file that runs the
   whole builder with **no server** (host it anywhere as customPOS.com).
-- ✅ **Tested** — 14 browser test suites in [`tests/`](tests), zero console errors.
+- ✅ **Tested** — 31 browser test suites in [`tests/`](tests), each driving the real app, all green with zero
+  console errors.
 
-**Next:** more trade templates, a drag-to-arrange visual flow editor, and hosting customPOS.com. The whole build
-story is in [JOURNAL.md](JOURNAL.md).
+**Next:** more trade templates, a drag-to-arrange visual flow editor, CSV importers, and hosting customPOS.com.
+The whole build story is in [JOURNAL.md](JOURNAL.md).
 
 ### Try it
+- **The landing page:** open [`index.html`](index.html).
 - **Just the builder, no server:** `node build.js` then open `dist/custompos.html`.
 - **Builder + engine over http:** `python3 -m http.server 8000` → visit `http://localhost:8000/builder.html`.
-- **The demo engine:** open [`pos.html`](pos.html) directly to play with the four demo trades.
+- **The demo engine:** open [`pos.html`](pos.html) directly to play with the demo trades.
 - **Share a POS across devices:** `node hub.js` then open `http://<host>:8090/pos.html?hub=http://<host>:8090`
   on each device.
 
