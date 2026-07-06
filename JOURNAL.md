@@ -320,4 +320,34 @@ foundation that has now earned trust. (He also tossed in another feature on the 
 their own order and items* down the path — logged in the ideas inbox as a filtered view of the same status
 broadcast that drives the customer tracker.)
 
+### Building the primitives — and a third trade
+Then: *"do it all, don't stop until you're out of ideas and it's fully tested."* So we built the engine out,
+one primitive at a time, each driven in a real browser with zero console errors before moving on:
+
+- **The rules evaluator** — required modifier choices that block an order until made (steak temp, drink size,
+  starch), suggested add-ons that upsell, and **86/par-count** that decrements an item and disables it everywhere
+  at zero. All of it *data on the catalog item*, no code per trade.
+- **The timer/SLA service** — one primitive, two modes: a ticket that ages green→yellow→red, and a
+  back-scheduled promise-by that flips to **OVERDUE**. The salon color timer, the cleaner promise clock, the
+  repair parts-aging — the same chip with different numbers.
+- **Deposits + the flag engine** — take a 50% deposit at drop-off and charge only the balance at pickup; and
+  flags (allergy, pre-existing damage, data-loss waiver) that ride the ticket, show **bold red** at the station
+  that needs them, and **gate completion until a worker acknowledges** — acknowledged once per ticket, and that
+  acknowledgment persists and broadcasts.
+- **The status board + the customer tracker + the module contract** — two projections of the one state machine:
+  an internal board of every live job by status and location, and a **sanitized** customer view that shows the
+  order number, a friendly status, and item names — and *nothing else* (no prices, no internal detail). Plus a
+  module registry so the **stations you turn on automatically enable their modules.**
+
+And then the real exam: a **repair shop** — approval waiver, a split path where batteries skip diagnostics but
+screen repairs don't, a deposit, an aging clock — stood up entirely as **config, with not one line of engine code
+changed.** It just worked. Three trades now run on the same file, and a suite of five browser tests drives every
+primitive across all of them: **5/5 green, zero console errors.**
+
+The through-line of the whole session, now proven in running software: **the difference between a taqueria and a
+tailor and a phone-repair bench is a config file.** That is the entire reason customPOS can be free and still do
+what shops pay hundreds a month for. There are more primitives to build — commission/tip math, capacity/pacing,
+profile recall, loyalty, gift cards, a real checklist — but the shape is set, and each is now just another knob on
+a foundation that holds.
+
 *— to be continued —*
