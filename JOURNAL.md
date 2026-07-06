@@ -439,4 +439,25 @@ Fourteen test suites now, all green. The engine, four trades, the builder, payme
 self-contained one-file distribution — the whole loop from *"help me set up a POS"* to *"here's your own
 software, and here's how to keep changing it with AI."* Free, owned, tested, and real.
 
+### The studio, and a real restaurant
+*"Deepen it — make the workstations clickable with lots of settings, and modules that follow items and/or
+workstations."* So the builder's second step became a **configuration studio.** Click a workstation and set its
+role, whether it shows prices, and a QC checklist that gates it — **modules that follow the workstation.** Click
+an item and set everything that trails it: which workstations it flows through, its required choices and add-ons,
+its flags, whether a staffer performs it, its 86 limit — **modules that follow the item.** Business-wide knobs for
+tenders, tips, deposits, loyalty, the order timer, and queue capacity sit up top. Add or remove stations and
+items; the flow diagram is clickable; and the generated `CLAUDE.md` describes whatever you actually built.
+
+Then: *"Ozark should be the dry-cleaner endpoint; the next one is the Hamburger Barn in Arkadelphia — grab that
+menu and make it more real."* So we did. The dry-cleaner template grew into a full plant — laundered shirts with
+starch and damage/stain flags, slacks, suits, dresses, coats, comforters, wash-&-fold, alterations — flowing
+Front Counter → Detail/Tag → Assembly → Rack (with a real piece-count-in-vs-out QC checklist) past a status board
+and a customer tracker. And a **real burger joint**: the actual Hamburger Barn menu off Pine Street — the Bubba
+Burger, the Mushroom Swiss, the fried pickles and onion rings and Big Teaser Trio, catfish plates, milkshakes,
+and a Blue Plate special that 86s when it runs out — nineteen items that **fan out live to a Grill, a Fry Station,
+and a Shake Bar** with a Kitchen Display over the pass. We built it in the wizard and drove the actual generated
+POS: one ticket, and the burger showed up at the grill while the onion rings showed up at the fry station. A real
+Arkadelphia restaurant, running on the same engine as the cleaner and the salon, from a template you can edit and
+own. Sixteen test suites, all green.
+
 *— to be continued —*
