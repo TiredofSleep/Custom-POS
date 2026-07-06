@@ -134,13 +134,15 @@ const FLOWS = {
   salon: {   // FOURTH trade — services + per-provider commission + tips + retail, config-only
     label:"Salon", topology:"hub-and-spoke",
     branding:{ name:"Demo Salon", brandColor:"#b06fdb" },
-    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}} },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}},
+      loyalty:{ earnPerDollar:1, redeemPoints:20, redeemValue:5 } },   // earn 1 pt/$1; 20 pts = $5 off
     performers:["Alex","Sam","Jordan"],
     commission:{ pct:40 },              // 40% of service sales
     catalog:[
-      {id:"s1", name:"Haircut", price:35, category:"service", path:["chair"], performer:true},
-      {id:"s2", name:"Color",   price:85, category:"service", path:["chair"], performer:true},
-      {id:"s3", name:"Shampoo", price:22, category:"retail",  path:[]}               // retail — no performer, no commission
+      {id:"s1", name:"Haircut", price:35, category:"service",  path:["chair"], performer:true},
+      {id:"s2", name:"Color",   price:85, category:"service",  path:["chair"], performer:true},
+      {id:"s3", name:"Shampoo", price:22, category:"retail",   path:[]},              // retail — no performer, no commission
+      {id:"s4", name:"Gift card $25", price:25, category:"giftcard", path:[]}         // sold as a product; credits gift balance
     ],
     stations:[
       {id:"desk",   type:"central",    label:"Front Desk",  view:{money:true}},
@@ -298,8 +300,20 @@ let pending = null;    // an item being configured (required mods / add-ons / fl
 function attachCustomer(phone, name){
   phone=(phone||"").trim(); if(!phone) return;
   DB=loadDB(); const found=(DB.customers||[]).find(c=>c.phone===phone);
-  draft.customer = found ? {...found} : { phone, name:(name||"").trim()||phone, lastItems:[] };
+  draft.customer = found ? {...found} : { phone, name:(name||"").trim()||phone, lastItems:[], points:0, gift:0 };
   render();
+}
+/* loyalty + gift card settlement, applied once when a record is paid */
+function onPaid(r){
+  if(!r.customer) return;
+  const loy=FLOW.endpoints.loyalty;
+  const c=(DB.customers||[]).find(x=>x.phone===r.customer.phone); if(!c) return;
+  c.points=c.points||0; c.gift=c.gift||0;
+  if(loy) c.points += Math.floor(recordTotal(r))*(loy.earnPerDollar||1);               // earn on the ticket
+  const gc=r.lines.filter(l=>l.category==="giftcard").reduce((s,l)=>s+l.price*l.qty,0); // gift cards bought credit balance
+  if(gc) c.gift += gc;
+  if(r.redeemPts) c.points = Math.max(0, c.points - r.redeemPts);                       // spend redeemed points
+  if(r.giftUsed)  c.gift   = Math.max(0, c.gift - r.giftUsed);                          // spend gift balance
 }
 function renderCustomerBar(app, station){
   if(!(FLOW.endpoints.customer.persist && station.view.money)) return;   // only where a customer is kept
@@ -309,6 +323,7 @@ function renderCustomerBar(app, station){
     head.innerHTML="<b>"+draft.customer.name+"</b> <span class='muted'>"+draft.customer.phone+"</span><span class='spacer'></span>";
     const clr=document.createElement("button"); clr.textContent="✕"; clr.onclick=()=>{ draft.customer=null; render(); }; head.appendChild(clr);
     c.appendChild(head);
+    if((draft.customer.points||0)||(draft.customer.gift||0)){ const info=document.createElement("div"); info.className="muted"; info.style.marginTop="6px"; info.textContent=(draft.customer.points||0)+" pts · gift card "+money(draft.customer.gift||0); c.appendChild(info); }
     if(draft.customer.lastItems && draft.customer.lastItems.length){
       const u=document.createElement("button"); u.className="good"; u.style.marginTop="8px";
       u.textContent="＋ The usual ("+draft.customer.lastItems.map(l=>l.name).join(", ")+")";
@@ -459,8 +474,15 @@ function renderCheckout(app, station){
       wrap.appendChild(opts); c.appendChild(wrap);
     }
     if(r.tip){ const tl=document.createElement("div"); tl.className="line"; tl.innerHTML="<span class='muted'>Tip"+(r.tipTo?" → "+r.tipTo:"")+"</span><span class='spacer'></span><span>"+money(r.tip)+"</span>"; c.appendChild(tl); }
+    // redemptions: gift card balance + loyalty points (both attached to the customer)
+    if(r.customer && r.status==="READY" && bal>0.0001){
+      const cust=(DB.customers||[]).find(x=>x.phone===r.customer.phone)||{}; const loy=FLOW.endpoints.loyalty;
+      if((cust.gift||0)>0 && !r.giftUsed){ const amt=Math.min(cust.gift, bal); const b=document.createElement("button"); b.textContent="Pay with gift card "+money(amt); b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"gift",amount:amt}); r.giftUsed=amt; saveDB(DB); render(); }; c.appendChild(b); }
+      if(loy && (cust.points||0)>=loy.redeemPoints && !r.redeemPts){ const b=document.createElement("button"); b.textContent="Redeem "+loy.redeemPoints+" pts (−"+money(loy.redeemValue)+")"; b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"loyalty",amount:loy.redeemValue}); r.redeemPts=loy.redeemPoints; saveDB(DB); render(); }; c.appendChild(b); }
+    }
     const t=document.createElement("div"); t.className="line"; t.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(t);
-    if(r.status==="READY"&&bal>0.0001){ const paid=recordPaid(r); const b=document.createElement("button"); b.className="primary"; b.textContent=(paid>0?"Take balance ":"Take payment ")+money(bal); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:bal}); r.status="PAID"; saveDB(DB); render(); }; c.appendChild(b); }
+    if(r.status==="READY"&&bal>0.0001){ const paid=recordPaid(r); const b=document.createElement("button"); b.className="primary"; b.textContent=(paid>0?"Take balance ":"Take payment ")+money(bal); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:bal}); r.status="PAID"; onPaid(r); saveDB(DB); render(); }; c.appendChild(b); }
+    else if(r.status==="READY"){ const b=document.createElement("button"); b.className="good"; b.textContent="Complete (paid)"; b.style.marginTop="10px"; b.onclick=()=>{ r.status="PAID"; onPaid(r); saveDB(DB); render(); }; c.appendChild(b); }   // fully covered by deposit/gift/loyalty
     else if(r.status==="PAID"){ const b=document.createElement("button"); b.className="good"; b.textContent="Done — close"; b.style.marginTop="10px"; b.onclick=()=>{ r.status="CLOSED"; saveDB(DB); render(); }; c.appendChild(b); }
     app.appendChild(c); });
   const closed=DB.records.filter(r=>r.status==="CLOSED").length;
