@@ -602,4 +602,13 @@ sitting too long. One big **Bump ✓** fires the whole ticket ready — every it
 off the board and shows up ready at the counter. It reads the same order stream and completion math the production
 stations already use; it's just the expo's view of it, built for speed. Twenty-nine suites, all green.
 
+### Which day is "today"?
+While wiring history into the report, a quiet bug surfaced: the Z-report said *today* but was actually totalling
+**every sale ever recorded** — there was no date filter at all. On day one nobody notices; by week two the
+"today" numbers are nonsense. So the report learned about days. Every record already carries a timestamp, so the
+report now groups by the **local** calendar day and shows only that day's orders — and since the data was already
+there, the same change unlocked **history**: page back a day at a time, jump to any date with a picker, or hit
+*Today* to return. Close out tonight and the numbers are tonight's; look up last Saturday and it's Saturday's. A
+correctness fix and a feature from the same three lines. Thirty suites, all green.
+
 *— to be continued —*

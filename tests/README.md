@@ -25,6 +25,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `coupon.js` | named coupon codes (% or $ off) applied at checkout, tax recomputes on the discounted base, clear/reject paths |
 | `quotes.js` | save a draft as a quote/estimate, load it back into the order (consuming it), ring it up like any order |
 | `kds.js` | interactive kitchen display — live tickets oldest-first with an aging prep timer, Bump fires the ticket ready |
+| `report-history.js` | the Z-report is scoped to a single day (fixes counting all history) + pages back through prior days |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
