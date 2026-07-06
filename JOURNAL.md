@@ -623,4 +623,15 @@ sentence, because trust is the entire pitch. A feature grid shows the twenty thi
 every button leads to the builder or the live demo. The marketing and the product tell the same story because
 they're made of the same stuff. Thirty-one suites, all green.
 
+### Templates that arrive fully dressed
+All these capabilities were reachable in the builder, but a first-time owner shouldn't have to know to turn them
+on — the *template* should already think like their trade. So each starter grew into what that business actually
+runs on. **Retail** ships with stock counts, barcodes, a scan box, sales tax, discounts, split checks and an
+Office report. The **café** and the **Hamburger Barn** get an interactive Kitchen Display with bump and split
+checks. The **cleaner** and the **repair shop** get ready-texts, quotes, and a Z-report — the repair shop's
+estimates especially. The **salon** arrives with staff PINs and a clock-in welcome, an Appointments book, a Time
+Clock, and ready-texts. Pick a trade, type your name, hit build, and the POS you download already knows how your
+kind of shop works — every one of the six templates builds and runs its live preview with zero console errors.
+Thirty-one suites, all green.
+
 *— to be continued —*
