@@ -350,4 +350,21 @@ what shops pay hundreds a month for. There are more primitives to build — comm
 profile recall, loyalty, gift cards, a real checklist — but the shape is set, and each is now just another knob on
 a foundation that holds.
 
+### The payments blueprint arrives (from another Claude)
+A parallel Claude session — working the payments angle while this one built the engine — dropped a
+**validated card-payment blueprint** into the repo ([docs/PAYMENTS-MODULE.md](docs/PAYMENTS-MODULE.md)). It's the
+monetization core the whole free model depends on, and it's exactly right: a **processor-agnostic engine
+interface** (`pay` / `saveCard` / `refund` / `void`) with swappable adapter modules, a scrubbed **CardConnect /
+CardPointe** reference adapter that runs only on the business's own server, and the golden rule that **the browser
+never touches a card number** — the card is captured by the processor's hosted tokenizer or a registered
+terminal, and only a token + last-four + brand ever come back. It even carries the hard-won gotchas from real
+validation (dollar-string on the gateway vs integer-cents on the terminal; void-before-settlement vs
+refund-after) and the refund-safety rule inherited from the origin app: **no typed refund amounts, owner approval
+required.** The integration has passed the processor's full transaction-scenario validation.
+
+Two Claudes, two branches of the same vision, converging in one repo — one building the engine, one certifying
+the way it earns its keep. The branch it came on had forked before this session's engine work, so we brought just
+the blueprint onto main rather than merge a stale tree. The monetization is no longer a promise in a plan; it's a
+proven, buildable module waiting for Phase 5.
+
 *— to be continued —*

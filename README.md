@@ -44,6 +44,11 @@ card payments? The POS is still 100% free and fully yours. **No paywalls, no fea
 > *Software is free. Knowledge is free.* This project is a deliberate stance on how technology — and AI — should
 > serve people: by helping them **own** their tools, not rent them.
 
+The card-payment module the free model rests on has a **validated blueprint** in
+[docs/PAYMENTS-MODULE.md](docs/PAYMENTS-MODULE.md) — a processor-agnostic interface with a certified
+CardConnect/CardPointe reference adapter, PCI-safe by design (**the browser never touches a card number**;
+credentials live only on the business's own server, never in the downloaded file).
+
 ## Who it's for
 
 Small businesses that want a real POS without a monthly bill or a vendor holding their data hostage — starting
