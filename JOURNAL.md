@@ -514,4 +514,15 @@ night now sees the day whole on one screen — what came in, by tender and categ
 the shift cost in hours — without a second system talking to the first, because there is no second system.
 Twenty suites, all green.
 
+### Knowing what's on the shelf
+For a shop that sells *things*, the question that never stops is *how many are left?* So items got an optional
+stock count. Set a Widget to 2 on hand and a reorder point of 1, and the register tile now reads **2 in stock**;
+sell one and it says **1 in stock · low**; sell the last and it flips to **out of stock** and the button goes
+dead so nobody rings up air. On-hand isn't a number we mutate and hope stays right — it's *derived*: starting
+stock, plus anything received, minus everything sold, computed the same way the 86 counter already worked. The
+back-office report grows a **Stock** card that badges *"1 to reorder"*, lists every tracked item with its on-hand
+and a low/out tag, and gives each a **Receive** box — type in a delivery of 5, and the shelf refills and the
+reorder flag clears. The builder exposes both fields (*In stock*, *Reorder at*) right on the item, so a retailer
+can set it all up without touching code. Twenty-one suites, all green.
+
 *— to be continued —*
