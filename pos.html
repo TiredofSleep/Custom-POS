@@ -752,10 +752,21 @@ function renderCheckout(app, station){
     if(tax){ totLine("Tax", money(tax)); }
     const t=document.createElement("div"); t.className="line"; t.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(t);
     if(r.status==="READY"&&bal>0.0001){ const paid=recordPaid(r);
-      const b=document.createElement("button"); b.className="primary"; b.textContent=(paid>0?"Take balance ":"Take payment ")+money(bal); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:bal}); r.status="PAID"; onPaid(r); saveDB(DB); render(); }; c.appendChild(b);
+      // split the check evenly N ways (opt-in) — each tap takes one equal share until the balance clears
+      if(FLOW.endpoints.payment.split){
+        const wrap=document.createElement("div"); wrap.className="mgroup"; wrap.innerHTML="<div class='lbl'>Split evenly</div>";
+        const opts=document.createElement("div"); opts.className="opts";
+        [2,3,4].forEach(n=>{ const bb=document.createElement("button"); if(r.splitWays===n) bb.className="sel"; bb.textContent=n+" ways"; bb.onclick=()=>{ r.splitWays=n; r.splitShare=+(recordTotal(r)/n).toFixed(2); saveDB(DB); render(); }; opts.appendChild(bb); });
+        const no=document.createElement("button"); if(!r.splitWays) no.className="sel"; no.textContent="No split"; no.onclick=()=>{ delete r.splitWays; delete r.splitShare; saveDB(DB); render(); }; opts.appendChild(no);
+        wrap.appendChild(opts); c.appendChild(wrap);
+        if(r.splitWays){ const paidShares=Math.round((recordTotal(r)-bal)/r.splitShare); const info=document.createElement("div"); info.className="muted"; info.style.margin="4px 0"; info.textContent=r.splitWays+" shares · "+money(r.splitShare)+" each · "+paidShares+" of "+r.splitWays+" paid"; c.appendChild(info); }
+      }
+      const payAmt = r.splitWays ? Math.min(r.splitShare, bal) : bal;
+      const label = r.splitWays ? "Take share " : (paid>0?"Take balance ":"Take payment ");
+      const b=document.createElement("button"); b.className="primary"; b.textContent=label+money(payAmt); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:payAmt}); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); }; c.appendChild(b);
       if((FLOW.endpoints.payment.tenders||[]).includes("card")){
-        const cb=document.createElement("button"); cb.textContent="Pay by card "+money(bal); cb.style.margin="10px 0 0 8px";
-        cb.onclick=()=>{ const res=payAdapter().charge(Math.round(bal*100)); if(res.status==="approved"){ r.tenders.push({type:"card",amount:bal,last4:res.last4,brand:res.brand,ref:res.ref}); r.status="PAID"; onPaid(r); saveDB(DB); render(); } else { flash("Card "+(res.message||"declined")); } };
+        const cb=document.createElement("button"); cb.textContent=(r.splitWays?"Share by card ":"Pay by card ")+money(payAmt); cb.style.margin="10px 0 0 8px";
+        cb.onclick=()=>{ const res=payAdapter().charge(Math.round(payAmt*100)); if(res.status==="approved"){ r.tenders.push({type:"card",amount:payAmt,last4:res.last4,brand:res.brand,ref:res.ref}); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { flash("Card "+(res.message||"declined")); } };
         c.appendChild(cb);
       }
     }

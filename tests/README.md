@@ -19,6 +19,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `inventory.js` | stock on-hand shown on tiles, low-stock + out-of-stock (tile disabled), Office reorder list, receive-stock replenish |
 | `booking.js` | appointments — book a customer/service/time/staff, day schedule, check-in converts a booking into a live order |
 | `notify.js` | "text when ready" — processor-agnostic notify seam, template tokens ({name}/{number}/{biz}), sent confirmation |
+| `split.js` | split the check evenly N ways — equal shares, mixed cash/card per share, balance clears exactly |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
