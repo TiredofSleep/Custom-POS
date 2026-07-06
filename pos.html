@@ -185,6 +185,22 @@ function recordTotal(r){ return r.lines.reduce((s,l)=> s + l.price*l.qty, 0); }
 function recordPaid(r){ return (r.tenders||[]).reduce((s,t)=> s + t.amount, 0); }
 function recordBalance(r){ return recordTotal(r) + (r.tip||0) - recordPaid(r); }   // tip adds to what's due
 function firstPerformer(r){ const l=r.lines.find(x=>x.performer); return l?l.performer:null; }
+
+/* Processor-agnostic PAYMENTS interface (matches docs/PAYMENTS-MODULE.md). A simulator adapter ships by
+   default so a downloaded POS takes card payments out of the box; the certified CardConnect adapter swaps in
+   on the business's own server. The browser only ever sees a token + last4 + brand — never a card number. */
+const PAYMENTS = {
+  sim: {
+    label:"Simulator",
+    charge(amountCents){
+      const cents=Math.round(amountCents);
+      if(cents%100===13) return { status:"declined", message:"declined (demo: any $_.13 declines)" };  // demo decline path
+      const brands=["Visa","Mastercard","Amex"];
+      return { status:"approved", ref:"SIM"+cents, auth:"OK", token:"tok_sim", brand:brands[cents%3], last4:String(cents).slice(-4).padStart(4,"0") };
+    }
+  }
+};
+function payAdapter(){ const pr=(FLOW.endpoints.payment&&FLOW.endpoints.payment.provider)||"sim"; return PAYMENTS[pr]||PAYMENTS.sim; }
 function lineComplete(l){ return l.stage >= l.path.length; }
 function allComplete(r){ return r.lines.every(lineComplete); }
 function linesAtStation(r, stationId){ return r.lines.filter(l => !lineComplete(l) && l.path[l.stage]===stationId); }
@@ -507,8 +523,16 @@ function renderCheckout(app, station){
       if((cust.gift||0)>0 && !r.giftUsed){ const amt=Math.min(cust.gift, bal); const b=document.createElement("button"); b.textContent="Pay with gift card "+money(amt); b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"gift",amount:amt}); r.giftUsed=amt; saveDB(DB); render(); }; c.appendChild(b); }
       if(loy && (cust.points||0)>=loy.redeemPoints && !r.redeemPts){ const b=document.createElement("button"); b.textContent="Redeem "+loy.redeemPoints+" pts (−"+money(loy.redeemValue)+")"; b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"loyalty",amount:loy.redeemValue}); r.redeemPts=loy.redeemPoints; saveDB(DB); render(); }; c.appendChild(b); }
     }
+    (r.tenders||[]).filter(t=>t.type==="card").forEach(t=>{ const cl=document.createElement("div"); cl.className="line"; cl.innerHTML="<span class='muted'>💳 "+t.brand+" ••"+t.last4+"</span><span class='spacer'></span><span>"+money(t.amount)+"</span>"; c.appendChild(cl); });
     const t=document.createElement("div"); t.className="line"; t.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(t);
-    if(r.status==="READY"&&bal>0.0001){ const paid=recordPaid(r); const b=document.createElement("button"); b.className="primary"; b.textContent=(paid>0?"Take balance ":"Take payment ")+money(bal); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:bal}); r.status="PAID"; onPaid(r); saveDB(DB); render(); }; c.appendChild(b); }
+    if(r.status==="READY"&&bal>0.0001){ const paid=recordPaid(r);
+      const b=document.createElement("button"); b.className="primary"; b.textContent=(paid>0?"Take balance ":"Take payment ")+money(bal); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:bal}); r.status="PAID"; onPaid(r); saveDB(DB); render(); }; c.appendChild(b);
+      if((FLOW.endpoints.payment.tenders||[]).includes("card")){
+        const cb=document.createElement("button"); cb.textContent="Pay by card "+money(bal); cb.style.margin="10px 0 0 8px";
+        cb.onclick=()=>{ const res=payAdapter().charge(Math.round(bal*100)); if(res.status==="approved"){ r.tenders.push({type:"card",amount:bal,last4:res.last4,brand:res.brand,ref:res.ref}); r.status="PAID"; onPaid(r); saveDB(DB); render(); } else { flash("Card "+(res.message||"declined")); } };
+        c.appendChild(cb);
+      }
+    }
     else if(r.status==="READY"){ const b=document.createElement("button"); b.className="good"; b.textContent="Complete (paid)"; b.style.marginTop="10px"; b.onclick=()=>{ r.status="PAID"; onPaid(r); saveDB(DB); render(); }; c.appendChild(b); }   // fully covered by deposit/gift/loyalty
     else if(r.status==="PAID"){ const b=document.createElement("button"); b.className="good"; b.textContent="Done — close"; b.style.marginTop="10px"; b.onclick=()=>{ r.status="CLOSED"; saveDB(DB); render(); }; c.appendChild(b); }
     app.appendChild(c); });
