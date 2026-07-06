@@ -535,4 +535,14 @@ same pipeline and checkout as a walk-in; the schedule marks it *checked in #N* s
 closed. One catalog, one order stream, whether the customer booked ahead or walked through the door. The builder
 offers Appointments as a station role, so any service business can switch it on. Twenty-two suites, all green.
 
+### "Your order's ready"
+The single most-asked-for feature at a cleaner or a repair shop is the text that says *come get it*. So the
+engine grew a notify seam — built exactly like payments, and for the same reason. Turn on **text when ready** and
+a ready order with a customer on it shows a *📱 Text ready* button; tap it and the engine composes the message
+from a template (*"Hi {name}, your order #{number} at {biz} is ready."*), sends it, and stamps the order *✓
+Texted 5551234: …* so staff know it went. The send goes through a processor-agnostic adapter: a simulator that
+just records the message ships by default so a downloaded POS works offline and demos honestly, and a hub adapter
+(Twilio and friends) does the real send server-side — the browser never holds an API key, same discipline as card
+numbers. The builder exposes it as a one-tap business toggle. Twenty-three suites, all green.
+
 *— to be continued —*
