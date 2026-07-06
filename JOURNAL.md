@@ -585,4 +585,13 @@ off, and switching codes just re-applies. The builder gets a **Coupon codes** ed
 discounts are on — add a code, pick *% off* or *$ off*, set the number. Same discount plumbing underneath, now
 with a name. Twenty-seven suites, all green.
 
+### "Let me write that up for you"
+Not every counter conversation ends in a sale — sometimes the customer wants a price to think about. A repair
+shop quotes a screen job, a cleaner quotes a wedding dress, and the customer comes back Tuesday. So the engine
+learned **quotes**. Turn it on and the order screen gains *Save as quote*: it tucks the current draft away with a
+number and a total, clears the counter for the next customer, and lists it under **Saved quotes**. When they come
+back, *Load* drops the whole thing back into the order exactly as it was — same items, same customer — and it
+rings up like any walk-in. A quote is just a parked draft, so it costs nothing and rides the same order machinery;
+the builder turns it on with one toggle. Twenty-eight suites, all green.
+
 *— to be continued —*

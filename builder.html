@@ -201,6 +201,7 @@ function toggleDiscounts(){ if(cfg.endpoints.discounts) delete cfg.endpoints.dis
 function toggleNotify(){ if(cfg.endpoints.notify) delete cfg.endpoints.notify; else cfg.endpoints.notify={template:"Hi {name}, your order #{number} at {biz} is ready."}; render(); }
 function toggleSplit(){ if(pay().split) delete pay().split; else pay().split=true; render(); }
 function toggleScan(){ if(cfg.endpoints.scan) delete cfg.endpoints.scan; else cfg.endpoints.scan=true; render(); }
+function toggleQuotes(){ if(cfg.endpoints.quotes) delete cfg.endpoints.quotes; else cfg.endpoints.quotes=true; render(); }
 function couponList(){ return Array.isArray(cfg.endpoints.discounts)?cfg.endpoints.discounts:[]; }
 function addCoupon(){ const list=couponList(); list.push({code:"SAVE10", pct:10}); cfg.endpoints.discounts=list; render(); }
 function removeCoupon(i){ const list=couponList(); list.splice(i,1); cfg.endpoints.discounts=list.length?list:true; render(); }
@@ -378,7 +379,8 @@ function render(){
         h('button',{class:cfg.endpoints.discounts?'on':'', onclick:()=>toggleDiscounts()},['discounts']),
         h('button',{class:cfg.endpoints.notify?'on':'', onclick:()=>toggleNotify()},['text when ready']),
         h('button',{class:pay().split?'on':'', onclick:()=>toggleSplit()},['split checks']),
-        h('button',{class:cfg.endpoints.scan?'on':'', onclick:()=>toggleScan()},['barcode scan']) ]),
+        h('button',{class:cfg.endpoints.scan?'on':'', onclick:()=>toggleScan()},['barcode scan']),
+        h('button',{class:cfg.endpoints.quotes?'on':'', onclick:()=>toggleQuotes()},['quotes / estimates']) ]),
       h('div',{class:'fld'},[ h('span',{class:'flab'},['Sales tax %']), h('input',{class:'sm',type:'number', step:'0.01', value:(cfg.endpoints.tax&&(cfg.endpoints.tax.rate*100))||'', placeholder:'0', oninput:e=>setTax(e.target.value)}),
         h('span',{class:'flab'},['Deposit %']), h('input',{class:'sm',type:'number', value:(pay().deposit&&pay().deposit.pct)||'', placeholder:'0', oninput:e=>setDeposit(e.target.value)}),
         h('span',{class:'flab'},['Order timer']), h('select',{onchange:e=>setTimer(e.target.value)}, [["off","none"],["aging","prep timer (turns red)"],["due","promise-by / due date"]].map(([v,l])=>h('option',{value:v, selected:(cfg.timer?cfg.timer.mode:'off')===v},[l]))),

@@ -23,6 +23,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `house-account.js` | charge to a customer's house account (A/R), report splits A/R from collected, record-payment settles |
 | `scan.js` | search/scan box (big menus or scan-enabled) — barcode + Enter rings the item, partial-name filter + Enter rings first match |
 | `coupon.js` | named coupon codes (% or $ off) applied at checkout, tax recomputes on the discounted base, clear/reject paths |
+| `quotes.js` | save a draft as a quote/estimate, load it back into the order (consuming it), ring it up like any order |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
