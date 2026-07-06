@@ -766,12 +766,23 @@ function renderCheckout(app, station){
     // discounts (opt-in per flow)
     if(FLOW.endpoints.discounts && r.status==="READY"){
       const wrap=document.createElement("div"); wrap.className="mgroup"; wrap.innerHTML="<div class='lbl'>Discount</div>";
-      const opts=document.createElement("div"); opts.className="opts";
-      const mk=(lab,fn,on)=>{ const bb=document.createElement("button"); if(on) bb.className="sel"; bb.textContent=lab; bb.onclick=()=>{ fn(); saveDB(DB); render(); }; opts.appendChild(bb); };
-      mk("10% off", ()=>{ r.discount=+(lineSubtotal(r)*0.10).toFixed(2); }, Math.abs((r.discount||0)-lineSubtotal(r)*0.10)<0.005 && r.discount);
-      mk("$5 off", ()=>{ r.discount=5; }, r.discount===5);
-      mk("None", ()=>{ r.discount=0; }, !r.discount);
-      wrap.appendChild(opts); c.appendChild(wrap);
+      const coupons=Array.isArray(FLOW.endpoints.discounts)?FLOW.endpoints.discounts:null;
+      if(coupons){   // named coupon codes: type a code to apply its % or $ off
+        const box=document.createElement("div"); box.className="opts";
+        const inp=document.createElement("input"); inp.id="couponCode"; inp.placeholder="Coupon code"; inp.style.width="140px"; if(r.coupon) inp.value=r.coupon;
+        const apply=document.createElement("button"); apply.textContent="Apply"; apply.onclick=()=>{ const code=(inp.value||"").trim().toUpperCase(); const co=coupons.find(x=>String(x.code).toUpperCase()===code); if(!co){ flash("No such coupon"); return; } r.discount = co.pct ? +(lineSubtotal(r)*co.pct/100).toFixed(2) : (co.amount||0); r.coupon=co.code; saveDB(DB); render(); };
+        const clr=document.createElement("button"); clr.textContent="Clear"; clr.onclick=()=>{ r.discount=0; delete r.coupon; saveDB(DB); render(); };
+        box.appendChild(inp); box.appendChild(apply); box.appendChild(clr); wrap.appendChild(box);
+        if(r.coupon){ const ap=document.createElement("div"); ap.className="muted"; ap.style.marginTop="4px"; ap.textContent="✓ "+r.coupon+" applied"; wrap.appendChild(ap); }
+      } else {
+        const opts=document.createElement("div"); opts.className="opts";
+        const mk=(lab,fn,on)=>{ const bb=document.createElement("button"); if(on) bb.className="sel"; bb.textContent=lab; bb.onclick=()=>{ fn(); saveDB(DB); render(); }; opts.appendChild(bb); };
+        mk("10% off", ()=>{ r.discount=+(lineSubtotal(r)*0.10).toFixed(2); }, Math.abs((r.discount||0)-lineSubtotal(r)*0.10)<0.005 && r.discount);
+        mk("$5 off", ()=>{ r.discount=5; }, r.discount===5);
+        mk("None", ()=>{ r.discount=0; delete r.coupon; }, !r.discount);
+        wrap.appendChild(opts);
+      }
+      c.appendChild(wrap);
     }
     if(r.tip){ const tl=document.createElement("div"); tl.className="line"; tl.innerHTML="<span class='muted'>Tip"+(r.tipTo?" → "+r.tipTo:"")+"</span><span class='spacer'></span><span>"+money(r.tip)+"</span>"; c.appendChild(tl); }
     // redemptions: gift card balance + loyalty points (both attached to the customer)

@@ -201,6 +201,9 @@ function toggleDiscounts(){ if(cfg.endpoints.discounts) delete cfg.endpoints.dis
 function toggleNotify(){ if(cfg.endpoints.notify) delete cfg.endpoints.notify; else cfg.endpoints.notify={template:"Hi {name}, your order #{number} at {biz} is ready."}; render(); }
 function toggleSplit(){ if(pay().split) delete pay().split; else pay().split=true; render(); }
 function toggleScan(){ if(cfg.endpoints.scan) delete cfg.endpoints.scan; else cfg.endpoints.scan=true; render(); }
+function couponList(){ return Array.isArray(cfg.endpoints.discounts)?cfg.endpoints.discounts:[]; }
+function addCoupon(){ const list=couponList(); list.push({code:"SAVE10", pct:10}); cfg.endpoints.discounts=list; render(); }
+function removeCoupon(i){ const list=couponList(); list.splice(i,1); cfg.endpoints.discounts=list.length?list:true; render(); }
 function setTax(v){ v=Number(v)||0; if(v>0) cfg.endpoints.tax={rate:v/100}; else delete cfg.endpoints.tax; }
 /* ---- staff & time clock ---- */
 function addStaff(){ cfg.staff=cfg.staff||[]; cfg.staff.push({ id:uid(), name:"New person", pin:String(1000+cfg.staff.length) }); render(); }
@@ -382,6 +385,22 @@ function render(){
         h('span',{class:'flab'},['Max in queue']), h('input',{class:'sm',type:'number', value:(cfg.capacity&&cfg.capacity.max)||'', placeholder:'∞', oninput:e=>setCapacity(e.target.value)}) ])
     ]);
     app.appendChild(biz);
+    // Coupon codes (only when discounts are on) — turns the quick-discount buttons into named codes
+    if(cfg.endpoints.discounts){
+      const coupons=couponList();
+      const cRows=h('div',{}, coupons.map((co,i)=>h('div',{class:'row2'},[
+        h('input',{class:'nm', value:co.code, oninput:e=>co.code=e.target.value.toUpperCase()}),
+        h('select',{onchange:e=>{ if(e.target.value==='pct'){ co.pct=co.pct||co.amount||10; delete co.amount; } else { co.amount=co.amount||co.pct||5; delete co.pct; } render(); }},
+          [['pct','% off'],['amount','$ off']].map(([v,l])=>h('option',{value:v, selected:(co.pct!=null?'pct':'amount')===v},[l]))),
+        h('input',{class:'sm',type:'number', value:co.pct!=null?co.pct:co.amount, oninput:e=>{ const n=Number(e.target.value)||0; if(co.pct!=null) co.pct=n; else co.amount=n; }}),
+        h('button',{class:'danger', onclick:()=>removeCoupon(i)},['×'])
+      ])));
+      app.appendChild(h('div',{class:'panel'},[
+        h('h2',{},['Coupon codes']),
+        h('div',{class:'fld'},[ h('span',{class:'flab'},['Codes']), h('span',{class:'hint'},['add codes to replace the quick 10%/$5 buttons with named coupons customers type at checkout'])]),
+        cRows, h('button',{onclick:addCoupon},['+ Add coupon'])
+      ]));
+    }
     // Staff & time clock
     const staff=cfg.staff||[];
     const staffRows=h('div',{}, staff.map((s,i)=>h('div',{class:'row2'},[
