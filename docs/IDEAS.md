@@ -25,6 +25,17 @@ and a bit of **encouragement**. Owner-editable, changes day to day.
   today's promo, cleaner's rush-list).
 - **Depth later:** per-role messages, acknowledge-to-continue, rotating tips, tie into the daily checklist.
 
+### Staff "track my order & items"  ·  *from Brayden*
+Let staff — a restaurant server, a counter clerk — **track their own order and its items** as they move through
+the shop: where each item is on the path right now (in the kitchen, at the bar, on the rack, ready).
+- **Problem it solves:** the server/clerk stops walking to the pass to check; they see live status and know
+  exactly when to run the plate or call the customer.
+- **Station / trigger:** a per-actor filter on the **status board** — "my orders" — reading live line stages.
+- **Primitive underneath:** **status broadcast & notify** (#11) filtered to a performer — the same state machine
+  that drives the customer tracker, pointed inward at the staff.
+- **Cross-industry:** yes — any trade where one person owns an order that others work (restaurant, cleaner,
+  repair, salon).
+
 ---
 
 *More to come — keep them coming.*
