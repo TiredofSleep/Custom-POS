@@ -306,6 +306,15 @@ function renderReport(app, station){
   const diff=document.createElement("span"); diff.className="muted"; diff.style.marginLeft="10px";
   inp.oninput=()=>{ const c=Number(inp.value); if(inp.value===""){ diff.textContent=""; return; } const d=+(c-(byTender.cash||0)).toFixed(2); diff.textContent = d===0?"balanced ✓":(d>0?"over +"+money(d):"short "+money(-d)); diff.style.color = d===0?"var(--good)":"var(--warn)"; };
   cnt.appendChild(inp); cnt.appendChild(diff); dc.appendChild(cnt); app.appendChild(dc);
+  // ---- labor: hours off the time clock (closes the loop with the timeclock station) ----
+  if((DB.punches||[]).length){
+    const now=Date.now(); const byStaff={}; let stillOn=false;
+    DB.punches.forEach(pn=>{ if(!pn.out) stillOn=true; byStaff[pn.name]=(byStaff[pn.name]||0)+((pn.out?pn.outTs:now)-pn.inTs)/3600000; });
+    const lc=document.createElement("div"); lc.className="card"; lc.innerHTML="<div class='row'><b>Labor — hours today</b></div>";
+    let tot=0; Object.keys(byStaff).forEach(n=>{ tot+=byStaff[n]; lc.innerHTML+=L(n, byStaff[n].toFixed(2)+" h"); });
+    lc.innerHTML+=L("Total hours", tot.toFixed(2)+" h", true) + (stillOn?"<div class='muted' style='margin-top:4px'>Some staff are still on the clock.</div>":"");
+    app.appendChild(lc);
+  }
   // ---- refunds (back-office: reverse a paid order to its original tender) ----
   const refundable=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED") && recordPaid(r)>0.0001);
   const rc=document.createElement("div"); rc.className="card"; rc.innerHTML="<div class='row'><b>Refund an order</b></div>";

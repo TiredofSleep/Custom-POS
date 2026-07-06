@@ -506,4 +506,12 @@ the one file you download, and named in the generated `CLAUDE.md` so your own Cl
 there. Build a café, drop in a Time Clock station and a couple of people, and the POS you download greets them by
 name on their first punch. Twenty suites, all green.
 
+### The clock feeds the close
+Once the time clock was writing punches into the same data the register uses, the payoff was almost free: the
+end-of-day report grew a **Labor — hours today** line. It sums every punch by name, totals the day's hours, and
+if anyone's still on the clock it says so (their hours are counted up to *right now*). The owner closing out at
+night now sees the day whole on one screen — what came in, by tender and category, the drawer count, *and* what
+the shift cost in hours — without a second system talking to the first, because there is no second system.
+Twenty suites, all green.
+
 *— to be continued —*
