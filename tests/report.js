@@ -35,9 +35,13 @@ const FLOW = {
   await p.getByRole('button',{name:/Pay by card \$11\.00/}).click();
   await p.getByRole('button',{name:/Done — close/}).click();
 
+  // ---- seed a completed time-clock punch (2.00 h) so the report's Labor section has real hours ----
+  await p.evaluate(() => { DB.punches.push({ staffId:"e1", name:"Alex", in:"08:00", inTs:0, out:"10:00", outTs:7200000 }); saveDB(DB); });
+
   // ---- open the Office end-of-day report ----
   await changeTo(/^Office/);
   const rep = await T();
+  const laborOk = /Labor — hours today/.test(rep) && /Alex\s*2\.00 h/.test(rep) && /Total hours\s*2\.00 h/.test(rep);
   const salesOk = /Orders\s*2/.test(rep) && /Items sold\s*2/.test(rep)
     && /Net sales\s*\$20\.00/.test(rep) && /Tax collected\s*\$2\.00/.test(rep)
     && /Total collected\s*\$22\.00/.test(rep);
@@ -72,6 +76,7 @@ const FLOW = {
   console.log('counted short -> "short $2.00":', short);
   console.log('counted over -> "over +$2.00":', over);
   console.log('refund reverses card order (orders 1, refunds −$11, card nets $0, collected $11):', refundOk);
+  console.log('labor hours off the time clock (Alex 2.00 h, total 2.00 h):', laborOk);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!salesOk||!tenderOk||!catOk||!drawerOk||!balanced||!short||!over||!refundOk?1:0);
+  process.exit(errors.length||!salesOk||!tenderOk||!catOk||!drawerOk||!balanced||!short||!over||!refundOk||!laborOk?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });
