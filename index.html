@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>customPOS — build your own point-of-sale, download it, own the code</title>
+<meta name="description" content="A free, config-driven POS builder. Answer a few questions, download one self-contained file, and own it forever. No subscription, no lock-in, your data on your machine.">
+<style>
+  :root{ --brand:#1f6feb; --bg:#0f1115; --panel:#161922; --card:#1b1f28; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; --good:#2ea043; --warn:#e3893c; }
+  @media (prefers-color-scheme: light){ :root{ --bg:#f6f8fb; --panel:#fff; --card:#fff; --line:#e3e8ef; --ink:#12161d; --dim:#5b6675; } }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  a{ color:var(--brand); text-decoration:none; }
+  a:hover{ text-decoration:underline; }
+  .wrap{ max-width:1040px; margin:0 auto; padding:0 20px; }
+  header.nav{ position:sticky; top:0; z-index:10; backdrop-filter:blur(8px); background:color-mix(in srgb, var(--bg) 82%, transparent); border-bottom:1px solid var(--line); }
+  header.nav .wrap{ display:flex; align-items:center; gap:12px; height:58px; }
+  .brand{ font-weight:800; letter-spacing:-.02em; font-size:19px; }
+  .brand .dot{ display:inline-block; width:11px; height:11px; border-radius:3px; background:var(--brand); margin-right:8px; vertical-align:baseline; }
+  header.nav .spacer{ flex:1; }
+  .btn{ display:inline-block; padding:11px 18px; border-radius:10px; border:1px solid var(--line); font-weight:600; cursor:pointer; background:var(--card); color:var(--ink); }
+  .btn.primary{ background:var(--brand); border-color:var(--brand); color:#fff; }
+  .btn.big{ padding:15px 26px; font-size:17px; }
+  .hero{ padding:76px 0 40px; text-align:center; }
+  .hero h1{ font-size:clamp(34px,6vw,56px); line-height:1.05; letter-spacing:-.03em; margin:0 0 18px; }
+  .hero h1 .g{ background:linear-gradient(90deg,var(--brand),#7aa2ff); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero p.sub{ font-size:clamp(17px,2.6vw,21px); color:var(--dim); max-width:640px; margin:0 auto 30px; }
+  .cta{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .pill{ display:inline-block; font-size:13px; color:var(--dim); border:1px solid var(--line); border-radius:999px; padding:5px 13px; margin:4px; }
+  section{ padding:52px 0; border-top:1px solid var(--line); }
+  section h2{ font-size:clamp(24px,4vw,33px); letter-spacing:-.02em; margin:0 0 8px; }
+  section .lede{ color:var(--dim); max-width:680px; margin:0 0 30px; }
+  .grid{ display:grid; gap:16px; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  .card h3{ margin:0 0 6px; font-size:17px; }
+  .card p{ margin:0; color:var(--dim); font-size:14.5px; }
+  .steps{ counter-reset:s; display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+  .step{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; position:relative; }
+  .step::before{ counter-increment:s; content:counter(s); display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:9px; background:var(--brand); color:#fff; font-weight:800; margin-bottom:12px; }
+  .money{ background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:28px; display:grid; gap:20px; grid-template-columns:1fr 1fr; }
+  @media (max-width:720px){ .money{ grid-template-columns:1fr; } }
+  .money .free .amt{ font-size:40px; font-weight:800; letter-spacing:-.02em; }
+  .money .free .amt small{ font-size:16px; color:var(--dim); font-weight:600; }
+  .money h3{ margin:0 0 8px; font-size:18px; }
+  .money p{ color:var(--dim); margin:0 0 6px; font-size:14.5px; }
+  .feat{ display:grid; gap:10px 16px; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+  .feat div{ padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--card); font-size:14.5px; }
+  .feat b{ font-weight:600; }
+  .faq details{ border:1px solid var(--line); border-radius:12px; background:var(--card); padding:2px 18px; margin-bottom:10px; }
+  .faq summary{ cursor:pointer; font-weight:600; padding:14px 0; list-style:none; }
+  .faq summary::-webkit-details-marker{ display:none; }
+  .faq summary::after{ content:"+"; float:right; color:var(--dim); font-weight:700; }
+  .faq details[open] summary::after{ content:"–"; }
+  .faq p{ margin:0 0 14px; color:var(--dim); font-size:14.5px; }
+  footer{ padding:40px 0 60px; border-top:1px solid var(--line); color:var(--dim); font-size:14px; text-align:center; }
+  .tag{ display:inline-block; font-size:12.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--good); margin-bottom:14px; }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap">
+  <span class="brand"><span class="dot"></span>customPOS</span>
+  <span class="spacer"></span>
+  <a href="pos.html">Live demo</a>
+  <a class="btn primary" href="builder.html">Build yours</a>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="tag">Free · open source · yours to keep</div>
+    <h1>Build your own POS.<br><span class="g">Download it. Own the code.</span></h1>
+    <p class="sub">Answer a few questions about your business and download a single, self-contained point-of-sale file. It runs in a browser, stores data on your own machine, and works offline. No subscription. No lock-in.</p>
+    <div class="cta">
+      <a class="btn primary big" href="builder.html">Build my POS</a>
+      <a class="btn big" href="pos.html">See the live demo</a>
+    </div>
+    <div style="margin-top:22px">
+      <span class="pill">Dry cleaner</span><span class="pill">Restaurant</span><span class="pill">Retail</span><span class="pill">Salon</span><span class="pill">Repair shop</span>
+    </div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <h2>How it works</h2>
+  <p class="lede">It's a website builder, but at the end you download the actual working software — and it's yours.</p>
+  <div class="steps">
+    <div class="step"><h3>Pick your trade</h3><p>Start from a template that already thinks like your business — the lifecycle, the stations, a sensible menu.</p></div>
+    <div class="step"><h3>Make it yours</h3><p>Click workstations and items to set prices, routes, modifiers, taxes, tips, staff, inventory — no code.</p></div>
+    <div class="step"><h3>Download &amp; own</h3><p>Get one HTML file plus a CLAUDE.md guide. Open it in a browser to run it, or in Claude Code to change anything in plain English.</p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>How we make money (and how we don't)</h2>
+  <p class="lede">This is a moral choice about how software should work. The knowledge is free and the code is free — forever.</p>
+  <div class="money">
+    <div class="free">
+      <h3>The software</h3>
+      <div class="amt">$0 <small>/ forever</small></div>
+      <p>No subscription, no per-terminal fee, no upsell. Download it and it keeps working even if we vanish.</p>
+      <p>Optional: a small server (a few dollars a month) only if you want to sync several registers. Your call, your server.</p>
+    </div>
+    <div class="paid">
+      <h3>Card processing (optional)</h3>
+      <p>The only way we earn is if you choose our certified card-payment integration — we take a small share of processing, a fee you already pay a processor today. No added software cost.</p>
+      <p>Prefer cash-only or your own processor? Everything else still works, free. Card numbers never touch the browser — they're handled on your own server, PCI-safe.</p>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Everything a real counter needs</h2>
+  <p class="lede">One engine, driven entirely by config, runs a cleaner, a diner, a shop and a salon alike — each turns on only what it needs.</p>
+  <div class="feat">
+    <div><b>Ring up &amp; record sales</b> — the universal core</div>
+    <div><b>Cash, cards &amp; house accounts</b> with change &amp; A/R</div>
+    <div><b>Sales tax &amp; printable receipts</b></div>
+    <div><b>Discounts &amp; coupon codes</b></div>
+    <div><b>Split the check</b> evenly, mixed tenders</div>
+    <div><b>Refunds &amp; voids</b> to original tender</div>
+    <div><b>End-of-day Z-report</b> + cash-drawer count</div>
+    <div><b>Sales history</b> day by day</div>
+    <div><b>Inventory</b> — stock, low/out, reorder</div>
+    <div><b>Barcode scan &amp; search</b> for big menus</div>
+    <div><b>Appointments</b> — book &amp; check in</div>
+    <div><b>Kitchen display</b> with bump &amp; prep timers</div>
+    <div><b>Time clock</b> + a clock-in welcome</div>
+    <div><b>Staff, roles, tips &amp; commission</b></div>
+    <div><b>Customer profiles</b> &amp; "the usual"</div>
+    <div><b>Loyalty points &amp; gift cards</b></div>
+    <div><b>Text customers</b> when it's ready</div>
+    <div><b>Quotes &amp; estimates</b> to save for later</div>
+    <div><b>Multi-device sync</b> across registers</div>
+    <div><b>Status board &amp; customer tracker</b></div>
+  </div>
+</div></section>
+
+<section class="faq"><div class="wrap">
+  <h2>The questions every owner asks</h2>
+  <p class="lede">The honest answers — because trust is the whole point.</p>
+  <details open><summary>Where is my data stored?</summary><p>On your own device, in the browser — never on our servers. If you run several registers you can sync them through a small server that <em>you</em> own. We never see your customers or your sales.</p></details>
+  <details><summary>Is it backed up? What if my computer dies?</summary><p>Your data is plain JSON you can export any time. Run the optional hub and you get rolling snapshots and an off-site copy. You're never one hard drive away from losing everything.</p></details>
+  <details><summary>Does it work if the internet goes down?</summary><p>Yes. It runs entirely from local data and re-syncs when you're back online. An outage never stops you ringing up a sale — a real advantage over cloud-only systems.</p></details>
+  <details><summary>Am I locked in? Can I get my data out?</summary><p>No lock-in. It's one HTML file and plain-JSON data, both yours. Export whenever you like. There's nothing proprietary to trap you.</p></details>
+  <details><summary>What does it cost to run?</summary><p>The software is $0 forever. A sync server, if you want one, is a few dollars a month. Texting customers costs only if you use it. Card processing is a fee you already pay — and the only place we earn.</p></details>
+  <details><summary>How long until I'm up and running?</summary><p>Download the file and open it in Chrome — it works immediately. Configuring your prices and importing data are guided steps, not a multi-week consultant project.</p></details>
+  <details><summary>Who helps me when I'm stuck or want changes?</summary><p>Every download ships with a CLAUDE.md guide. Open your file in <a href="https://claude.com/claude-code">Claude Code</a> and change prices, receipts, or whole workflows in plain English — on your own machine.</p></details>
+  <details><summary>What if customPOS disappears?</summary><p>You own the code and it runs locally, so it keeps working with zero dependency on us. That's the strongest promise we can make — and the reason it's built this way.</p></details>
+</div></section>
+
+<section><div class="wrap" style="text-align:center">
+  <h2>Ready to own your point-of-sale?</h2>
+  <p class="lede" style="margin:0 auto 26px">Build it in a few minutes. Download it. Change it forever.</p>
+  <div class="cta"><a class="btn primary big" href="builder.html">Build my POS</a><a class="btn big" href="pos.html">Try the demo first</a></div>
+</div></section>
+
+<footer><div class="wrap">
+  <p>customPOS — software is free, knowledge is free, and this code is yours. MIT-licensed.</p>
+  <p style="margin-top:6px"><a href="https://github.com/TiredofSleep/Custom-POS">Source on GitHub</a></p>
+</div></footer>
+</body>
+</html>
