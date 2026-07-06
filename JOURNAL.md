@@ -153,4 +153,51 @@ The only way to build something genuinely general is to keep dragging it in fron
 one it came from — and to believe them when they tell you it doesn't fit. Twelve fake owners just saved us from
 shipping a dry-cleaner-shaped "universal" POS. We'll keep doing this every time the design moves.
 
+### Round 2 — the IQ range, and the jargon cliff
+We didn't trust v0.2 either. We sent it back out — this time **12 trades × 3 kinds of owner**: one who barely
+uses a smartphone and quits the instant something confuses them, one typical owner, and one sharp power-user who
+probes every limit and would happily crack the file open in Claude Code. 36 owners. The idea was to test not
+just *does it fit my trade* but *can the least technical person alive finish it, and does the most demanding
+person respect it?* — because a real tool has to be simple by default and deep on demand, and that's exactly the
+tension most software fails.
+
+The result was almost poetic. **Trade-first — picking "food cart" or "salon" as the very first thing — was a
+clean win for everyone.** Every single owner, at every level, called it the best moment: it spoke their words
+and hid the other trades' clutter. The cross-trade vocabulary leak from round 1 was gone.
+
+And then the second screen abandoned 11 of the 12 low-tech owners. **All at the same spot. All on the same
+words.** The one that killed them, named independently by nearly every low-tech owner: *"how do your things vary
+— variants vs modifiers vs asset specs?"* Three words they'd never heard, in one line. Right behind it: the
+heading word "lifecycle," the phrase "multi-select" (fear of picking wrong), and — cruelly — seeing questions
+that *didn't apply to them* ("route to a kitchen?" at a dry cleaner) which made them think they'd broken it by
+picking the wrong trade. The 12th low-tech owner (a café) only finished because *her daughter sat down and did
+it with her.* For that whole band, the failure was total: they don't get a worse POS, they get **nothing.**
+
+Meanwhile all 12 power-users sailed through the wizard — and none were satisfied. They stalled on the *trust*
+step, because "we disclose the card rate as a percentage" reads as evasive to someone sharp: **give me the
+number.** They wanted the export *schema*, the storage *ceiling*, the *config* they'd edit in Claude Code — real
+facts, not adjectives. The bookstore owner walked over one missing feature (look up a book by ISBN instead of
+typing thousands by hand).
+
+So the same design was simultaneously **too hard for the bottom and too shallow for the top.** That's the
+sentence that reorganized the wizard.
+
+### The fix: one wizard, two doors
+We stopped trying to make a single flow serve everyone. After you pick your trade, the wizard **forks**:
+
+- **Express** (the default): a big *"Recommended setup for a food cart — build it for me"* button that applies
+  sensible defaults and goes **straight to download.** No adjust screen at all. This one change rescues almost
+  every low-tech owner we lost — they came to run a business, not to configure software.
+- **Guided** (if you tap "customize"): **one plain question per screen**, the right answer already checked, and
+  a strict ban on every software word that killed people ("lifecycle," "variants," "asset" — gone; a pet is a
+  pet, a garment is a garment). Your trade's packs are turned on *for* you, named in *your* words ("Check-in &
+  pet records," not "Take-in Service & Repair").
+- **Advanced** (a collapsed drawer): every knob, plus the hard numbers the power-users demanded — exact card
+  rate, export schema with a sample file, storage limits, and direct access to the config they'll customize.
+
+The deeper principle we're keeping: **simple by default, deep on demand — and never make the simple owner walk
+through the deep owner's screen to get there.** Two rounds of fake customers, forty-eight imaginary owners, and
+the design is finally shaped like the people who'll use it instead of like the shop it was born in. Next: fold
+these fixes into the build, or run one more quick pass to watch a low-tech owner actually *finish*.
+
 *— to be continued —*
