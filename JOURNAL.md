@@ -594,4 +594,12 @@ back, *Load* drops the whole thing back into the order exactly as it was — sam
 rings up like any walk-in. A quote is just a parked draft, so it costs nothing and rides the same order machinery;
 the builder turns it on with one toggle. Twenty-eight suites, all green.
 
+### The bump bar
+A busy kitchen doesn't want a checkout screen — it wants a wall of tickets and a way to clear them. So a device
+can be a **Kitchen Display**. It shows every working ticket **oldest first**, each with a **prep timer** that ages
+green → yellow → red against the trade's thresholds, so the line cook can see at a glance which order has been
+sitting too long. One big **Bump ✓** fires the whole ticket ready — every item marked done in a tap — and it drops
+off the board and shows up ready at the counter. It reads the same order stream and completion math the production
+stations already use; it's just the expo's view of it, built for speed. Twenty-nine suites, all green.
+
 *— to be continued —*
