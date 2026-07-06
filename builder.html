@@ -1,225 +1,335 @@
 <!--
   customPOS — the builder (customPOS.com in one file)
   ===================================================
-  Trade-first wizard: pick your business, name it, (optionally customize), then DOWNLOAD a
-  single self-contained POS with your config baked in — plus a generated CLAUDE.md so your own
-  Claude Code can take over. It assembles the download by fetching the engine (pos.html) and
-  injecting your flow as window.CUSTOMPOS_FLOW (see pos.html's injection hook).
+  Trade-first wizard + a DEEP editor: click a workstation to configure it, click an item to
+  configure everything that follows it (its path through the workstations, modifiers, flags,
+  performer, 86 limit…), plus business-wide payments/tips/deposit/loyalty/timer/capacity.
+  Then DOWNLOAD a self-contained POS with your config baked in + a generated CLAUDE.md.
 
-  Serve this alongside pos.html over http (that's how customPOS.com works). Neutral templates only.
+  Assembles by embedding the engine (window.__ENGINE_SRC__ from a build, or fetch('pos.html')).
+  Serve alongside pos.html over http, or build a standalone file with `node build.js`.
 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>customPOS — build your POS</title>
 <style>
-  :root { --brand:#1f6feb; --bg:#0f1115; --card:#181b22; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; --good:#2ea043; }
+  :root { --brand:#1f6feb; --bg:#0f1115; --card:#181b22; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; --good:#2ea043; --bad:#d0433a; }
   * { box-sizing:border-box; }
   body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
-  header { padding:18px 20px; border-bottom:1px solid var(--line); background:var(--card); }
+  header { padding:16px 20px; border-bottom:1px solid var(--line); background:var(--card); }
   header b { font-size:18px; } header .tag { color:var(--dim); margin-left:8px; }
-  main { max-width:900px; margin:0 auto; padding:22px 18px 70px; }
-  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.03em; color:var(--dim); margin:26px 0 12px; }
+  main { max-width:940px; margin:0 auto; padding:20px 18px 70px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.03em; color:var(--dim); margin:22px 0 10px; }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; }
   .trade { text-align:left; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; cursor:pointer; color:var(--ink); font:inherit; }
   .trade:hover, .trade.sel { border-color:var(--brand); }
   .trade b { font-size:16px; display:block; } .trade small { color:var(--dim); }
-  input, button { font:inherit; color:var(--ink); }
-  input { background:#222834; border:1px solid var(--line); border-radius:8px; padding:10px 12px; width:100%; max-width:360px; }
-  button { background:#222834; border:1px solid var(--line); border-radius:8px; padding:10px 15px; cursor:pointer; margin:6px 8px 0 0; }
+  input, select { font:inherit; color:var(--ink); background:#222834; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  input[type=color]{ padding:2px; width:44px; height:34px; }
+  input.sm{ width:80px; } input.nm{ width:200px; }
+  button { background:#222834; border:1px solid var(--line); border-radius:8px; padding:9px 14px; cursor:pointer; color:var(--ink); font:inherit; margin:6px 8px 0 0; }
   button:hover { border-color:var(--brand); }
   button.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
-  button.big { padding:14px 20px; font-size:16px; }
+  button.big { padding:13px 20px; font-size:16px; }
+  button.on { border-color:var(--brand); color:#cfe0ff; background:#1b2536; }
+  button.danger { border-color:var(--bad); color:#f2a49d; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:12px 0; }
   .flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:10px 0; }
-  .node { background:#1b2536; border:1px solid var(--brand); color:#cfe0ff; border-radius:20px; padding:6px 12px; font-size:13px; }
-  .node.fixed { background:#14301f; border-color:var(--good); color:#bdf0cd; }
+  .node { background:#1b2536; border:1px solid var(--brand); color:#cfe0ff; border-radius:20px; padding:6px 12px; font-size:13px; cursor:pointer; }
+  .node.fixed { background:#14301f; border-color:var(--good); color:#bdf0cd; cursor:default; }
   .arrow { color:var(--dim); }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; }
+  .chip { background:#1b2130; border:1px solid var(--line); border-radius:10px; padding:8px 12px; cursor:pointer; font-size:14px; }
+  .chip:hover { border-color:var(--brand); } .chip.sel { border-color:var(--brand); color:#cfe0ff; background:#1b2536; }
+  .chip .t { color:var(--dim); font-size:12px; margin-left:6px; }
   .muted { color:var(--dim); } .pill { font-size:12px; border:1px solid var(--line); border-radius:20px; padding:2px 8px; color:var(--dim); margin-right:5px; }
-  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:14px 0; }
+  .fld { display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; } .flab { color:var(--dim); min-width:130px; font-size:13px; }
+  .ed { border:1px solid var(--brand); border-radius:12px; padding:14px; margin:10px 0; background:#141a24; }
+  .ed h3 { margin:0 0 8px; font-size:15px; }
+  .row2 { display:flex; gap:8px; align-items:center; margin:5px 0; flex-wrap:wrap; }
   iframe { width:100%; height:460px; border:1px solid var(--line); border-radius:12px; background:#0f1115; margin-top:10px; }
-  a.dl { display:inline-block; }
-  .step { color:var(--dim); font-size:13px; margin-bottom:4px; }
+  a.dl { display:inline-block; } .step { color:var(--dim); font-size:13px; margin-bottom:4px; }
+  .hint { color:var(--dim); font-size:13px; margin:4px 0 0; }
 </style>
 
 <header><b>customPOS</b><span class="tag">build your point-of-sale · download it · own the code</span></header>
 <main id="app"></main>
 
 <script>
-/* ---- starter trade templates (the builder's own library — each a valid engine FLOW) ---- */
+/* tiny DOM helper */
+function h(tag, attrs, kids){ const e=document.createElement(tag); if(attrs) for(const k in attrs){ if(k==='class') e.className=attrs[k]; else if(k==='html') e.innerHTML=attrs[k]; else if(k.slice(0,2)==='on') e[k.toLowerCase()]=attrs[k]; else if(k==='style') e.style.cssText=attrs[k]; else if(e[k]!==undefined && k!=='list') e[k]=attrs[k]; else e.setAttribute(k,attrs[k]); } (kids||[]).forEach(c=>{ if(c==null) return; e.appendChild(typeof c==='string'?document.createTextNode(c):c); }); return e; }
+const uid = () => 'x'+Math.random().toString(36).slice(2,8);
+
+/* ---- starter trade templates (each a valid engine FLOW) ---- */
 const TEMPLATES = {
-  retail: {
-    flowId:"retail", label:"Shop / Retail", topology:"linear", blurb:"Ring up items from stock",
+  retail: { flowId:"retail", label:"Shop / Retail", topology:"linear", blurb:"Ring up items from stock",
     branding:{ name:"My Shop", brandColor:"#1f6feb" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0" }, loyalty:{earnPerDollar:1,redeemPoints:100,redeemValue:5} },
     catalog:[ {id:"p1",name:"Item A",price:12,category:"retail",path:[]}, {id:"p2",name:"Item B",price:24,category:"retail",path:[]}, {id:"g",name:"Gift card $25",price:25,category:"giftcard",path:[]} ],
-    stations:[ {id:"reg",type:"central",label:"Register",view:{money:true}}, {id:"board",type:"board",label:"Sales Board",view:{money:false}} ]
-  },
-  cafe: {
-    flowId:"cafe", label:"Café / Counter", topology:"linear", blurb:"Made-to-order food & drinks",
+    stations:[ {id:"reg",type:"central",label:"Register",view:{money:true}}, {id:"board",type:"board",label:"Sales Board",view:{money:false}} ] },
+  cafe: { flowId:"cafe", label:"Café / Counter", topology:"linear", blurb:"Made-to-order food & drinks",
     branding:{ name:"My Café", brandColor:"#8a5a2b" },
     endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}} },
     timer:{ mode:"aging", warnSec:300, badSec:600, label:"prep" }, capacity:{ perOrderMins:4, max:8 },
-    catalog:[
-      {id:"c1",name:"Coffee",price:3.5,category:"drink",path:["bar"]},
+    catalog:[ {id:"c1",name:"Coffee",price:3.5,category:"drink",path:["bar"]},
       {id:"c2",name:"Latte",price:4.75,category:"drink",path:["bar"],modifiers:[{group:"Size",required:true,options:[{name:"Sm",price:0},{name:"Md",price:.5},{name:"Lg",price:1}]}],addons:[{name:"Oat milk",price:.75}]},
-      {id:"c3",name:"Sandwich",price:8,category:"food",path:["kitchen"]}
-    ],
-    stations:[ {id:"order",type:"intake",label:"Register",view:{money:true}}, {id:"bar",type:"production",label:"Bar",view:{money:false}}, {id:"kitchen",type:"production",label:"Kitchen",view:{money:false}}, {id:"pickup",type:"fulfillment",label:"Pickup",view:{money:true}} ]
-  },
-  cleaner: {
-    flowId:"cleaner", label:"Dry cleaner / Laundry", topology:"hub-and-spoke", blurb:"Take items in, process, return",
+      {id:"c3",name:"Sandwich",price:8,category:"food",path:["kitchen"]} ],
+    stations:[ {id:"order",type:"intake",label:"Register",view:{money:true}}, {id:"bar",type:"production",label:"Bar",view:{money:false}}, {id:"kitchen",type:"production",label:"Kitchen",view:{money:false}}, {id:"pickup",type:"fulfillment",label:"Pickup",view:{money:true}} ] },
+  cleaner: { flowId:"cleaner", label:"Dry cleaner / Laundry", topology:"hub-and-spoke", blurb:"Take items in, process, return",
     branding:{ name:"My Cleaners", brandColor:"#2ea043" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}} },
     timer:{ mode:"due", promiseSec:172800, warnSec:86400, label:"promise" },
-    catalog:[
-      {id:"g1",name:"Shirt",price:6.5,category:"press",path:["assembly","rack"],flags:["Pre-existing damage"]},
-      {id:"g2",name:"Pants",price:7,category:"press",path:["assembly","rack"]},
-      {id:"g3",name:"Wash & Fold",price:2.75,category:"wf",path:["rack"]}
-    ],
-    stations:[ {id:"counter",type:"central",label:"Front Counter",view:{money:true}}, {id:"assembly",type:"production",label:"Assembly",view:{money:false}}, {id:"rack",type:"staging",label:"Rack",view:{money:false},checklist:["Piece count matches"]}, {id:"board",type:"board",label:"Status Board",view:{money:false}}, {id:"tracker",type:"tracker",label:"Customer Tracker",view:{money:false,external:true}} ]
-  },
-  repair: {
-    flowId:"repair", label:"Repair shop", topology:"hub-and-spoke", blurb:"Intake, estimate, fix, return",
+    catalog:[ {id:"g1",name:"Shirt",price:6.5,category:"press",path:["assembly","rack"],flags:["Pre-existing damage"]},
+      {id:"g2",name:"Pants",price:7,category:"press",path:["assembly","rack"]}, {id:"g3",name:"Wash & Fold",price:2.75,category:"wf",path:["rack"]} ],
+    stations:[ {id:"counter",type:"central",label:"Front Counter",view:{money:true}}, {id:"assembly",type:"production",label:"Assembly",view:{money:false}}, {id:"rack",type:"staging",label:"Rack",view:{money:false},checklist:["Piece count matches"]}, {id:"board",type:"board",label:"Status Board",view:{money:false}}, {id:"tracker",type:"tracker",label:"Customer Tracker",view:{money:false,external:true}} ] },
+  repair: { flowId:"repair", label:"Repair shop", topology:"hub-and-spoke", blurb:"Intake, estimate, fix, return",
     branding:{ name:"My Repair Shop", brandColor:"#e3893c" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}} },
     timer:{ mode:"aging", warnSec:600, badSec:1200, label:"in shop" },
-    catalog:[
-      {id:"r1",name:"Screen repair",price:129,category:"repair",path:["diagnose","repair","ready"],flags:["Data-loss waiver"]},
-      {id:"r2",name:"Battery",price:59,category:"repair",path:["repair","ready"]},
-      {id:"r3",name:"Diagnostic",price:25,category:"repair",path:["diagnose","ready"]}
-    ],
-    stations:[ {id:"counter",type:"central",label:"Front Counter",view:{money:true}}, {id:"diagnose",type:"production",label:"Diagnostics",view:{money:false}}, {id:"repair",type:"production",label:"Repair Bench",view:{money:false}}, {id:"ready",type:"staging",label:"Ready Shelf",view:{money:false},checklist:["Powered on & tested","Cleaned"]}, {id:"board",type:"board",label:"Job Board",view:{money:false}} ]
-  },
-  salon: {
-    flowId:"salon", label:"Salon / Services", topology:"hub-and-spoke", blurb:"Appointments, commission, tips",
+    catalog:[ {id:"r1",name:"Screen repair",price:129,category:"repair",path:["diagnose","repair","ready"],flags:["Data-loss waiver"]},
+      {id:"r2",name:"Battery",price:59,category:"repair",path:["repair","ready"]}, {id:"r3",name:"Diagnostic",price:25,category:"repair",path:["diagnose","ready"]} ],
+    stations:[ {id:"counter",type:"central",label:"Front Counter",view:{money:true}}, {id:"diagnose",type:"production",label:"Diagnostics",view:{money:false}}, {id:"repair",type:"production",label:"Repair Bench",view:{money:false}}, {id:"ready",type:"staging",label:"Ready Shelf",view:{money:false},checklist:["Powered on & tested","Cleaned"]}, {id:"board",type:"board",label:"Job Board",view:{money:false}} ] },
+  salon: { flowId:"salon", label:"Salon / Services", topology:"hub-and-spoke", blurb:"Appointments, commission, tips",
     branding:{ name:"My Salon", brandColor:"#b06fdb" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}}, loyalty:{earnPerDollar:1,redeemPoints:20,redeemValue:5} },
     performers:["Alex","Sam","Jordan"], commission:{ pct:40 },
     catalog:[ {id:"s1",name:"Haircut",price:35,category:"service",path:["chair"],performer:true}, {id:"s2",name:"Color",price:85,category:"service",path:["chair"],performer:true}, {id:"s3",name:"Product",price:22,category:"retail",path:[]} ],
-    stations:[ {id:"desk",type:"central",label:"Front Desk",view:{money:true}}, {id:"chair",type:"production",label:"Chair",view:{money:false}}, {id:"office",type:"report",label:"Back Office",view:{money:true}} ]
-  }
+    stations:[ {id:"desk",type:"central",label:"Front Desk",view:{money:true}}, {id:"chair",type:"production",label:"Chair",view:{money:false}}, {id:"office",type:"report",label:"Back Office",view:{money:true}} ] }
 };
-
-const MODULE_LABEL = { central:"checkout", intake:"checkout", fulfillment:"checkout", production:"work stations", staging:"staging/rack", board:"status board", tracker:"customer tracker", report:"commission/reports" };
-function moduleList(cfg){ const t=[...new Set(cfg.stations.map(s=>MODULE_LABEL[s.type]).filter(Boolean))]; return t; }
+const STATION_TYPES = [
+  ["intake","Intake — starts orders"], ["central","Counter — starts & finishes"], ["production","Work station — items pass through"],
+  ["staging","Staging / rack — hold until ready"], ["fulfillment","Checkout — finishes orders"],
+  ["board","Status board (view only)"], ["tracker","Customer tracker (sanitized)"], ["report","Commission / reports"]
+];
+const PATH_TYPES = ["production","staging"];   // the station types an item can flow THROUGH
 
 /* ---- wizard state ---- */
-let step = 1, tradeKey = null, cfg = null;
-function chooseTrade(k){ tradeKey=k; cfg=JSON.parse(JSON.stringify(TEMPLATES[k])); step=2; render(); }
+let step=1, tradeKey=null, cfg=null, selStation=-1, selItem=-1;
+function chooseTrade(k){ tradeKey=k; cfg=JSON.parse(JSON.stringify(TEMPLATES[k])); selStation=-1; selItem=-1; step=2; render(); }
 
-function flowPreview(cfg){
-  // Customer -> [stations that appear on the path] -> Payment
-  const mids = cfg.stations.filter(s=>["production","staging"].includes(s.type)).map(s=>s.label);
-  const chain = ["<span class='node fixed'>Customer</span>"];
-  chain.push("<span class='node'>"+cfg.stations.find(s=>["intake","central"].includes(s.type)).label+"</span>");
-  mids.forEach(m=>chain.push("<span class='node'>"+m+"</span>"));
-  const end = cfg.stations.find(s=>s.type==="fulfillment") || cfg.stations.find(s=>s.type==="central");
-  chain.push("<span class='node'>"+end.label+"</span>");
-  chain.push("<span class='node fixed'>Payment</span>");
-  return "<div class='flow'>"+chain.join("<span class='arrow'>→</span>")+"</div>";
+/* ---- flow preview (clickable stations) ---- */
+function flowPreview(cfg, clickable){
+  const intake = cfg.stations.find(s=>["intake","central"].includes(s.type)) || cfg.stations[0];
+  const end = cfg.stations.find(s=>s.type==="fulfillment") || cfg.stations.find(s=>s.type==="central") || intake;
+  const mids = cfg.stations.filter(s=>PATH_TYPES.includes(s.type));
+  const wrap=h('div',{class:'flow',id:'flowPrev'});
+  const add=(label,idx,fixed)=>{ const n=h('span',{class:'node'+(fixed?' fixed':''), onclick: (!fixed&&clickable&&idx>=0)?(()=>selectStation(idx)):null}, [label]); wrap.appendChild(n); };
+  add('Customer',-1,true);
+  wrap.appendChild(h('span',{class:'arrow'},['→']));
+  add(intake.label, cfg.stations.indexOf(intake));
+  mids.forEach(m=>{ wrap.appendChild(h('span',{class:'arrow'},['→'])); add(m.label, cfg.stations.indexOf(m)); });
+  if(end!==intake){ wrap.appendChild(h('span',{class:'arrow'},['→'])); add(end.label, cfg.stations.indexOf(end)); }
+  wrap.appendChild(h('span',{class:'arrow'},['→'])); add('Payment',-1,true);
+  return wrap;
+}
+function enabledCount(cfg){ return { items:cfg.catalog.length, stations:cfg.stations.length }; }
+
+/* ---- selection ---- */
+function selectStation(i){ selStation=i; selItem=-1; render(); }
+function selectItem(i){ selItem=i; selStation=-1; render(); }
+
+/* ---- business + payments controls ---- */
+function pay(){ return cfg.endpoints.payment; }
+function hasTender(t){ return (pay().tenders||[]).includes(t); }
+function toggleTender(t){ const a=pay().tenders||(pay().tenders=[]); const i=a.indexOf(t); if(i<0)a.push(t); else a.splice(i,1); render(); }
+function toggleTip(){ if(pay().tip) delete pay().tip; else pay().tip={presets:[15,18,20]}; render(); }
+function toggleLoyalty(){ if(cfg.endpoints.loyalty) delete cfg.endpoints.loyalty; else cfg.endpoints.loyalty={earnPerDollar:1,redeemPoints:100,redeemValue:5}; render(); }
+function setDeposit(v){ v=Number(v)||0; if(v>0){ pay().deposit={pct:v}; if(!(pay().points||[]).includes("deposit-balance")) pay().points=["deposit-balance"]; } else { delete pay().deposit; } }
+function setTimer(mode){ if(mode==="off"){ delete cfg.timer; } else if(mode==="aging"){ cfg.timer={mode:"aging",warnSec:300,badSec:600,label:"prep"}; } else { cfg.timer={mode:"due",promiseSec:172800,warnSec:86400,label:"promise"}; } render(); }
+function setCapacity(v){ v=Number(v)||0; if(v>0) cfg.capacity={perOrderMins:(cfg.capacity&&cfg.capacity.perOrderMins)||4, max:v}; else delete cfg.capacity; }
+
+/* ---- stations ---- */
+function addStation(){ cfg.stations.push({ id:uid(), type:"production", label:"New station", view:{money:false} }); selStation=cfg.stations.length-1; selItem=-1; render(); }
+function removeStation(i){ const id=cfg.stations[i].id; cfg.stations.splice(i,1); cfg.catalog.forEach(it=>{ it.path=(it.path||[]).filter(p=>p!==id); }); selStation=-1; render(); }
+function stationEditor(i){
+  const s=cfg.stations[i];
+  const typeSel=h('select',{onchange:e=>{ s.type=e.target.value; if(!PATH_TYPES.includes(s.type)&&s.type!=='production') s.view=s.view||{money:false}; render(); }},
+    STATION_TYPES.map(([v,l])=>h('option',{value:v, selected:s.type===v},[l])));
+  const nameInp=h('input',{id:'stationName', class:'nm',value:s.label, oninput:e=>{ s.label=e.target.value; document.getElementById('flowPrev').replaceWith(flowPreview(cfg,true)); }});
+  const moneyBtn=h('button',{class:(s.view&&s.view.money)?'on':'', onclick:()=>{ s.view=s.view||{}; s.view.money=!s.view.money; render(); }}, [(s.view&&s.view.money)?'✓ shows prices':'prices hidden']);
+  // checklist
+  const cl=s.checklist||[];
+  const clRows=h('div',{}, cl.map((step,idx)=>h('div',{class:'row2'},[
+    h('input',{class:'nm',value:step, oninput:e=>{ s.checklist[idx]=e.target.value; }}),
+    h('button',{class:'danger', onclick:()=>{ s.checklist.splice(idx,1); if(!s.checklist.length) delete s.checklist; render(); }},['remove'])
+  ])));
+  const addStep=h('button',{onclick:()=>{ s.checklist=s.checklist||[]; s.checklist.push("New step"); render(); }},['+ checklist step']);
+  return h('div',{class:'ed'},[
+    h('h3',{},['Workstation']),
+    h('div',{class:'fld'},[h('span',{class:'flab'},['Name']), nameInp]),
+    h('div',{class:'fld'},[h('span',{class:'flab'},['Role']), typeSel]),
+    h('div',{class:'fld'},[h('span',{class:'flab'},['Money view']), moneyBtn, h('span',{class:'hint'},['work stations usually hide prices'])]),
+    h('div',{class:'fld'},[h('span',{class:'flab'},['QC checklist']), h('span',{class:'hint'},['all steps must be ticked before this station can pass an order on'])]),
+    clRows, addStep,
+    h('div',{style:'margin-top:12px'},[ h('button',{class:'danger', onclick:()=>removeStation(i)},['Delete workstation']), h('button',{onclick:()=>{selStation=-1;render();}},['Done']) ])
+  ]);
 }
 
-/* ---- generate the per-build CLAUDE.md ---- */
+/* ---- items ---- */
+function addItem(){ cfg.catalog.push({ id:uid(), name:"New item", price:0, category:"item", path:[] }); selItem=cfg.catalog.length-1; selStation=-1; render(); }
+function removeItem(i){ cfg.catalog.splice(i,1); selItem=-1; render(); }
+function itemEditor(i){
+  const it=cfg.catalog[i];
+  const pathStations=cfg.stations.filter(s=>PATH_TYPES.includes(s.type));
+  // PATH — which workstations this item flows through (modules follow the item)
+  const pathRow=h('div',{class:'row2'}, pathStations.length?pathStations.map(s=>{
+    const on=(it.path||[]).includes(s.id);
+    return h('button',{class:on?'on':'', onclick:()=>{ it.path=it.path||[]; const j=it.path.indexOf(s.id); if(j<0){ // keep station order
+        it.path = cfg.stations.filter(x=>PATH_TYPES.includes(x.type)&&(x.id===s.id||it.path.includes(x.id))).map(x=>x.id);
+      } else it.path.splice(j,1); document.getElementById('flowPrev').replaceWith(flowPreview(cfg,true)); render(); }},[s.label]);
+  }):[h('span',{class:'hint'},['(no work stations yet — add one below to give items a path)'])]);
+  // modifiers (one required choice group, optional)
+  const mod=(it.modifiers&&it.modifiers[0])||null;
+  const modBlock=h('div',{},[]);
+  if(mod){
+    modBlock.appendChild(h('div',{class:'row2'},[ h('span',{class:'flab'},['Choice name']), h('input',{class:'nm', value:mod.group, oninput:e=>mod.group=e.target.value}), h('button',{class:'danger',onclick:()=>{ delete it.modifiers; render(); }},['remove choice']) ]));
+    mod.options.forEach((o,oi)=>modBlock.appendChild(h('div',{class:'row2'},[
+      h('input',{class:'nm',value:o.name, oninput:e=>o.name=e.target.value}),
+      h('span',{class:'muted'},['+$']), h('input',{class:'sm',type:'number',value:o.price, oninput:e=>o.price=Number(e.target.value)||0}),
+      h('button',{class:'danger',onclick:()=>{ mod.options.splice(oi,1); render(); }},['×'])
+    ])));
+    modBlock.appendChild(h('button',{onclick:()=>{ mod.options.push({name:"Option",price:0}); render(); }},['+ option']));
+  } else {
+    modBlock.appendChild(h('button',{onclick:()=>{ it.modifiers=[{group:"Size",required:true,options:[{name:"Regular",price:0}]}]; render(); }},['+ add a required choice (size, temp, starch…)']));
+  }
+  // add-ons
+  const addons=it.addons||[];
+  const addonRows=h('div',{}, addons.map((a,ai)=>h('div',{class:'row2'},[ h('input',{class:'nm',value:a.name,oninput:e=>a.name=e.target.value}), h('span',{class:'muted'},['+$']), h('input',{class:'sm',type:'number',value:a.price,oninput:e=>a.price=Number(e.target.value)||0}), h('button',{class:'danger',onclick:()=>{ it.addons.splice(ai,1); if(!it.addons.length) delete it.addons; render(); }},['×']) ])));
+  // flags
+  const flags=it.flags||[];
+  const flagRows=h('div',{}, flags.map((f,fi)=>h('div',{class:'row2'},[ h('input',{class:'nm',value:f,oninput:e=>it.flags[fi]=e.target.value}), h('button',{class:'danger',onclick:()=>{ it.flags.splice(fi,1); if(!it.flags.length) delete it.flags; render(); }},['×']) ])));
+
+  return h('div',{class:'ed'},[
+    h('h3',{},['Item']),
+    h('div',{class:'fld'},[h('span',{class:'flab'},['Name']), h('input',{id:'itemName', class:'nm',value:it.name, oninput:e=>{ it.name=e.target.value; }})]),
+    h('div',{class:'fld'},[h('span',{class:'flab'},['Price $']), h('input',{id:'itemPrice', class:'sm',type:'number',value:it.price, oninput:e=>it.price=Number(e.target.value)||0}), h('span',{class:'flab'},['Category']), h('input',{class:'nm',value:it.category, oninput:e=>it.category=e.target.value})]),
+    h('div',{class:'fld'},[h('span',{class:'flab'},['Flows through']), h('span',{class:'hint'},['the workstations this item visits, in order — modules follow the item'])]),
+    pathRow,
+    h('div',{class:'fld'},[h('span',{class:'flab'},['Required choice']), h('span',{class:'hint'},['must be picked before it can be sent'])]), modBlock,
+    h('div',{class:'fld'},[h('span',{class:'flab'},['Add-ons (upsell)'])]), addonRows, h('button',{onclick:()=>{ it.addons=it.addons||[]; it.addons.push({name:"Add-on",price:0}); render(); }},['+ add-on']),
+    h('div',{class:'fld'},[h('span',{class:'flab'},['Flags / warnings']), h('span',{class:'hint'},['e.g. allergy, pre-existing damage — shown bold, must be acknowledged'])]), flagRows, h('button',{onclick:()=>{ it.flags=it.flags||[]; it.flags.push("Warning"); render(); }},['+ flag']),
+    h('div',{class:'fld'},[
+      h('span',{class:'flab'},['Performed by staff']), h('button',{class:it.performer?'on':'', onclick:()=>{ it.performer=!it.performer; if(!it.performer) delete it.performer; if(it.performer&&!cfg.performers) cfg.performers=["Alex","Sam"]; render(); }},[it.performer?'✓ pick a provider':'no']),
+      h('span',{class:'flab'},['86 limit']), h('input',{class:'sm',type:'number',value:it.par!=null?it.par:'', placeholder:'∞', oninput:e=>{ const v=Number(e.target.value); if(e.target.value===''||v<=0) delete it.par; else it.par=v; }})
+    ]),
+    h('div',{style:'margin-top:12px'},[ h('button',{class:'danger', onclick:()=>removeItem(i)},['Delete item']), h('button',{onclick:()=>{selItem=-1;render();}},['Done']) ])
+  ]);
+}
+
+/* ---- generated CLAUDE.md ---- */
 function genClaudeMd(cfg){
-  const stations = cfg.stations.map(s=>"- **"+s.label+"** ("+s.type+")").join("\n");
-  const items = cfg.catalog.map(i=>"- "+i.name+" — $"+i.price+(i.path.length?" (flows: "+i.path.join(" → ")+")":"")).join("\n");
+  const stations=cfg.stations.map(s=>"- **"+s.label+"** ("+s.type+")"+(s.checklist?" · checklist: "+s.checklist.join(", "):"")).join("\n");
+  const items=cfg.catalog.map(i=>"- "+i.name+" — $"+i.price+(i.path&&i.path.length?" (flows: "+i.path.join(" → ")+")":"")+(i.performer?" · by staff":"")+(i.par!=null?" · 86 at "+i.par:"")).join("\n");
   return `# CLAUDE.md — ${cfg.branding.name} (your point-of-sale)
 
-This is **your** customPOS, generated for a ${TEMPLATES[tradeKey].label.toLowerCase()}. It's one self-contained
-HTML file that runs in a browser and stores its data locally. **You own it.** Open this folder in
-[Claude Code](https://claude.com/claude-code) and ask for changes in plain English.
+This is **your** customPOS, generated for a ${(TEMPLATES[tradeKey]||{label:'business'}).label.toLowerCase()}. One self-contained
+HTML file, runs in a browser, stores data locally. **You own it.** Open this folder in
+[Claude Code](https://claude.com/claude-code) and change anything in plain English.
 
-## Everything about your business lives in one object
-At the top of the HTML file there's a \`window.CUSTOMPOS_FLOW = { ... }\` object. That's your whole setup:
-- **branding** — your name and brand color
-- **catalog** — your products/services and prices. Each item has a \`path\` = the workstations it flows through
-  (empty path = sold right at the counter). Change prices or add items here.
-- **stations** — your screens/devices (${cfg.stations.length} of them). Each device opens the file, signs in,
-  and picks which station it is.
-- **endpoints** — tax, tips, deposits, loyalty, and card payments.
+## It's all one object
+The \`window.CUSTOMPOS_FLOW = { ... }\` at the top of the HTML is your whole setup:
+- **branding** — name, color.  **endpoints** — tax, tips, deposits, loyalty, card payments.
+- **catalog** — your items. Each has a \`path\` = the workstations it flows through (empty = sold at the counter),
+  plus optional modifiers, add-ons, flags, a performer, and an 86 limit.
+- **stations** — your ${cfg.stations.length} screens/devices. Each device opens the file, signs in, and picks which
+  station it is; a station may carry a QC \`checklist\` that gates it.
 
 ## Your setup
-**Business:** ${cfg.branding.name}
-**Type:** ${TEMPLATES[tradeKey].label}  ·  **Layout:** ${cfg.topology}
+**Business:** ${cfg.branding.name}  ·  **Layout:** ${cfg.topology}
 
 **Workstations**
 ${stations}
 
-**Starter catalog**
+**Catalog**
 ${items}
 
-## Running it across devices
-Each computer/phone opens the file, and picks its station ("which screen is this?"). To share live data across
-devices, run the optional hub (the small Node companion) — otherwise each device keeps its own local copy.
+## Across devices & payments
+Run the optional hub (\`hub.js\`) to share one live POS across devices; otherwise each device is local.
+Card payments are PCI-safe — the browser never sees a card number (see \`docs/PAYMENTS-MODULE.md\`); your
+processor credentials live only on your own server.
 
-## Taking card payments
-Card payments are optional and PCI-safe: the browser never touches a card number. See the project's
-\`docs/PAYMENTS-MODULE.md\` for the processor-agnostic adapter. Your processor credentials live **only on your own
-server**, never in this file.
-
-## Ideas to ask Claude Code
-- "Add a new item called ___ for $___."
-- "Rename the '${cfg.stations[0].label}' station to ___."
-- "Turn on a customer text when an order is ready."
-- "Change the tax rate to ___%."
+## Ask Claude Code things like
+- "Add an item ___ for $___ that flows through ${ (cfg.stations.find(s=>PATH_TYPES.includes(s.type))||{label:'the work station'}).label }."
+- "Put a checklist on ___ before it can be marked ready."
+- "Text the customer when their order is ready."
 
 *Built with customPOS — software is free, knowledge is free, and this code is yours.*`;
 }
 
-/* ---- assemble the downloadable POS: engine (pos.html) + injected flow ---- */
+/* ---- assemble + download ---- */
 async function assemble(cfg){
-  // prefer an embedded engine (self-contained build); otherwise fetch it (served over http)
   const engine = (typeof window!=="undefined" && window.__ENGINE_SRC__) ? window.__ENGINE_SRC__ : await fetch('pos.html').then(r=>r.text());
   const inject = "<script>window.CUSTOMPOS_FLOW = "+JSON.stringify(cfg)+";<\/script>\n";
-  const html = engine.replace("<script>", inject+"<script>");   // prepend injection before the engine script
+  const html = engine.replace("<script>", inject+"<script>");
   const claudeMd = genClaudeMd(cfg);
-  window.__build = { flow:cfg, html, claudeMd };                 // exposed for verification
+  window.__build = { flow:cfg, html, claudeMd };
   return { html, claudeMd };
 }
 function blobUrl(text, type){ return URL.createObjectURL(new Blob([text], {type:type||'text/plain'})); }
-
-async function buildAndShow(){
-  await assemble(cfg);    // sets window.__build; step-3 render() wires the downloads + preview
-  step = 3; render();
-}
+async function buildAndShow(){ await assemble(cfg); step=3; render(); }
 
 /* ---- render ---- */
 function render(){
-  const app = document.getElementById('app'); app.innerHTML = "";
+  const app=document.getElementById('app'); app.innerHTML="";
   if(step===1){
-    app.innerHTML = "<div class='step'>Step 1 of 3</div><h2>What kind of business do you run?</h2>";
-    const cards=document.createElement('div'); cards.className='cards';
-    Object.keys(TEMPLATES).forEach(k=>{ const t=TEMPLATES[k]; const b=document.createElement('button'); b.className='trade';
-      b.innerHTML="<b>"+t.label+"</b><small>"+t.blurb+"</small>"; b.onclick=()=>chooseTrade(k); cards.appendChild(b); });
+    app.appendChild(h('div',{class:'step'},['Step 1 of 3']));
+    app.appendChild(h('h2',{},['What kind of business do you run?']));
+    const cards=h('div',{class:'cards'}, Object.keys(TEMPLATES).map(k=>{ const t=TEMPLATES[k];
+      return h('button',{class:'trade', onclick:()=>chooseTrade(k)},[ h('b',{},[t.label]), h('small',{},[t.blurb]) ]); }));
     app.appendChild(cards);
     return;
   }
   if(step===2){
-    app.innerHTML = "<div class='step'>Step 2 of 3</div><h2>Name it</h2>";
-    const p=document.createElement('div'); p.className='panel';
-    const nm=document.createElement('input'); nm.id='bizName'; nm.value=cfg.branding.name; nm.oninput=()=>{ cfg.branding.name=nm.value||cfg.branding.name; };
-    p.appendChild(nm);
-    p.insertAdjacentHTML('beforeend', "<h2>Your flow</h2>"+flowPreview(cfg)
-      + "<p class='muted'>"+cfg.catalog.length+" starter items · workstations: "+moduleList(cfg).map(m=>"<span class='pill'>"+m+"</span>").join(" ")+"</p>");
-    app.appendChild(p);
-    const ex=document.createElement('button'); ex.className='primary big'; ex.textContent="Build it for me → download";
-    ex.onclick=()=>{ cfg.branding.name=(document.getElementById('bizName').value||cfg.branding.name); buildAndShow(); };
-    const back=document.createElement('button'); back.textContent="← pick a different business"; back.onclick=()=>{ step=1; render(); };
-    app.appendChild(ex); app.appendChild(back);
-    app.insertAdjacentHTML('beforeend', "<p class='muted' style='margin-top:14px'>The Express path gives you sensible defaults and a ready-to-use file. You can customize everything afterward in Claude Code — every download comes with a guide.</p>");
+    app.appendChild(h('div',{class:'step'},['Step 2 of 3 — customize (or just build it)']));
+    // Business + payments
+    const biz=h('div',{class:'panel'},[
+      h('h2',{},['Business']),
+      h('div',{class:'fld'},[ h('span',{class:'flab'},['Name']), h('input',{id:'bizName', class:'nm', value:cfg.branding.name, oninput:e=>cfg.branding.name=e.target.value||cfg.branding.name}),
+        h('span',{class:'flab'},['Color']), h('input',{type:'color', value:cfg.branding.brandColor, oninput:e=>cfg.branding.brandColor=e.target.value}) ]),
+      h('h2',{},['Payments & money']),
+      h('div',{class:'fld'},[ h('span',{class:'flab'},['Take']),
+        h('button',{class:'on'},['cash']),
+        h('button',{class:hasTender('card')?'on':'', onclick:()=>toggleTender('card')},['cards']),
+        h('button',{class:hasTender('account')?'on':'', onclick:()=>toggleTender('account')},['house accounts']),
+        h('button',{class:pay().tip?'on':'', onclick:()=>toggleTip()},['tips']),
+        h('button',{class:cfg.endpoints.loyalty?'on':'', onclick:()=>toggleLoyalty()},['loyalty']) ]),
+      h('div',{class:'fld'},[ h('span',{class:'flab'},['Deposit %']), h('input',{class:'sm',type:'number', value:(pay().deposit&&pay().deposit.pct)||'', placeholder:'0', oninput:e=>setDeposit(e.target.value)}),
+        h('span',{class:'flab'},['Order timer']), h('select',{onchange:e=>setTimer(e.target.value)}, [["off","none"],["aging","prep timer (turns red)"],["due","promise-by / due date"]].map(([v,l])=>h('option',{value:v, selected:(cfg.timer?cfg.timer.mode:'off')===v},[l]))),
+        h('span',{class:'flab'},['Max in queue']), h('input',{class:'sm',type:'number', value:(cfg.capacity&&cfg.capacity.max)||'', placeholder:'∞', oninput:e=>setCapacity(e.target.value)}) ])
+    ]);
+    app.appendChild(biz);
+    // Flow preview
+    app.appendChild(h('h2',{},['Your flow — click a workstation to configure it']));
+    app.appendChild(flowPreview(cfg,true));
+    // Workstations
+    app.appendChild(h('h2',{},['Workstations']));
+    const sChips=h('div',{class:'chips'}, cfg.stations.map((s,i)=>h('div',{class:'chip'+(selStation===i?' sel':''), onclick:()=>selectStation(i)},[ s.label, h('span',{class:'t'},[s.type]) ])));
+    app.appendChild(sChips); app.appendChild(h('button',{onclick:addStation},['+ Add workstation']));
+    if(selStation>=0 && cfg.stations[selStation]) app.appendChild(stationEditor(selStation));
+    // Items
+    app.appendChild(h('h2',{},['Items & services — click one to set what follows it']));
+    const iChips=h('div',{class:'chips'}, cfg.catalog.map((it,i)=>h('div',{class:'chip'+(selItem===i?' sel':''), onclick:()=>selectItem(i)},[ it.name, h('span',{class:'t'},['$'+it.price+(it.path&&it.path.length?' · '+it.path.length+' steps':'')]) ])));
+    app.appendChild(iChips); app.appendChild(h('button',{onclick:addItem},['+ Add item']));
+    if(selItem>=0 && cfg.catalog[selItem]) app.appendChild(itemEditor(selItem));
+    // Build
+    app.appendChild(h('div',{style:'margin-top:18px'},[
+      h('button',{class:'primary big', onclick:buildAndShow},['⬇ Build & download my POS']),
+      h('button',{class:'big', onclick:buildAndShow},['Build it for me (defaults)']),
+      h('button',{onclick:()=>{ step=1; render(); }},['← different business'])
+    ]));
     return;
   }
   if(step===3){
-    app.innerHTML = "<div class='step'>Step 3 of 3</div><h2>Your POS is ready</h2>";
-    const p=document.createElement('div'); p.className='panel';
-    p.innerHTML = "<b>"+cfg.branding.name+"</b> — one self-contained file, yours to own."+flowPreview(cfg)
-      + "<a class='dl' id='dlPos'><button class='primary big'>⬇ Download your POS (one file)</button></a>"
-      + "<a class='dl' id='dlMd'><button class='big'>⬇ Download CLAUDE.md (your Claude Code guide)</button></a>"
-      + "<h2>Live preview</h2><p class='muted'>This is your actual POS, running right here.</p>";
+    app.appendChild(h('div',{class:'step'},['Step 3 of 3']));
+    app.appendChild(h('h2',{},['Your POS is ready']));
+    const p=h('div',{class:'panel'},[ h('b',{},[cfg.branding.name]), ' — one self-contained file, yours to own.', flowPreview(cfg,false),
+      h('a',{class:'dl', id:'dlPos'},[h('button',{class:'primary big'},['⬇ Download your POS (one file)'])]),
+      h('a',{class:'dl', id:'dlMd'},[h('button',{class:'big'},['⬇ Download CLAUDE.md (your Claude Code guide)'])]),
+      h('h2',{},['Live preview — your actual POS']) ]);
     app.appendChild(p);
-    const fr=document.createElement('iframe'); fr.id='preview'; app.appendChild(fr);
-    const back=document.createElement('button'); back.textContent="← start over"; back.onclick=()=>{ step=1; tradeKey=null; render(); };
-    app.appendChild(back);
-    // wire the download hrefs + preview from the already-assembled build (no re-assemble -> no loop)
+    app.appendChild(h('iframe',{id:'preview'}));
+    app.appendChild(h('button',{onclick:()=>{ step=2; render(); }},['← keep editing']));
+    app.appendChild(h('button',{onclick:()=>{ step=1; tradeKey=null; render(); }},['start over']));
     if(window.__build){
       const dlPos=document.getElementById('dlPos'); dlPos.href=blobUrl(window.__build.html,'text/html'); dlPos.download=(cfg.branding.name.replace(/\W+/g,'-')||'my')+'-pos.html';
       const dlMd=document.getElementById('dlMd'); dlMd.href=blobUrl(window.__build.claudeMd,'text/markdown'); dlMd.download='CLAUDE.md';
