@@ -95,7 +95,8 @@ let FLOWS = {
   cleaners: {
     label:"Cleaners", topology:"hub-and-spoke",
     branding:{ name:"Demo Cleaners", brandColor:"#2ea043" },
-    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}} },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}},
+      notify:{ template:"Hi {name}, your order #{number} at {biz} is ready for pickup." } },
     timer:{ mode:"due", promiseSec:172800, warnSec:86400, label:"promise" },   // back-scheduled ready-by date
     catalog:[
       {id:"g1", name:"Shirt", price:6.50, category:"press", path:["assembly","rack"],
@@ -109,7 +110,8 @@ let FLOWS = {
       {id:"assembly", type:"production",  label:"Assembly",        view:{money:false}},
       {id:"rack",     type:"staging",     label:"Rack",            view:{money:false}},
       {id:"board",    type:"board",       label:"Status Board",    view:{money:false}},
-      {id:"tracker",  type:"tracker",     label:"Customer Tracker", view:{money:false, external:true}}
+      {id:"tracker",  type:"tracker",     label:"Customer Tracker", view:{money:false, external:true}},
+      {id:"office",   type:"report",      label:"Office",          view:{money:true}}
     ]
   },
   repair: {   // THIRD trade — added as pure config, no engine changes: approval/waiver gate, split path, aging, deposit
@@ -139,6 +141,8 @@ let FLOWS = {
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}},
       loyalty:{ earnPerDollar:1, redeemPoints:20, redeemValue:5 } },   // earn 1 pt/$1; 20 pts = $5 off
     performers:["Alex","Sam","Jordan"],
+    staff:[{id:"e1",name:"Alex",pin:"1111"},{id:"e2",name:"Sam",pin:"2222"},{id:"e3",name:"Jordan",pin:"3333"}],   // clock in by PIN
+    welcome:{ message:"Make someone's day today ✂️", specials:["Ask about the color special","New: keratin add-on"] },
     commission:{ pct:40 },              // 40% of service sales
     catalog:[
       {id:"s1", name:"Haircut", price:35, category:"service",  path:["chair"], performer:true},
@@ -149,6 +153,8 @@ let FLOWS = {
     stations:[
       {id:"desk",   type:"central",    label:"Front Desk",  view:{money:true}},
       {id:"chair",  type:"production",  label:"Chair",      view:{money:false}},
+      {id:"book",   type:"booking",    label:"Appointments", view:{}},
+      {id:"clock",  type:"timeclock",  label:"Time Clock",  view:{}},
       {id:"office", type:"report",     label:"Back Office", view:{money:true}}
     ]
   }
