@@ -525,4 +525,14 @@ and a low/out tag, and gives each a **Receive** box — type in a delivery of 5,
 reorder flag clears. The builder exposes both fields (*In stock*, *Reorder at*) right on the item, so a retailer
 can set it all up without touching code. Twenty-one suites, all green.
 
+### The book of the day
+Retail asks *how many are left*; a salon or a repair shop asks *who's coming in and when*. So a device can now be
+an **Appointments** station. It's a small booking desk: type the customer, pick a service off the same catalog
+the register uses, choose a time and (if the trade has providers) who it's with, and it lands on **today's
+schedule**, sorted by time. The important part is the hand-off — a booking isn't a separate island of data. Tap
+**Check in** and it becomes a real order, order number and all, provider already attached, flowing into the exact
+same pipeline and checkout as a walk-in; the schedule marks it *checked in #N* so the front desk can see the loop
+closed. One catalog, one order stream, whether the customer booked ahead or walked through the door. The builder
+offers Appointments as a station role, so any service business can switch it on. Twenty-two suites, all green.
+
 *— to be continued —*

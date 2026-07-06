@@ -17,6 +17,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `timeclock.js` | staff PIN clock-in/out, the welcome screen (daily message + specials), on-the-clock list, bad-PIN rejection |
 | `builder-timeclock.js` | the builder configures staff (name+PIN), the clock-in message + specials, and a Time Clock station into a live POS |
 | `inventory.js` | stock on-hand shown on tiles, low-stock + out-of-stock (tile disabled), Office reorder list, receive-stock replenish |
+| `booking.js` | appointments — book a customer/service/time/staff, day schedule, check-in converts a booking into a live order |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

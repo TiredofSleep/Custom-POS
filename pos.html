@@ -162,7 +162,8 @@ const MODULES = {
   board:   { label:"Status board",            stationTypes:["board"] },
   portal:  { label:"Customer tracker",        stationTypes:["tracker"] },
   office:  { label:"Commission / reports",    stationTypes:["report"] },
-  clock:   { label:"Time clock",              stationTypes:["timeclock"] }
+  clock:   { label:"Time clock",              stationTypes:["timeclock"] },
+  booking: { label:"Appointments",            stationTypes:["booking"] }
 };
 function enabledModules(flow){ const types=new Set(flow.stations.map(s=>s.type)); return Object.keys(MODULES).filter(m=>MODULES[m].stationTypes.some(t=>types.has(t))); }
 const STATUS_LABEL = { INPROGRESS:"In progress", READY:"Ready for pickup", PAID:"Ready for pickup", CLOSED:"Picked up" };
@@ -174,7 +175,7 @@ function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FL
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{}}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[]}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -279,6 +280,7 @@ function render(){
   else if(station.type==="tracker")     renderTracker(app, station);
   else if(station.type==="report")      renderReport(app, station);
   else if(station.type==="timeclock")   renderTimeclock(app, station);
+  else if(station.type==="booking")     renderBooking(app, station);
 }
 
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
@@ -406,6 +408,49 @@ function renderTimeclock(app, station){
   if(!on.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="Nobody clocked in."; oc.appendChild(e); }
   on.forEach(s=>{ const p=openPunch(s.id); const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+s.name+"</span><span class='spacer'></span><span class='muted'>in "+p.in+" · "+hoursToday(s.id).toFixed(2)+" h</span>"; oc.appendChild(row); });
   app.appendChild(oc);
+}
+
+/* APPOINTMENTS — book a customer + service + time; check-in turns a booking into a real order in the pipeline.
+   Bookings live in DB.bookings; services are the catalog items. Staff options come from FLOW.staff/performers. */
+let bookForm = { name:"", service:"", time:"", staff:"" };
+function providerNames(){ return (FLOW.performers) || (FLOW.staff||[]).map(s=>s.name); }
+function checkInBooking(bk){
+  DB=loadDB(); DB.seq++;
+  const item=FLOW.catalog.find(i=>i.id===bk.service);
+  const line={ id:"L"+DB.seq, catId:item.id, name:item.name, modLabel:"", flags:[], performer:bk.staff||null, price:item.price, qty:1, category:item.category, path:(item.path||[]).slice(), stage:0 };
+  const rec={ id:"R"+DB.seq, number:DB.seq, lines:[line], tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now(), fromBooking:bk.id };
+  if(bk.name){ rec.customer={ name:bk.name, phone:bk.phone||"" }; }
+  rec.status = allComplete(rec) ? "READY" : "INPROGRESS";
+  DB.records.push(rec);
+  const b=(DB.bookings||[]).find(x=>x.id===bk.id); if(b){ b.status="CHECKEDIN"; b.orderNo=rec.number; }
+  saveDB(DB); render();
+}
+function renderBooking(app, station){
+  app.innerHTML="<h2>"+station.label+"</h2>";
+  const services=FLOW.catalog;
+  // booking form
+  const f=document.createElement("div"); f.className="card"; f.innerHTML="<div class='row'><b>New appointment</b></div>";
+  const mk=(label,el)=>{ const d=document.createElement("div"); d.className="fld"; const s=document.createElement("span"); s.className="flab"; s.textContent=label; d.appendChild(s); d.appendChild(el); return d; };
+  const name=document.createElement("input"); name.id="bkName"; name.placeholder="Customer"; name.value=bookForm.name; name.oninput=e=>bookForm.name=e.target.value;
+  const svc=document.createElement("select"); svc.id="bkService"; svc.innerHTML="<option value=''>— service —</option>"+services.map(i=>"<option value='"+i.id+"'"+(bookForm.service===i.id?" selected":"")+">"+i.name+" ("+money(i.price)+")</option>").join(""); svc.onchange=e=>bookForm.service=e.target.value;
+  const time=document.createElement("input"); time.id="bkTime"; time.type="time"; time.value=bookForm.time; time.oninput=e=>bookForm.time=e.target.value;
+  f.appendChild(mk("Customer", name)); f.appendChild(mk("Service", svc)); f.appendChild(mk("Time", time));
+  const provs=providerNames();
+  if(provs.length){ const st=document.createElement("select"); st.id="bkStaff"; st.innerHTML="<option value=''>— anyone —</option>"+provs.map(n=>"<option"+(bookForm.staff===n?" selected":"")+">"+n+"</option>").join(""); st.onchange=e=>bookForm.staff=e.target.value; f.appendChild(mk("With", st)); }
+  const add=document.createElement("button"); add.className="primary"; add.textContent="Book it"; add.style.marginTop="8px";
+  add.onclick=()=>{ if(!bookForm.service||!bookForm.time){ flash("Pick a service and a time"); return; } DB=loadDB(); DB.bookings.push({ id:"B"+Date.now(), name:bookForm.name, service:bookForm.service, time:bookForm.time, staff:bookForm.staff, status:"BOOKED" }); bookForm={ name:"", service:"", time:"", staff:"" }; saveDB(DB); render(); };
+  f.appendChild(add); app.appendChild(f);
+  // today's schedule (sorted by time)
+  const list=(DB.bookings||[]).slice().sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+  const sc=document.createElement("div"); sc.className="card"; sc.innerHTML="<div class='row'><b>Today's schedule</b></div>";
+  if(!list.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="No appointments yet."; sc.appendChild(e); }
+  list.forEach(bk=>{ const item=FLOW.catalog.find(i=>i.id===bk.service)||{name:"?"}; const row=document.createElement("div"); row.className="line";
+    const done=bk.status==="CHECKEDIN";
+    row.innerHTML="<span><b>"+(bk.time||"—")+"</b> · "+(bk.name||"Guest")+" — "+item.name+(bk.staff?" <span class='pill'>"+bk.staff+"</span>":"")+(done?" <span class='pill clock good'>checked in #"+bk.orderNo+"</span>":"")+"</span><span class='spacer'></span>";
+    if(!done){ const ci=document.createElement("button"); ci.className="good"; ci.textContent="Check in"; ci.style.padding="4px 10px"; ci.onclick=()=>checkInBooking(bk); row.appendChild(ci); }
+    else { const cx=document.createElement("button"); cx.textContent="Remove"; cx.style.padding="4px 10px"; cx.onclick=()=>{ DB=loadDB(); DB.bookings=DB.bookings.filter(x=>x.id!==bk.id); saveDB(DB); render(); }; row.appendChild(cx); }
+    sc.appendChild(row); });
+  app.appendChild(sc);
 }
 
 /* STATUS BOARD — internal broadcast: every live record by status, read-only, with location + clock */
