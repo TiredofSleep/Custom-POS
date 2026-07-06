@@ -587,9 +587,22 @@ function renderIntake(app, station){
   if(!draft) draft = { lines:[] };
   renderCustomerBar(app, station);
   const cat=document.createElement("div"); cat.innerHTML="<h2>New order</h2>";
+  // search / barcode-scan box — shown for big menus or when a scanner is configured (keyboard-wedge types code + Enter)
+  const tiles=[];
+  const addItem=item=> needsConfig(item) ? (pending={item, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(item, {}, [], [], null);
+  if(FLOW.catalog.length>5 || FLOW.endpoints.scan){
+    const search=document.createElement("input"); search.id="catSearch"; search.placeholder="Search or scan…"; search.autocomplete="off"; search.style.cssText="width:100%;margin-bottom:10px";
+    search.oninput=()=>{ const q=search.value.trim().toLowerCase(); tiles.forEach(({item,btn})=>{ const hay=(item.name+" "+(item.category||"")+" "+(item.barcode||item.sku||"")).toLowerCase(); btn.style.display=(!q||hay.includes(q))?"":"none"; }); };
+    search.onkeydown=e=>{ if(e.key!=="Enter") return; const q=search.value.trim().toLowerCase(); if(!q) return;
+      const exact=tiles.find(({item})=>String(item.barcode||item.sku||"").toLowerCase()===q && !item.__out);
+      const vis=tiles.find(({btn,item})=>btn.style.display!=="none" && !item.__out);
+      const hit=exact||vis; if(hit){ addItem(hit.item); } else { flash("No match for “"+search.value.trim()+"”"); } };
+    cat.appendChild(search);
+  }
   const grid=document.createElement("div"); grid.className="grid";
   FLOW.catalog.forEach(item=>{
     const b=document.createElement("button"); b.className="tile"; const rem=remainingOf(item); const out=is86(item)||isOutOfStock(item);
+    item.__out=out;
     if(out) b.className="tile eightysix";
     const via=item.path.length?item.path.join(" → "):"no prep";
     let sub = station.view.money?money(item.price)+" · "+via:via;
@@ -597,7 +610,8 @@ function renderIntake(app, station){
     if(tracksStock(item)) sub += isOutOfStock(item) ? " · <span class='pill x86'>out of stock</span>" : " · "+stockOnHand(item)+" in stock"+(isLowStock(item)?" <span class='pill flag'>low</span>":"");
     b.innerHTML = item.name + "<small>"+sub+"</small>";
     b.disabled = out;
-    b.onclick=()=> needsConfig(item) ? (pending={item, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(item, {}, [], [], null);
+    b.onclick=()=> addItem(item);
+    tiles.push({item, btn:b});
     grid.appendChild(b);
   });
   cat.appendChild(grid); app.appendChild(cat);

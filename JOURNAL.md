@@ -565,4 +565,14 @@ count is untouched. The report also grows a **House accounts** card: who owes, h
 too. It's real A/R, built from the same customer records and tender math already in the engine. Twenty-five
 suites, all green.
 
+### Beep
+A grid of tap-tiles is lovely for a coffee shop with eight things; it's hopeless for a grocery with eight
+hundred, and useless with a barcode scanner in your hand. So the intake grew a **search / scan** box — it shows
+up automatically once a menu passes a handful of items, or any time you flip on *barcode scan*. Type a few
+letters and the tiles filter live; hit Enter and the first match rings up. And because a USB barcode scanner is
+really just a keyboard that types fast and presses Enter, the same box *is* the scanner integration: give an item
+a barcode/SKU, scan it, and it drops straight into the order — no driver, no hardware config, works on the
+nineteen-item Hamburger Barn menu and a nine-hundred-item market alike. The builder adds a *barcode scan* toggle
+and a Barcode/SKU field on every item. Twenty-six suites, all green.
+
 *— to be continued —*
