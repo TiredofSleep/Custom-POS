@@ -485,4 +485,16 @@ by-tender totals *net themselves* (charge $11 to card, refund $11, card shows $0
 appears in the summary, and *Total collected* drops accordingly. No separate ledger, no double-counting — the
 drawer math just tells the truth. Eighteen suites, all green.
 
+### Clock in, and be welcomed
+The owner had one request that wasn't about money at all: *"Each employee gets a welcome screen when they clock
+in! Can just be a message with the daily specials and encouragement."* That line is the whole spirit of the
+project — software that's a little kind — so we built it. Bind any device as a **Time Clock**, and it's a PIN
+pad. A staffer taps in their PIN and the engine punches them in (or out — same PIN toggles), then greets them by
+name: *👋 Welcome, Alex!*, the time, a rotating word of encouragement, the owner's message of the day, and
+today's specials. Tap *Start shift* and it's ready for the next person; an **On the clock** list shows who's
+working and how long. Punch back out and it thanks them with their hours for the day. It's all config —
+`FLOW.staff` (names + PINs) and an optional `FLOW.welcome` (message + specials) — and the punches accumulate in
+the data the engine already owns, so a payroll report later gets its hours for free. A wrong PIN just shakes its
+head; nothing breaks. Nineteen suites, all green.
+
 *— to be continued —*

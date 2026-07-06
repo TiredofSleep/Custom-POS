@@ -161,7 +161,8 @@ const MODULES = {
   staging: { label:"Staging / rack",          stationTypes:["staging"] },
   board:   { label:"Status board",            stationTypes:["board"] },
   portal:  { label:"Customer tracker",        stationTypes:["tracker"] },
-  office:  { label:"Commission / reports",    stationTypes:["report"] }
+  office:  { label:"Commission / reports",    stationTypes:["report"] },
+  clock:   { label:"Time clock",              stationTypes:["timeclock"] }
 };
 function enabledModules(flow){ const types=new Set(flow.stations.map(s=>s.type)); return Object.keys(MODULES).filter(m=>MODULES[m].stationTypes.some(t=>types.has(t))); }
 const STATUS_LABEL = { INPROGRESS:"In progress", READY:"Ready for pickup", PAID:"Ready for pickup", CLOSED:"Picked up" };
@@ -173,7 +174,7 @@ function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FL
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; return d; } catch(e){ return {records:[],seq:0,customers:[]}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[]}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -255,6 +256,7 @@ function needsConfig(item){ return (item.modifiers&&item.modifiers.length) || (i
 
 /* ============================================================================ RENDER */
 function money(n){ return "$"+n.toFixed(2); }
+function flash(msg){ let t=document.getElementById("toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.style.cssText="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--bad);color:#fff;padding:10px 16px;border-radius:8px;z-index:99;font-weight:600"; document.body.appendChild(t); } t.textContent=msg; t.style.display="block"; }
 function render(){
   DB = loadDB();
   document.getElementById("brandDot").style.background = FLOW.branding.brandColor;
@@ -271,6 +273,7 @@ function render(){
   else if(station.type==="board")       renderBoard(app, station);
   else if(station.type==="tracker")     renderTracker(app, station);
   else if(station.type==="report")      renderReport(app, station);
+  else if(station.type==="timeclock")   renderTimeclock(app, station);
 }
 
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
@@ -329,6 +332,54 @@ function renderReport(app, station){
   }
 }
 
+/* TIME CLOCK — staff punch in/out by PIN, then a welcome screen (daily message + specials + encouragement).
+   Config: FLOW.staff [{id,name,pin}] and optional FLOW.welcome {message, specials:[...]}. Punches land in DB.punches. */
+const CLOCK_CHEERS = ["Have a great shift!","You've got this.","Thanks for being here.","Let's make it a good one.","The team's glad you're on today."];
+function openPunch(staffId){ return (DB.punches||[]).find(p=>p.staffId===staffId && !p.out); }
+function hoursToday(staffId){ const now=Date.now(); return (DB.punches||[]).filter(p=>p.staffId===staffId).reduce((s,p)=> s + ((p.out? p.outTs : now) - p.inTs), 0)/3600000; }
+function punch(staff){
+  const open=openPunch(staff.id); const hhmm=new Date().toISOString().slice(11,16);
+  if(open){ open.out=hhmm; open.outTs=Date.now(); clockWelcome={ name:staff.name, inbound:false }; }
+  else { DB.punches.push({ staffId:staff.id, name:staff.name, in:hhmm, inTs:Date.now(), out:null, outTs:null }); clockWelcome={ name:staff.name, inbound:true }; }
+  pinBuf=""; saveDB(DB); render();
+}
+function renderTimeclock(app, station){
+  const staff=FLOW.staff||[];
+  // welcome / goodbye screen right after a punch
+  if(clockWelcome){
+    const w=clockWelcome; const wel=document.createElement("div"); wel.className="card"; wel.style.textAlign="center";
+    const cheer=CLOCK_CHEERS[w.name.length % CLOCK_CHEERS.length];  // deterministic (no Math.random in the engine)
+    if(w.inbound){
+      wel.innerHTML="<h2 style='margin:6px 0'>👋 Welcome, "+w.name+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked in at "+new Date().toISOString().slice(11,16)+" · "+cheer+"</div>";
+      const wc=FLOW.welcome||{};
+      if(wc.message){ const m=document.createElement("div"); m.className="line"; m.style.justifyContent="center"; m.innerHTML="<span>"+wc.message+"</span>"; wel.appendChild(m); }
+      if((wc.specials||[]).length){ const s=document.createElement("div"); s.style.marginTop="8px"; s.innerHTML="<b>Today's specials</b>"; (wc.specials||[]).forEach(sp=>{ const d=document.createElement("div"); d.className="muted"; d.textContent="• "+sp; s.appendChild(d); }); wel.appendChild(s); }
+    } else {
+      wel.innerHTML="<h2 style='margin:6px 0'>✅ Thanks, "+w.name+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked out · "+hoursToday(staff.find(x=>x.name===w.name)?.id ?? -1).toFixed(2)+" h today. See you next time.</div>";
+    }
+    const ok=document.createElement("button"); ok.className="primary"; ok.textContent=w.inbound?"Start shift":"Done"; ok.onclick=()=>{ clockWelcome=null; render(); }; wel.appendChild(ok);
+    app.appendChild(wel); return;
+  }
+  app.innerHTML="<h2>"+station.label+"</h2><p class='muted'>Enter your PIN to clock in or out.</p>";
+  if(!staff.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No staff configured. Add staff (name + PIN) in the builder."; app.appendChild(e); return; }
+  // PIN pad
+  const pad=document.createElement("div"); pad.className="card"; pad.style.maxWidth="260px";
+  const disp=document.createElement("div"); disp.style.cssText="font-size:28px;letter-spacing:8px;text-align:center;min-height:36px;margin-bottom:8px"; disp.textContent=pinBuf.replace(/./g,"•")||"—"; pad.appendChild(disp);
+  const grid=document.createElement("div"); grid.style.cssText="display:grid;grid-template-columns:repeat(3,1fr);gap:6px";
+  const press=d=>{ pinBuf=(pinBuf+d).slice(0,8); render(); };
+  ["1","2","3","4","5","6","7","8","9"].forEach(d=>{ const b=document.createElement("button"); b.textContent=d; b.onclick=()=>press(d); grid.appendChild(b); });
+  const clr=document.createElement("button"); clr.textContent="⌫"; clr.onclick=()=>{ pinBuf=pinBuf.slice(0,-1); render(); }; grid.appendChild(clr);
+  const zero=document.createElement("button"); zero.textContent="0"; zero.onclick=()=>press("0"); grid.appendChild(zero);
+  const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=()=>{ const who=staff.find(s=>String(s.pin)===pinBuf); if(who){ punch(who); } else { pinBuf=""; flash("PIN not recognized"); render(); } }; grid.appendChild(ent);
+  pad.appendChild(grid); app.appendChild(pad);
+  // who's on the clock
+  const on=staff.filter(s=>openPunch(s.id));
+  const oc=document.createElement("div"); oc.className="card"; oc.innerHTML="<div class='row'><b>On the clock</b></div>";
+  if(!on.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="Nobody clocked in."; oc.appendChild(e); }
+  on.forEach(s=>{ const p=openPunch(s.id); const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+s.name+"</span><span class='spacer'></span><span class='muted'>in "+p.in+" · "+hoursToday(s.id).toFixed(2)+" h</span>"; oc.appendChild(row); });
+  app.appendChild(oc);
+}
+
 /* STATUS BOARD — internal broadcast: every live record by status, read-only, with location + clock */
 function renderBoard(app, station){
   app.innerHTML="<h2>"+station.label+"</h2>";
@@ -382,6 +433,8 @@ function renderPicker(app){
 let draft = null;      // the order being built
 let pending = null;    // an item being configured (required mods / add-ons / flags)
 let receiptOpen = {};  // which orders have their receipt open
+let pinBuf = "";       // time-clock PIN entry buffer
+let clockWelcome = null; // {name, inbound} — the welcome/goodbye screen shown right after a punch
 function attachCustomer(phone, name){
   phone=(phone||"").trim(); if(!phone) return;
   DB=loadDB(); const found=(DB.customers||[]).find(c=>c.phone===phone);
