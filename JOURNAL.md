@@ -611,4 +611,16 @@ there, the same change unlocked **history**: page back a day at a time, jump to 
 *Today* to return. Close out tonight and the numbers are tonight's; look up last Saturday and it's Saturday's. A
 correctness fix and a feature from the same three lines. Thirty suites, all green.
 
+### A front door
+All this machinery needed somewhere to land, so customPOS got a home page — and it's built the same way as
+everything else: one self-contained HTML file, no frameworks, no external fonts or scripts, works in light or
+dark. It says the plain thing up top — *build your own POS, download it, own the code* — and then does the
+harder, more important job: it tells the truth about money. A panel that literally reads **$0 / forever** next
+to an honest note that the *only* way the project earns is an optional certified card integration, a fee you
+already pay a processor. Below that, the questions every owner actually asks before trusting software — where's
+my data, is it backed up, does it work offline, am I locked in, what if you disappear — each answered in a
+sentence, because trust is the entire pitch. A feature grid shows the twenty things the engine now does, and
+every button leads to the builder or the live demo. The marketing and the product tell the same story because
+they're made of the same stuff. Thirty-one suites, all green.
+
 *— to be continued —*

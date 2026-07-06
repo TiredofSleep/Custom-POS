@@ -26,6 +26,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `quotes.js` | save a draft as a quote/estimate, load it back into the order (consuming it), ring it up like any order |
 | `kds.js` | interactive kitchen display — live tickets oldest-first with an aging prep timer, Bump fires the ticket ready |
 | `report-history.js` | the Z-report is scoped to a single day (fixes counting all history) + pages back through prior days |
+| `landing.js` | the customPOS.com landing page — pitch, honest monetization, trust FAQ, feature grid, CTA links, mobile no-overflow |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
