@@ -1,0 +1,231 @@
+<!--
+  customPOS — the builder (customPOS.com in one file)
+  ===================================================
+  Trade-first wizard: pick your business, name it, (optionally customize), then DOWNLOAD a
+  single self-contained POS with your config baked in — plus a generated CLAUDE.md so your own
+  Claude Code can take over. It assembles the download by fetching the engine (pos.html) and
+  injecting your flow as window.CUSTOMPOS_FLOW (see pos.html's injection hook).
+
+  Serve this alongside pos.html over http (that's how customPOS.com works). Neutral templates only.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>customPOS — build your POS</title>
+<style>
+  :root { --brand:#1f6feb; --bg:#0f1115; --card:#181b22; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; --good:#2ea043; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:18px 20px; border-bottom:1px solid var(--line); background:var(--card); }
+  header b { font-size:18px; } header .tag { color:var(--dim); margin-left:8px; }
+  main { max-width:900px; margin:0 auto; padding:22px 18px 70px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.03em; color:var(--dim); margin:26px 0 12px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; }
+  .trade { text-align:left; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; cursor:pointer; color:var(--ink); font:inherit; }
+  .trade:hover, .trade.sel { border-color:var(--brand); }
+  .trade b { font-size:16px; display:block; } .trade small { color:var(--dim); }
+  input, button { font:inherit; color:var(--ink); }
+  input { background:#222834; border:1px solid var(--line); border-radius:8px; padding:10px 12px; width:100%; max-width:360px; }
+  button { background:#222834; border:1px solid var(--line); border-radius:8px; padding:10px 15px; cursor:pointer; margin:6px 8px 0 0; }
+  button:hover { border-color:var(--brand); }
+  button.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
+  button.big { padding:14px 20px; font-size:16px; }
+  .flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:10px 0; }
+  .node { background:#1b2536; border:1px solid var(--brand); color:#cfe0ff; border-radius:20px; padding:6px 12px; font-size:13px; }
+  .node.fixed { background:#14301f; border-color:var(--good); color:#bdf0cd; }
+  .arrow { color:var(--dim); }
+  .muted { color:var(--dim); } .pill { font-size:12px; border:1px solid var(--line); border-radius:20px; padding:2px 8px; color:var(--dim); margin-right:5px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:14px 0; }
+  iframe { width:100%; height:460px; border:1px solid var(--line); border-radius:12px; background:#0f1115; margin-top:10px; }
+  a.dl { display:inline-block; }
+  .step { color:var(--dim); font-size:13px; margin-bottom:4px; }
+</style>
+
+<header><b>customPOS</b><span class="tag">build your point-of-sale · download it · own the code</span></header>
+<main id="app"></main>
+
+<script>
+/* ---- starter trade templates (the builder's own library — each a valid engine FLOW) ---- */
+const TEMPLATES = {
+  retail: {
+    flowId:"retail", label:"Shop / Retail", topology:"linear", blurb:"Ring up items from stock",
+    branding:{ name:"My Shop", brandColor:"#1f6feb" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0" }, loyalty:{earnPerDollar:1,redeemPoints:100,redeemValue:5} },
+    catalog:[ {id:"p1",name:"Item A",price:12,category:"retail",path:[]}, {id:"p2",name:"Item B",price:24,category:"retail",path:[]}, {id:"g",name:"Gift card $25",price:25,category:"giftcard",path:[]} ],
+    stations:[ {id:"reg",type:"central",label:"Register",view:{money:true}}, {id:"board",type:"board",label:"Sales Board",view:{money:false}} ]
+  },
+  cafe: {
+    flowId:"cafe", label:"Café / Counter", topology:"linear", blurb:"Made-to-order food & drinks",
+    branding:{ name:"My Café", brandColor:"#8a5a2b" },
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}} },
+    timer:{ mode:"aging", warnSec:300, badSec:600, label:"prep" }, capacity:{ perOrderMins:4, max:8 },
+    catalog:[
+      {id:"c1",name:"Coffee",price:3.5,category:"drink",path:["bar"]},
+      {id:"c2",name:"Latte",price:4.75,category:"drink",path:["bar"],modifiers:[{group:"Size",required:true,options:[{name:"Sm",price:0},{name:"Md",price:.5},{name:"Lg",price:1}]}],addons:[{name:"Oat milk",price:.75}]},
+      {id:"c3",name:"Sandwich",price:8,category:"food",path:["kitchen"]}
+    ],
+    stations:[ {id:"order",type:"intake",label:"Register",view:{money:true}}, {id:"bar",type:"production",label:"Bar",view:{money:false}}, {id:"kitchen",type:"production",label:"Kitchen",view:{money:false}}, {id:"pickup",type:"fulfillment",label:"Pickup",view:{money:true}} ]
+  },
+  cleaner: {
+    flowId:"cleaner", label:"Dry cleaner / Laundry", topology:"hub-and-spoke", blurb:"Take items in, process, return",
+    branding:{ name:"My Cleaners", brandColor:"#2ea043" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}} },
+    timer:{ mode:"due", promiseSec:172800, warnSec:86400, label:"promise" },
+    catalog:[
+      {id:"g1",name:"Shirt",price:6.5,category:"press",path:["assembly","rack"],flags:["Pre-existing damage"]},
+      {id:"g2",name:"Pants",price:7,category:"press",path:["assembly","rack"]},
+      {id:"g3",name:"Wash & Fold",price:2.75,category:"wf",path:["rack"]}
+    ],
+    stations:[ {id:"counter",type:"central",label:"Front Counter",view:{money:true}}, {id:"assembly",type:"production",label:"Assembly",view:{money:false}}, {id:"rack",type:"staging",label:"Rack",view:{money:false},checklist:["Piece count matches"]}, {id:"board",type:"board",label:"Status Board",view:{money:false}}, {id:"tracker",type:"tracker",label:"Customer Tracker",view:{money:false,external:true}} ]
+  },
+  repair: {
+    flowId:"repair", label:"Repair shop", topology:"hub-and-spoke", blurb:"Intake, estimate, fix, return",
+    branding:{ name:"My Repair Shop", brandColor:"#e3893c" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}} },
+    timer:{ mode:"aging", warnSec:600, badSec:1200, label:"in shop" },
+    catalog:[
+      {id:"r1",name:"Screen repair",price:129,category:"repair",path:["diagnose","repair","ready"],flags:["Data-loss waiver"]},
+      {id:"r2",name:"Battery",price:59,category:"repair",path:["repair","ready"]},
+      {id:"r3",name:"Diagnostic",price:25,category:"repair",path:["diagnose","ready"]}
+    ],
+    stations:[ {id:"counter",type:"central",label:"Front Counter",view:{money:true}}, {id:"diagnose",type:"production",label:"Diagnostics",view:{money:false}}, {id:"repair",type:"production",label:"Repair Bench",view:{money:false}}, {id:"ready",type:"staging",label:"Ready Shelf",view:{money:false},checklist:["Powered on & tested","Cleaned"]}, {id:"board",type:"board",label:"Job Board",view:{money:false}} ]
+  },
+  salon: {
+    flowId:"salon", label:"Salon / Services", topology:"hub-and-spoke", blurb:"Appointments, commission, tips",
+    branding:{ name:"My Salon", brandColor:"#b06fdb" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}}, loyalty:{earnPerDollar:1,redeemPoints:20,redeemValue:5} },
+    performers:["Alex","Sam","Jordan"], commission:{ pct:40 },
+    catalog:[ {id:"s1",name:"Haircut",price:35,category:"service",path:["chair"],performer:true}, {id:"s2",name:"Color",price:85,category:"service",path:["chair"],performer:true}, {id:"s3",name:"Product",price:22,category:"retail",path:[]} ],
+    stations:[ {id:"desk",type:"central",label:"Front Desk",view:{money:true}}, {id:"chair",type:"production",label:"Chair",view:{money:false}}, {id:"office",type:"report",label:"Back Office",view:{money:true}} ]
+  }
+};
+
+const MODULE_LABEL = { central:"checkout", intake:"checkout", fulfillment:"checkout", production:"work stations", staging:"staging/rack", board:"status board", tracker:"customer tracker", report:"commission/reports" };
+function moduleList(cfg){ const t=[...new Set(cfg.stations.map(s=>MODULE_LABEL[s.type]).filter(Boolean))]; return t; }
+
+/* ---- wizard state ---- */
+let step = 1, tradeKey = null, cfg = null;
+function chooseTrade(k){ tradeKey=k; cfg=JSON.parse(JSON.stringify(TEMPLATES[k])); step=2; render(); }
+
+function flowPreview(cfg){
+  // Customer -> [stations that appear on the path] -> Payment
+  const mids = cfg.stations.filter(s=>["production","staging"].includes(s.type)).map(s=>s.label);
+  const chain = ["<span class='node fixed'>Customer</span>"];
+  chain.push("<span class='node'>"+cfg.stations.find(s=>["intake","central"].includes(s.type)).label+"</span>");
+  mids.forEach(m=>chain.push("<span class='node'>"+m+"</span>"));
+  const end = cfg.stations.find(s=>s.type==="fulfillment") || cfg.stations.find(s=>s.type==="central");
+  chain.push("<span class='node'>"+end.label+"</span>");
+  chain.push("<span class='node fixed'>Payment</span>");
+  return "<div class='flow'>"+chain.join("<span class='arrow'>→</span>")+"</div>";
+}
+
+/* ---- generate the per-build CLAUDE.md ---- */
+function genClaudeMd(cfg){
+  const stations = cfg.stations.map(s=>"- **"+s.label+"** ("+s.type+")").join("\n");
+  const items = cfg.catalog.map(i=>"- "+i.name+" — $"+i.price+(i.path.length?" (flows: "+i.path.join(" → ")+")":"")).join("\n");
+  return `# CLAUDE.md — ${cfg.branding.name} (your point-of-sale)
+
+This is **your** customPOS, generated for a ${TEMPLATES[tradeKey].label.toLowerCase()}. It's one self-contained
+HTML file that runs in a browser and stores its data locally. **You own it.** Open this folder in
+[Claude Code](https://claude.com/claude-code) and ask for changes in plain English.
+
+## Everything about your business lives in one object
+At the top of the HTML file there's a \`window.CUSTOMPOS_FLOW = { ... }\` object. That's your whole setup:
+- **branding** — your name and brand color
+- **catalog** — your products/services and prices. Each item has a \`path\` = the workstations it flows through
+  (empty path = sold right at the counter). Change prices or add items here.
+- **stations** — your screens/devices (${cfg.stations.length} of them). Each device opens the file, signs in,
+  and picks which station it is.
+- **endpoints** — tax, tips, deposits, loyalty, and card payments.
+
+## Your setup
+**Business:** ${cfg.branding.name}
+**Type:** ${TEMPLATES[tradeKey].label}  ·  **Layout:** ${cfg.topology}
+
+**Workstations**
+${stations}
+
+**Starter catalog**
+${items}
+
+## Running it across devices
+Each computer/phone opens the file, and picks its station ("which screen is this?"). To share live data across
+devices, run the optional hub (the small Node companion) — otherwise each device keeps its own local copy.
+
+## Taking card payments
+Card payments are optional and PCI-safe: the browser never touches a card number. See the project's
+\`docs/PAYMENTS-MODULE.md\` for the processor-agnostic adapter. Your processor credentials live **only on your own
+server**, never in this file.
+
+## Ideas to ask Claude Code
+- "Add a new item called ___ for $___."
+- "Rename the '${cfg.stations[0].label}' station to ___."
+- "Turn on a customer text when an order is ready."
+- "Change the tax rate to ___%."
+
+*Built with customPOS — software is free, knowledge is free, and this code is yours.*`;
+}
+
+/* ---- assemble the downloadable POS: engine (pos.html) + injected flow ---- */
+async function assemble(cfg){
+  const engine = await fetch('pos.html').then(r=>r.text());
+  const inject = "<script>window.CUSTOMPOS_FLOW = "+JSON.stringify(cfg)+";<\/script>\n";
+  const html = engine.replace("<script>", inject+"<script>");   // prepend injection before the engine script
+  const claudeMd = genClaudeMd(cfg);
+  window.__build = { flow:cfg, html, claudeMd };                 // exposed for verification
+  return { html, claudeMd };
+}
+function blobUrl(text, type){ return URL.createObjectURL(new Blob([text], {type:type||'text/plain'})); }
+
+async function buildAndShow(){
+  await assemble(cfg);    // sets window.__build; step-3 render() wires the downloads + preview
+  step = 3; render();
+}
+
+/* ---- render ---- */
+function render(){
+  const app = document.getElementById('app'); app.innerHTML = "";
+  if(step===1){
+    app.innerHTML = "<div class='step'>Step 1 of 3</div><h2>What kind of business do you run?</h2>";
+    const cards=document.createElement('div'); cards.className='cards';
+    Object.keys(TEMPLATES).forEach(k=>{ const t=TEMPLATES[k]; const b=document.createElement('button'); b.className='trade';
+      b.innerHTML="<b>"+t.label+"</b><small>"+t.blurb+"</small>"; b.onclick=()=>chooseTrade(k); cards.appendChild(b); });
+    app.appendChild(cards);
+    return;
+  }
+  if(step===2){
+    app.innerHTML = "<div class='step'>Step 2 of 3</div><h2>Name it</h2>";
+    const p=document.createElement('div'); p.className='panel';
+    const nm=document.createElement('input'); nm.id='bizName'; nm.value=cfg.branding.name; nm.oninput=()=>{ cfg.branding.name=nm.value||cfg.branding.name; };
+    p.appendChild(nm);
+    p.insertAdjacentHTML('beforeend', "<h2>Your flow</h2>"+flowPreview(cfg)
+      + "<p class='muted'>"+cfg.catalog.length+" starter items · workstations: "+moduleList(cfg).map(m=>"<span class='pill'>"+m+"</span>").join(" ")+"</p>");
+    app.appendChild(p);
+    const ex=document.createElement('button'); ex.className='primary big'; ex.textContent="Build it for me → download";
+    ex.onclick=()=>{ cfg.branding.name=(document.getElementById('bizName').value||cfg.branding.name); buildAndShow(); };
+    const back=document.createElement('button'); back.textContent="← pick a different business"; back.onclick=()=>{ step=1; render(); };
+    app.appendChild(ex); app.appendChild(back);
+    app.insertAdjacentHTML('beforeend', "<p class='muted' style='margin-top:14px'>The Express path gives you sensible defaults and a ready-to-use file. You can customize everything afterward in Claude Code — every download comes with a guide.</p>");
+    return;
+  }
+  if(step===3){
+    app.innerHTML = "<div class='step'>Step 3 of 3</div><h2>Your POS is ready</h2>";
+    const p=document.createElement('div'); p.className='panel';
+    p.innerHTML = "<b>"+cfg.branding.name+"</b> — one self-contained file, yours to own."+flowPreview(cfg)
+      + "<a class='dl' id='dlPos'><button class='primary big'>⬇ Download your POS (one file)</button></a>"
+      + "<a class='dl' id='dlMd'><button class='big'>⬇ Download CLAUDE.md (your Claude Code guide)</button></a>"
+      + "<h2>Live preview</h2><p class='muted'>This is your actual POS, running right here.</p>";
+    app.appendChild(p);
+    const fr=document.createElement('iframe'); fr.id='preview'; app.appendChild(fr);
+    const back=document.createElement('button'); back.textContent="← start over"; back.onclick=()=>{ step=1; tradeKey=null; render(); };
+    app.appendChild(back);
+    // wire the download hrefs + preview from the already-assembled build (no re-assemble -> no loop)
+    if(window.__build){
+      const dlPos=document.getElementById('dlPos'); dlPos.href=blobUrl(window.__build.html,'text/html'); dlPos.download=(cfg.branding.name.replace(/\W+/g,'-')||'my')+'-pos.html';
+      const dlMd=document.getElementById('dlMd'); dlMd.href=blobUrl(window.__build.claudeMd,'text/markdown'); dlMd.download='CLAUDE.md';
+      document.getElementById('preview').srcdoc=window.__build.html;
+    }
+    return;
+  }
+}
+render();
+</script>
