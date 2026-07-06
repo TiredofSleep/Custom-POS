@@ -169,7 +169,8 @@ const MODULES = {
   portal:  { label:"Customer tracker",        stationTypes:["tracker"] },
   office:  { label:"Commission / reports",    stationTypes:["report"] },
   clock:   { label:"Time clock",              stationTypes:["timeclock"] },
-  booking: { label:"Appointments",            stationTypes:["booking"] }
+  booking: { label:"Appointments",            stationTypes:["booking"] },
+  kds:     { label:"Kitchen display (bump)",  stationTypes:["kds"] }
 };
 function enabledModules(flow){ const types=new Set(flow.stations.map(s=>s.type)); return Object.keys(MODULES).filter(m=>MODULES[m].stationTypes.some(t=>types.has(t))); }
 const STATUS_LABEL = { INPROGRESS:"In progress", READY:"Ready for pickup", PAID:"Ready for pickup", CLOSED:"Picked up" };
@@ -298,6 +299,7 @@ function render(){
   else if(station.type==="report")      renderReport(app, station);
   else if(station.type==="timeclock")   renderTimeclock(app, station);
   else if(station.type==="booking")     renderBooking(app, station);
+  else if(station.type==="kds")         renderKDS(app, station);
 }
 
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
@@ -483,6 +485,26 @@ function renderBooking(app, station){
     else { const cx=document.createElement("button"); cx.textContent="Remove"; cx.style.padding="4px 10px"; cx.onclick=()=>{ DB=loadDB(); DB.bookings=DB.bookings.filter(x=>x.id!==bk.id); saveDB(DB); render(); }; row.appendChild(cx); }
     sc.appendChild(row); });
   app.appendChild(sc);
+}
+
+/* KITCHEN DISPLAY (KDS) — interactive: live tickets with a prep timer that ages green→yellow→red, oldest first,
+   and a Bump that fires the whole ticket ready. Thresholds from FLOW.kds {warnSec,badSec} (default 5/10 min). */
+function kdsChip(r){
+  const k=FLOW.kds||{warnSec:300,badSec:600}; const el=(Date.now()-(r.ts||Date.now()))/1000;
+  const cls = el>=k.badSec ? "bad" : el>=k.warnSec ? "warn" : "good";
+  return "<span class='pill clock "+cls+"'>"+fmtDur(el)+"</span>";
+}
+function bumpRecord(r){ r.lines.forEach(l=>{ l.stage=(l.path||[]).length; }); r.bumpedAt=new Date().toISOString().slice(11,16); afterChange(r); render(); }
+function renderKDS(app, station){
+  app.innerHTML="<h2>"+station.label+"</h2><p class='muted'>Oldest first. Bump a ticket when it's up.</p>";
+  const live=DB.records.filter(r=>r.status==="INPROGRESS").sort((a,b)=>(a.ts||0)-(b.ts||0));
+  if(!live.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="All caught up — no tickets working."; app.appendChild(e); }
+  live.forEach(r=>{ const c=document.createElement("div"); c.className="card";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> "+kdsChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const where=lineComplete(l)?"ready":("at "+l.path[l.stage]);
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span class='muted'>"+where+"</span>"; c.appendChild(row); });
+    const bump=document.createElement("button"); bump.className="primary"; bump.textContent="Bump ✓"; bump.style.marginTop="10px"; bump.onclick=()=>{ bumpRecord(r); saveDB(DB); render(); }; c.appendChild(bump);
+    app.appendChild(c); });
 }
 
 /* STATUS BOARD — internal broadcast: every live record by status, read-only, with location + clock */
