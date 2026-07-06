@@ -497,4 +497,13 @@ working and how long. Punch back out and it thanks them with their hours for the
 the data the engine already owns, so a payroll report later gets its hours for free. A wrong PIN just shakes its
 head; nothing breaks. Nineteen suites, all green.
 
+### Wiring it back into the studio
+An engine feature nobody can configure isn't really a feature, so the last of these went back into the builder.
+The workstation role dropdown now offers **Time Clock** (and the reports role got renamed to what it actually is
+now — *Reports / Z-report / refunds*). And the Step-2 studio grew a **Staff & time clock** panel: add people with
+their PINs, write the clock-in message of the day, and list today's specials one per line — all of it baked into
+the one file you download, and named in the generated `CLAUDE.md` so your own Claude Code knows the staff are
+there. Build a café, drop in a Time Clock station and a couple of people, and the POS you download greets them by
+name on their first punch. Twenty suites, all green.
+
 *— to be continued —*

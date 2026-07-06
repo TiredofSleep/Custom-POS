@@ -158,7 +158,8 @@ const TEMPLATES = {
 const STATION_TYPES = [
   ["intake","Intake — starts orders"], ["central","Counter — starts & finishes"], ["production","Work station — items pass through"],
   ["staging","Staging / rack — hold until ready"], ["fulfillment","Checkout — finishes orders"],
-  ["board","Status board (view only)"], ["tracker","Customer tracker (sanitized)"], ["report","Commission / reports"]
+  ["board","Status board (view only)"], ["tracker","Customer tracker (sanitized)"], ["report","Reports / Z-report / refunds"],
+  ["timeclock","Time clock (staff PIN in/out)"]
 ];
 const PATH_TYPES = ["production","staging"];   // the station types an item can flow THROUGH
 
@@ -198,6 +199,10 @@ function setTimer(mode){ if(mode==="off"){ delete cfg.timer; } else if(mode==="a
 function setCapacity(v){ v=Number(v)||0; if(v>0) cfg.capacity={perOrderMins:(cfg.capacity&&cfg.capacity.perOrderMins)||4, max:v}; else delete cfg.capacity; }
 function toggleDiscounts(){ if(cfg.endpoints.discounts) delete cfg.endpoints.discounts; else cfg.endpoints.discounts=true; render(); }
 function setTax(v){ v=Number(v)||0; if(v>0) cfg.endpoints.tax={rate:v/100}; else delete cfg.endpoints.tax; }
+/* ---- staff & time clock ---- */
+function addStaff(){ cfg.staff=cfg.staff||[]; cfg.staff.push({ id:uid(), name:"New person", pin:String(1000+cfg.staff.length) }); render(); }
+function removeStaff(i){ cfg.staff.splice(i,1); if(!cfg.staff.length) delete cfg.staff; render(); }
+function setWelcome(field,v){ cfg.welcome=cfg.welcome||{}; if(field==='specials'){ cfg.welcome.specials=v.split('\n').map(s=>s.trim()).filter(Boolean); if(!cfg.welcome.specials.length) delete cfg.welcome.specials; } else { if(v) cfg.welcome[field]=v; else delete cfg.welcome[field]; } if(!Object.keys(cfg.welcome).length) delete cfg.welcome; }
 
 /* ---- stations ---- */
 function addStation(){ cfg.stations.push({ id:uid(), type:"production", label:"New station", view:{money:false} }); selStation=cfg.stations.length-1; selItem=-1; render(); }
@@ -297,7 +302,7 @@ The \`window.CUSTOMPOS_FLOW = { ... }\` at the top of the HTML is your whole set
   station it is; a station may carry a QC \`checklist\` that gates it.
 
 ## Your setup
-**Business:** ${cfg.branding.name}  ·  **Layout:** ${cfg.topology}
+**Business:** ${cfg.branding.name}  ·  **Layout:** ${cfg.topology}${cfg.staff&&cfg.staff.length?`  ·  **Staff:** ${cfg.staff.length} (clock in by PIN on a Time Clock station)`:''}
 
 **Workstations**
 ${stations}
@@ -362,6 +367,23 @@ function render(){
         h('span',{class:'flab'},['Max in queue']), h('input',{class:'sm',type:'number', value:(cfg.capacity&&cfg.capacity.max)||'', placeholder:'∞', oninput:e=>setCapacity(e.target.value)}) ])
     ]);
     app.appendChild(biz);
+    // Staff & time clock
+    const staff=cfg.staff||[];
+    const staffRows=h('div',{}, staff.map((s,i)=>h('div',{class:'row2'},[
+      h('input',{class:'nm', value:s.name, oninput:e=>s.name=e.target.value}),
+      h('span',{class:'muted'},['PIN']), h('input',{class:'sm', value:s.pin, oninput:e=>s.pin=e.target.value.replace(/\D/g,'').slice(0,8)}),
+      h('button',{class:'danger', onclick:()=>removeStaff(i)},['×'])
+    ])));
+    const wc=cfg.welcome||{};
+    const staffPanel=h('div',{class:'panel'},[
+      h('h2',{},['Staff & time clock']),
+      h('div',{class:'fld'},[ h('span',{class:'flab'},['People']), h('span',{class:'hint'},['each staffer clocks in with their PIN on a Time Clock station'])]),
+      staffRows, h('button',{onclick:addStaff},['+ Add person']),
+      h('div',{class:'fld', style:'margin-top:10px'},[ h('span',{class:'flab'},['Clock-in message']), h('input',{class:'nm', style:'flex:1', value:wc.message||'', placeholder:'A friendly note staff see when they clock in', oninput:e=>setWelcome('message', e.target.value)}) ]),
+      h('div',{class:'fld'},[ h('span',{class:'flab'},["Today's specials"]), h('span',{class:'hint'},['one per line — shown on the welcome screen'])]),
+      h('textarea',{class:'nm', style:'width:100%;min-height:52px', placeholder:'Half-price muffins\nFree refills till noon', oninput:e=>setWelcome('specials', e.target.value)}, [ (wc.specials||[]).join('\n') ])
+    ]);
+    app.appendChild(staffPanel);
     // Flow preview
     app.appendChild(h('h2',{},['Your flow — click a workstation to configure it']));
     app.appendChild(flowPreview(cfg,true));
