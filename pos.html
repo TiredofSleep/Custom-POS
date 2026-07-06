@@ -38,6 +38,7 @@
   .pill { font-size:12px; padding:2px 8px; border-radius:20px; background:#222834; color:var(--dim); border:1px solid var(--line); }
   .pill.route { border-color:var(--brand); color:var(--brand); }
   .pill.x86 { border-color:var(--bad); color:var(--bad); }
+  .pill.flag { border-color:var(--bad); color:var(--bad); font-weight:600; }
   .pill.clock.good { border-color:var(--good); color:var(--good); }
   .pill.clock.warn { border-color:var(--warn); color:var(--warn); }
   .pill.clock.bad  { border-color:var(--bad);  color:var(--bad); }
@@ -77,7 +78,7 @@ const FLOWS = {
       {id:"c2", name:"Latte",  price:4.75, category:"drink", path:["bar"],
         modifiers:[{group:"Size", required:true, options:[{name:"Small",price:0},{name:"Medium",price:0.50},{name:"Large",price:1.00}]}],
         addons:[{name:"Oat milk", price:0.75},{name:"Extra shot", price:0.90}]},
-      {id:"c3", name:"Muffin", price:3.25, category:"food", path:["kitchen"], par:1},   // 86 after 1
+      {id:"c3", name:"Muffin", price:3.25, category:"food", path:["kitchen"], par:1, flags:["Nut allergy"]},   // 86 after 1; flag needs ack at kitchen
       {id:"c4", name:"Bagel",  price:2.75, category:"food", path:["kitchen"]}
     ],
     stations:[
@@ -90,11 +91,12 @@ const FLOWS = {
   cleaners: {
     label:"Cleaners", topology:"hub-and-spoke",
     branding:{ name:"Demo Cleaners", brandColor:"#2ea043" },
-    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0"} },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}} },
     timer:{ mode:"due", promiseSec:172800, warnSec:86400, label:"promise" },   // back-scheduled ready-by date
     catalog:[
       {id:"g1", name:"Shirt", price:6.50, category:"press", path:["assembly","rack"],
-        modifiers:[{group:"Starch", required:true, options:[{name:"None",price:0},{name:"Light",price:0},{name:"Heavy",price:0.50}]}]},
+        modifiers:[{group:"Starch", required:true, options:[{name:"None",price:0},{name:"Light",price:0},{name:"Heavy",price:0.50}]}],
+        flags:["Pre-existing damage"]},
       {id:"g2", name:"Pants", price:7.00, category:"press", path:["assembly","rack"]},
       {id:"g3", name:"Wash & Fold", price:2.75, category:"wf", path:["rack"]}
     ],
@@ -147,7 +149,7 @@ function soldOf(catId){
 }
 function remainingOf(item){ return item.par==null ? Infinity : item.par - soldOf(item.id); }
 function is86(item){ return remainingOf(item) <= 0; }
-function needsConfig(item){ return (item.modifiers&&item.modifiers.length) || (item.addons&&item.addons.length); }
+function needsConfig(item){ return (item.modifiers&&item.modifiers.length) || (item.addons&&item.addons.length) || (item.flags&&item.flags.length); }
 
 /* ============================================================================ RENDER */
 function money(n){ return "$"+n.toFixed(2); }
@@ -182,7 +184,8 @@ function renderPicker(app){
 
 /* ---- intake with the rules evaluator (modifiers + 86) ---- */
 let draft = null;      // the order being built
-let pending = null;    // an item being configured (required mods / add-ons)
+let pending = null;    // an item being configured (required mods / add-ons / flags)
+let acked = {};        // station+record acknowledgements (flag gates)
 function renderIntake(app, station){
   if(!draft) draft = { lines:[] };
   const cat=document.createElement("div"); cat.innerHTML="<h2>New order</h2>";
@@ -195,7 +198,7 @@ function renderIntake(app, station){
     if(item.par!=null) sub += out ? " · <span class='pill x86'>86</span>" : " · "+rem+" left";
     b.innerHTML = item.name + "<small>"+sub+"</small>";
     b.disabled = out;
-    b.onclick=()=> needsConfig(item) ? (pending={item, choices:{}, addons:[]}, render()) : addLine(item, {}, []);
+    b.onclick=()=> needsConfig(item) ? (pending={item, choices:{}, addons:[], flags:[]}, render()) : addLine(item, {}, [], []);
     grid.appendChild(b);
   });
   cat.appendChild(grid); app.appendChild(cat);
@@ -208,6 +211,14 @@ function renderIntake(app, station){
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='pill route'>"+(l.path.join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":""); c.appendChild(row); });
     const tot=document.createElement("div"); tot.className="line"; tot.innerHTML="<b>Total</b><span class='spacer'></span><b>"+money(draft.lines.reduce((s,l)=>s+l.price*l.qty,0))+"</b>"; c.appendChild(tot); }
   app.appendChild(c);
+  // deposit control (deposit-balance payment point)
+  const dep = FLOW.endpoints.payment.deposit;
+  if(dep && station.view.money && draft.lines.length){
+    const amt=+(draft.lines.reduce((s,l)=>s+l.price*l.qty,0)*dep.pct/100).toFixed(2);
+    const db=document.createElement("button"); if(draft.takeDeposit) db.className="sel"; db.style.marginRight="8px";
+    db.textContent=(draft.takeDeposit?"✓ ":"")+"Take "+dep.pct+"% deposit "+money(amt);
+    db.onclick=()=>{ draft.takeDeposit=!draft.takeDeposit; render(); }; app.appendChild(db);
+  }
   const send=document.createElement("button"); send.className="primary"; send.textContent="Send order →"; send.disabled=!draft.lines.length||!!pending; send.onclick=sendDraft; app.appendChild(send);
 }
 
@@ -229,25 +240,34 @@ function configPanel(station){
       b.textContent=(on?"✓ ":"+ ")+a.name+" "+money(a.price); b.onclick=()=>{ pending.addons = on?pending.addons.filter(x=>x.name!==a.name):[...pending.addons,a]; render(); }; opts.appendChild(b); });
     wrap.appendChild(opts); c.appendChild(wrap);
   }
+  if(item.flags&&item.flags.length){
+    const wrap=document.createElement("div"); wrap.className="mgroup"; wrap.innerHTML="<div class='lbl'>Flags</div>";
+    const opts=document.createElement("div"); opts.className="opts";
+    item.flags.forEach(f=>{ const on=pending.flags.includes(f); const b=document.createElement("button"); if(on) b.className="sel";
+      b.textContent=(on?"✓ ⚠ ":"⚠ ")+f; b.onclick=()=>{ pending.flags = on?pending.flags.filter(x=>x!==f):[...pending.flags,f]; render(); }; opts.appendChild(b); });
+    wrap.appendChild(opts); c.appendChild(wrap);
+  }
   const reqMet=(item.modifiers||[]).every(g=>!g.required||pending.choices[g.group]);
   const add=document.createElement("button"); add.className="primary"; add.textContent="Add to order"; add.disabled=!reqMet; add.style.marginRight="8px";
-  add.onclick=()=>{ addLine(item, pending.choices, pending.addons); pending=null; render(); };
+  add.onclick=()=>{ addLine(item, pending.choices, pending.addons, pending.flags); pending=null; render(); };
   const cancel=document.createElement("button"); cancel.textContent="Cancel"; cancel.onclick=()=>{ pending=null; render(); };
   c.appendChild(add); c.appendChild(cancel);
   return c;
 }
 
-function addLine(item, choices, addons){
+function addLine(item, choices, addons, flags){
   const mods=[...Object.values(choices||{}), ...(addons||[])];
   const price=item.price + mods.reduce((s,m)=>s+(m.price||0),0);
   const modLabel=mods.map(m=>m.name).filter(Boolean).join(", ");
-  draft.lines.push({ id:"L"+Math.round(performance.now()), catId:item.id, name:item.name, modLabel, price, qty:1, category:item.category, path:item.path.slice(), stage:0 });
+  draft.lines.push({ id:"L"+Math.round(performance.now()), catId:item.id, name:item.name, modLabel, flags:(flags||[]).slice(), price, qty:1, category:item.category, path:item.path.slice(), stage:0 });
   render();
 }
 function sendDraft(){
   DB=loadDB(); DB.seq++;
   const rec={ id:"R"+DB.seq, number:DB.seq, lines:draft.lines.map(l=>({...l, stage:0})), tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now() };
   rec.status = allComplete(rec) ? "READY" : "INPROGRESS";
+  const dep = FLOW.endpoints.payment.deposit;
+  if(draft.takeDeposit && dep){ rec.tenders.push({ type:"deposit", amount:+(recordTotal(rec)*dep.pct/100).toFixed(2) }); }
   DB.records.push(rec); saveDB(DB); draft=null; render();
 }
 
@@ -257,10 +277,14 @@ function renderPipeline(app, station){
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nothing waiting."; app.appendChild(e); }
   recs.forEach(r=>{ const mine=linesAtStation(r, station.id); const c=document.createElement("div"); c.className="card";
     c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    let hasFlags=false;
     mine.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const next=l.path[l.stage+1];
-      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"; c.appendChild(row); });
-    const b=document.createElement("button"); b.className="good"; b.textContent="Mark done here"; b.style.marginTop="10px";
-    b.onclick=()=>{ mine.forEach(l=>l.stage++); afterChange(r); render(); }; c.appendChild(b); app.appendChild(c); });
+      const flagHtml=(l.flags||[]).map(f=>{ hasFlags=true; return " <span class='pill flag'>⚠ "+f+"</span>"; }).join("");
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+flagHtml+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"; c.appendChild(row); });
+    const needAck = hasFlags && !acked[station.id+":"+r.id];
+    if(needAck){ const a=document.createElement("button"); a.className="primary"; a.textContent="⚠ Acknowledge & continue"; a.style.marginTop="10px"; a.onclick=()=>{ acked[station.id+":"+r.id]=true; render(); }; c.appendChild(a); }
+    else { const b=document.createElement("button"); b.className="good"; b.textContent="Mark done here"; b.style.marginTop="10px"; b.onclick=()=>{ mine.forEach(l=>l.stage++); afterChange(r); render(); }; c.appendChild(b); }
+    app.appendChild(c); });
 }
 
 function renderCheckout(app, station){
@@ -271,7 +295,7 @@ function renderCheckout(app, station){
     c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
     const t=document.createElement("div"); t.className="line"; t.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(t);
-    if(r.status==="READY"&&bal>0.0001){ const b=document.createElement("button"); b.className="primary"; b.textContent="Take cash "+money(recordTotal(r)); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:recordTotal(r)}); r.status="PAID"; saveDB(DB); render(); }; c.appendChild(b); }
+    if(r.status==="READY"&&bal>0.0001){ const paid=recordPaid(r); const b=document.createElement("button"); b.className="primary"; b.textContent=(paid>0?"Take balance ":"Take cash ")+money(bal); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:bal}); r.status="PAID"; saveDB(DB); render(); }; c.appendChild(b); }
     else if(r.status==="PAID"){ const b=document.createElement("button"); b.className="good"; b.textContent="Done — close"; b.style.marginTop="10px"; b.onclick=()=>{ r.status="CLOSED"; saveDB(DB); render(); }; c.appendChild(b); }
     app.appendChild(c); });
   const closed=DB.records.filter(r=>r.status==="CLOSED").length;
