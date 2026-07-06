@@ -280,6 +280,9 @@ function needsConfig(item){ return (item.modifiers&&item.modifiers.length) || (i
 
 /* ============================================================================ RENDER */
 function money(n){ return "$"+n.toFixed(2); }
+function dayOf(ts){ return new Date(ts||Date.now()).toLocaleDateString("en-CA"); }   // local YYYY-MM-DD
+function todayStr(){ return new Date().toLocaleDateString("en-CA"); }
+function shiftDay(dstr, delta){ const d=new Date(dstr+"T12:00:00"); d.setDate(d.getDate()+delta); return d.toLocaleDateString("en-CA"); }
 function flash(msg){ let t=document.getElementById("toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.style.cssText="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--bad);color:#fff;padding:10px 16px;border-radius:8px;z-index:99;font-weight:600"; document.body.appendChild(t); } t.textContent=msg; t.style.display="block"; }
 function render(){
   DB = loadDB();
@@ -304,8 +307,16 @@ function render(){
 
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
 function renderReport(app, station){
-  app.innerHTML="<h2>"+station.label+" — today</h2>";
-  const done=DB.records.filter(r=>r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED");
+  const day = reportDay || todayStr(); const isToday = day===todayStr();
+  app.innerHTML="<h2>"+station.label+" — "+(isToday?"today":day)+"</h2>";
+  // day navigation — the report defaults to today but you can page back through history
+  const nav=document.createElement("div"); nav.className="row"; nav.style.margin="0 0 10px";
+  const prev=document.createElement("button"); prev.textContent="← "+shiftDay(day,-1); prev.onclick=()=>{ reportDay=shiftDay(day,-1); render(); }; nav.appendChild(prev);
+  const dp=document.createElement("input"); dp.type="date"; dp.value=day; dp.style.margin="0 8px"; dp.max=todayStr(); dp.onchange=e=>{ reportDay = e.target.value||todayStr(); render(); }; nav.appendChild(dp);
+  if(!isToday){ const next=document.createElement("button"); next.textContent=shiftDay(day,1)+" →"; next.onclick=()=>{ reportDay=shiftDay(day,1); if(reportDay===todayStr()) reportDay=null; render(); }; nav.appendChild(next);
+    const tb=document.createElement("button"); tb.textContent="Today"; tb.style.marginLeft="8px"; tb.onclick=()=>{ reportDay=null; render(); }; nav.appendChild(tb); }
+  app.appendChild(nav);
+  const done=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED") && dayOf(r.ts)===day);
   const L=(lab,val,bold)=>"<div class='line'>"+(bold?"<b>":"<span>")+lab+(bold?"</b>":"</span>")+"<span class='spacer'></span>"+(bold?"<b>":"<span>")+val+(bold?"</b>":"</span>")+"</div>";
   // ---- daily sales summary (refund-aware: a refunded order's sale nets out, its reversed tender nets its tenders) ----
   let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0; const byTender={}, byCat={};
@@ -562,6 +573,7 @@ let pending = null;    // an item being configured (required mods / add-ons / fl
 let receiptOpen = {};  // which orders have their receipt open
 let pinBuf = "";       // time-clock PIN entry buffer
 let clockWelcome = null; // {name, inbound} — the welcome/goodbye screen shown right after a punch
+let reportDay = null;  // which day the Z-report shows (YYYY-MM-DD, local); null = today
 function attachCustomer(phone, name){
   phone=(phone||"").trim(); if(!phone) return;
   DB=loadDB(); const found=(DB.customers||[]).find(c=>c.phone===phone);
