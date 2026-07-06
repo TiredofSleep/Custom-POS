@@ -68,7 +68,7 @@
    THE FLOWS — businesses as config on ONE engine. Items carry `path` (workstations),
    `modifiers` (required choices), `addons` (suggested upsells), and `par` (86 count).
    ==========================================================================*/
-const FLOWS = {
+let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
     branding:{ name:"Demo Counter", brandColor:"#1f6feb" },
@@ -166,7 +166,9 @@ function enabledModules(flow){ const types=new Set(flow.stations.map(s=>s.type))
 const STATUS_LABEL = { INPROGRESS:"In progress", READY:"Ready for pickup", PAID:"Ready for pickup", CLOSED:"Picked up" };
 
 /* ============================================================================ ENGINE */
-function flowId(){ return localStorage.getItem("custompos_flow") || "counter"; }
+// A downloaded/built POS injects its single flow before this script runs — then there is no demo picker.
+if(typeof window!=="undefined" && window.CUSTOMPOS_FLOW){ const f=window.CUSTOMPOS_FLOW; FLOWS = {}; FLOWS[f.flowId||"business"] = f; }
+function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FLOWS[s]) ? s : Object.keys(FLOWS)[0]; }
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
@@ -279,14 +281,18 @@ function renderTracker(app, station){
 }
 
 function renderPicker(app){
-  const fs=document.createElement("div"); fs.innerHTML="<h2>Demo business</h2>";
-  const bar=document.createElement("div"); bar.className="flowsel";
-  Object.keys(FLOWS).forEach(id=>{ const b=document.createElement("button"); if(id===flowId()) b.className="sel";
-    b.innerHTML=FLOWS[id].label+" <small class='muted'>("+FLOWS[id].topology+")</small>"; b.onclick=()=>setFlow(id); bar.appendChild(b); });
+  const multi = Object.keys(FLOWS).length>1;   // demo mode shows a business selector; a downloaded POS does not
+  const fs=document.createElement("div"); fs.innerHTML = multi ? "<h2>Demo business</h2>" : "<h2>"+FLOW.branding.name+"</h2>";
+  if(multi){
+    const bar=document.createElement("div"); bar.className="flowsel";
+    Object.keys(FLOWS).forEach(id=>{ const b=document.createElement("button"); if(id===flowId()) b.className="sel";
+      b.innerHTML=FLOWS[id].label+" <small class='muted'>("+FLOWS[id].topology+")</small>"; b.onclick=()=>setFlow(id); bar.appendChild(b); });
+    fs.appendChild(bar);
+  }
   const mods=document.createElement("p"); mods.className="muted"; mods.style.margin="-8px 0 14px";
   mods.innerHTML="Modules enabled by your stations: <b>"+enabledModules(FLOW).map(m=>MODULES[m].label).join(" · ")+"</b>";
   fs.appendChild(mods);
-  fs.appendChild(bar); app.appendChild(fs);
+  app.appendChild(fs);
   const wrap=document.createElement("div"); wrap.className="picker";
   wrap.innerHTML="<h2>Set up this device</h2><p class='muted'>Which workstation is this? Open in another tab/device and pick a different station to watch an order flow between them.</p>";
   FLOW.stations.forEach(s=>{ const b=document.createElement("button");
