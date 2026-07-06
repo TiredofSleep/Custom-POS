@@ -575,4 +575,14 @@ a barcode/SKU, scan it, and it drops straight into the order — no driver, no h
 nineteen-item Hamburger Barn menu and a nine-hundred-item market alike. The builder adds a *barcode scan* toggle
 and a Barcode/SKU field on every item. Twenty-six suites, all green.
 
+### Codes at the counter
+The quick *10% / $5 off* buttons are fine until a shop runs a real promotion and wants a code customers can say
+out loud. So discounts learned a second form: instead of `true`, an owner can hand the engine a list of **coupon
+codes** — `SAVE10` for a percentage, `5BUCKS` for a flat amount. Checkout then shows a code box instead of the
+quick buttons; type `SAVE10`, and it knocks 10% off, recomputes the tax on the discounted base (the tax engine
+already did that math), and stamps *✓ SAVE10 applied*. A wrong code is politely refused, *Clear* takes it back
+off, and switching codes just re-applies. The builder gets a **Coupon codes** editor that appears the moment
+discounts are on — add a code, pick *% off* or *$ off*, set the number. Same discount plumbing underneath, now
+with a name. Twenty-seven suites, all green.
+
 *— to be continued —*
