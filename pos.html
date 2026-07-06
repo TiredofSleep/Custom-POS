@@ -190,9 +190,18 @@ function boundStation(){ const id=localStorage.getItem(skey()); return FLOW.stat
 function bindStation(id){ localStorage.setItem(skey(), id); render(); }
 function unbind(){ localStorage.removeItem(skey()); render(); }
 
-function recordTotal(r){ return r.lines.reduce((s,l)=> s + l.price*l.qty, 0); }
+function lineSubtotal(r){ return r.lines.reduce((s,l)=> s + l.price*l.qty, 0); }
+function recordDiscount(r){ return Math.min(r.discount||0, lineSubtotal(r)); }
+function recordTax(r){                                   // per-line taxable; rate from config; discount prorated
+  const rate=(FLOW.endpoints.tax&&FLOW.endpoints.tax.rate)||0; if(!rate) return 0;
+  const sub=lineSubtotal(r); if(sub<=0) return 0;
+  const taxable=r.lines.filter(l=>l.taxable!==false && l.category!=="giftcard").reduce((s,l)=>s+l.price*l.qty,0);
+  const eff=taxable*(sub-recordDiscount(r))/sub;
+  return +(eff*rate).toFixed(2);
+}
+function recordTotal(r){ return +(lineSubtotal(r) - recordDiscount(r) + recordTax(r) + (r.tip||0)).toFixed(2); }
 function recordPaid(r){ return (r.tenders||[]).reduce((s,t)=> s + t.amount, 0); }
-function recordBalance(r){ return recordTotal(r) + (r.tip||0) - recordPaid(r); }   // tip adds to what's due
+function recordBalance(r){ return +(recordTotal(r) - recordPaid(r)).toFixed(2); }
 function firstPerformer(r){ const l=r.lines.find(x=>x.performer); return l?l.performer:null; }
 
 /* Processor-agnostic PAYMENTS interface (matches docs/PAYMENTS-MODULE.md). A simulator adapter ships by
@@ -329,6 +338,7 @@ function renderPicker(app){
 /* ---- intake with the rules evaluator (modifiers + 86) ---- */
 let draft = null;      // the order being built
 let pending = null;    // an item being configured (required mods / add-ons / flags)
+let receiptOpen = {};  // which orders have their receipt open
 function attachCustomer(phone, name){
   phone=(phone||"").trim(); if(!phone) return;
   DB=loadDB(); const found=(DB.customers||[]).find(c=>c.phone===phone);
@@ -508,6 +518,18 @@ function renderPipeline(app, station){
     app.appendChild(c); });
 }
 
+function receiptPanel(r){
+  const sub=lineSubtotal(r), disc=recordDiscount(r), tax=recordTax(r), tip=r.tip||0, tot=recordTotal(r);
+  const line=(l,v,b)=>"<div class='line'>"+(b?"<b>":"<span class='muted'>")+l+(b?"</b>":"</span>")+"<span class='spacer'></span>"+(b?"<b>":"<span>")+v+(b?"</b>":"</span>")+"</div>";
+  const rows=r.lines.map(l=>"<div class='line'><span>"+l.qty+"× "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span></div>").join("");
+  const hr="<hr style='border:none;border-top:1px dashed var(--line)'>";
+  const totals=(disc||tax?line("Subtotal",money(sub)):"")+(disc?line("Discount","−"+money(disc)):"")+(tax?line("Tax",money(tax)):"")+(tip?line("Tip",money(tip)):"")+line("Total",money(tot),true);
+  const tenders=(r.tenders||[]).map(t=>line(t.type==="card"?("💳 "+t.brand+" ••"+t.last4):t.type[0].toUpperCase()+t.type.slice(1), money(t.amount))).join("");
+  const wrap=document.createElement("div"); wrap.className="card"; wrap.style.borderColor="var(--brand)"; wrap.id="receipt";
+  wrap.innerHTML="<div class='center'><b>"+FLOW.branding.name+"</b><div class='muted'>Order #"+r.number+" · "+r.createdAt+"</div></div>"+hr+rows+hr+totals+(tenders?hr+tenders:"")+"<p class='center muted' style='margin-top:8px'>Thank you!</p>";
+  const pr=document.createElement("button"); pr.className="primary"; pr.textContent="Print"; pr.onclick=()=>window.print(); wrap.appendChild(pr);
+  return wrap;
+}
 function renderCheckout(app, station){
   const h=document.createElement("h2"); h.textContent=station.type==="central"?"Ready for pickup":station.label; app.appendChild(h);
   const recs=DB.records.filter(r=> r.status==="READY"||r.status==="PAID");
@@ -525,6 +547,16 @@ function renderCheckout(app, station){
       const no=document.createElement("button"); if(!r.tip) no.className="sel"; no.textContent="No tip"; no.onclick=()=>{ r.tip=0; r.tipTo=null; saveDB(DB); render(); }; opts.appendChild(no);
       wrap.appendChild(opts); c.appendChild(wrap);
     }
+    // discounts (opt-in per flow)
+    if(FLOW.endpoints.discounts && r.status==="READY"){
+      const wrap=document.createElement("div"); wrap.className="mgroup"; wrap.innerHTML="<div class='lbl'>Discount</div>";
+      const opts=document.createElement("div"); opts.className="opts";
+      const mk=(lab,fn,on)=>{ const bb=document.createElement("button"); if(on) bb.className="sel"; bb.textContent=lab; bb.onclick=()=>{ fn(); saveDB(DB); render(); }; opts.appendChild(bb); };
+      mk("10% off", ()=>{ r.discount=+(lineSubtotal(r)*0.10).toFixed(2); }, Math.abs((r.discount||0)-lineSubtotal(r)*0.10)<0.005 && r.discount);
+      mk("$5 off", ()=>{ r.discount=5; }, r.discount===5);
+      mk("None", ()=>{ r.discount=0; }, !r.discount);
+      wrap.appendChild(opts); c.appendChild(wrap);
+    }
     if(r.tip){ const tl=document.createElement("div"); tl.className="line"; tl.innerHTML="<span class='muted'>Tip"+(r.tipTo?" → "+r.tipTo:"")+"</span><span class='spacer'></span><span>"+money(r.tip)+"</span>"; c.appendChild(tl); }
     // redemptions: gift card balance + loyalty points (both attached to the customer)
     if(r.customer && r.status==="READY" && bal>0.0001){
@@ -533,6 +565,12 @@ function renderCheckout(app, station){
       if(loy && (cust.points||0)>=loy.redeemPoints && !r.redeemPts){ const b=document.createElement("button"); b.textContent="Redeem "+loy.redeemPoints+" pts (−"+money(loy.redeemValue)+")"; b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"loyalty",amount:loy.redeemValue}); r.redeemPts=loy.redeemPoints; saveDB(DB); render(); }; c.appendChild(b); }
     }
     (r.tenders||[]).filter(t=>t.type==="card").forEach(t=>{ const cl=document.createElement("div"); cl.className="line"; cl.innerHTML="<span class='muted'>💳 "+t.brand+" ••"+t.last4+"</span><span class='spacer'></span><span>"+money(t.amount)+"</span>"; c.appendChild(cl); });
+    // totals: subtotal / discount / tax (shown when either applies)
+    const sub=lineSubtotal(r), disc=recordDiscount(r), tax=recordTax(r);
+    const totLine=(lab,val)=>{ const d=document.createElement("div"); d.className="line"; d.innerHTML="<span class='muted'>"+lab+"</span><span class='spacer'></span><span>"+val+"</span>"; c.appendChild(d); };
+    if(disc||tax){ totLine("Subtotal", money(sub)); }
+    if(disc){ totLine("Discount", "−"+money(disc)); }
+    if(tax){ totLine("Tax", money(tax)); }
     const t=document.createElement("div"); t.className="line"; t.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(t);
     if(r.status==="READY"&&bal>0.0001){ const paid=recordPaid(r);
       const b=document.createElement("button"); b.className="primary"; b.textContent=(paid>0?"Take balance ":"Take payment ")+money(bal); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:bal}); r.status="PAID"; onPaid(r); saveDB(DB); render(); }; c.appendChild(b);
@@ -544,6 +582,8 @@ function renderCheckout(app, station){
     }
     else if(r.status==="READY"){ const b=document.createElement("button"); b.className="good"; b.textContent="Complete (paid)"; b.style.marginTop="10px"; b.onclick=()=>{ r.status="PAID"; onPaid(r); saveDB(DB); render(); }; c.appendChild(b); }   // fully covered by deposit/gift/loyalty
     else if(r.status==="PAID"){ const b=document.createElement("button"); b.className="good"; b.textContent="Done — close"; b.style.marginTop="10px"; b.onclick=()=>{ r.status="CLOSED"; saveDB(DB); render(); }; c.appendChild(b); }
+    const rb=document.createElement("button"); rb.textContent=receiptOpen[r.id]?"Hide receipt":"🧾 Receipt"; rb.style.margin="10px 0 0 8px"; rb.onclick=()=>{ receiptOpen[r.id]=!receiptOpen[r.id]; render(); }; c.appendChild(rb);
+    if(receiptOpen[r.id]) c.appendChild(receiptPanel(r));
     app.appendChild(c); });
   const closed=DB.records.filter(r=>r.status==="CLOSED").length;
   if(closed){ const f=document.createElement("p"); f.className="muted center"; f.textContent=closed+" order(s) completed today."; app.appendChild(f); }

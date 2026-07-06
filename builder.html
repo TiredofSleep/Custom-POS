@@ -196,6 +196,8 @@ function toggleLoyalty(){ if(cfg.endpoints.loyalty) delete cfg.endpoints.loyalty
 function setDeposit(v){ v=Number(v)||0; if(v>0){ pay().deposit={pct:v}; if(!(pay().points||[]).includes("deposit-balance")) pay().points=["deposit-balance"]; } else { delete pay().deposit; } }
 function setTimer(mode){ if(mode==="off"){ delete cfg.timer; } else if(mode==="aging"){ cfg.timer={mode:"aging",warnSec:300,badSec:600,label:"prep"}; } else { cfg.timer={mode:"due",promiseSec:172800,warnSec:86400,label:"promise"}; } render(); }
 function setCapacity(v){ v=Number(v)||0; if(v>0) cfg.capacity={perOrderMins:(cfg.capacity&&cfg.capacity.perOrderMins)||4, max:v}; else delete cfg.capacity; }
+function toggleDiscounts(){ if(cfg.endpoints.discounts) delete cfg.endpoints.discounts; else cfg.endpoints.discounts=true; render(); }
+function setTax(v){ v=Number(v)||0; if(v>0) cfg.endpoints.tax={rate:v/100}; else delete cfg.endpoints.tax; }
 
 /* ---- stations ---- */
 function addStation(){ cfg.stations.push({ id:uid(), type:"production", label:"New station", view:{money:false} }); selStation=cfg.stations.length-1; selItem=-1; render(); }
@@ -269,7 +271,8 @@ function itemEditor(i){
     h('div',{class:'fld'},[h('span',{class:'flab'},['Flags / warnings']), h('span',{class:'hint'},['e.g. allergy, pre-existing damage — shown bold, must be acknowledged'])]), flagRows, h('button',{onclick:()=>{ it.flags=it.flags||[]; it.flags.push("Warning"); render(); }},['+ flag']),
     h('div',{class:'fld'},[
       h('span',{class:'flab'},['Performed by staff']), h('button',{class:it.performer?'on':'', onclick:()=>{ it.performer=!it.performer; if(!it.performer) delete it.performer; if(it.performer&&!cfg.performers) cfg.performers=["Alex","Sam"]; render(); }},[it.performer?'✓ pick a provider':'no']),
-      h('span',{class:'flab'},['86 limit']), h('input',{class:'sm',type:'number',value:it.par!=null?it.par:'', placeholder:'∞', oninput:e=>{ const v=Number(e.target.value); if(e.target.value===''||v<=0) delete it.par; else it.par=v; }})
+      h('span',{class:'flab'},['86 limit']), h('input',{class:'sm',type:'number',value:it.par!=null?it.par:'', placeholder:'∞', oninput:e=>{ const v=Number(e.target.value); if(e.target.value===''||v<=0) delete it.par; else it.par=v; }}),
+      h('span',{class:'flab'},['Taxable']), h('button',{class:(it.taxable!==false)?'on':'', onclick:()=>{ if(it.taxable===false) delete it.taxable; else it.taxable=false; render(); }},[(it.taxable!==false)?'✓ taxed':'tax-exempt'])
     ]),
     h('div',{style:'margin-top:12px'},[ h('button',{class:'danger', onclick:()=>removeItem(i)},['Delete item']), h('button',{onclick:()=>{selItem=-1;render();}},['Done']) ])
   ]);
@@ -351,8 +354,10 @@ function render(){
         h('button',{class:hasTender('card')?'on':'', onclick:()=>toggleTender('card')},['cards']),
         h('button',{class:hasTender('account')?'on':'', onclick:()=>toggleTender('account')},['house accounts']),
         h('button',{class:pay().tip?'on':'', onclick:()=>toggleTip()},['tips']),
-        h('button',{class:cfg.endpoints.loyalty?'on':'', onclick:()=>toggleLoyalty()},['loyalty']) ]),
-      h('div',{class:'fld'},[ h('span',{class:'flab'},['Deposit %']), h('input',{class:'sm',type:'number', value:(pay().deposit&&pay().deposit.pct)||'', placeholder:'0', oninput:e=>setDeposit(e.target.value)}),
+        h('button',{class:cfg.endpoints.loyalty?'on':'', onclick:()=>toggleLoyalty()},['loyalty']),
+        h('button',{class:cfg.endpoints.discounts?'on':'', onclick:()=>toggleDiscounts()},['discounts']) ]),
+      h('div',{class:'fld'},[ h('span',{class:'flab'},['Sales tax %']), h('input',{class:'sm',type:'number', step:'0.01', value:(cfg.endpoints.tax&&(cfg.endpoints.tax.rate*100))||'', placeholder:'0', oninput:e=>setTax(e.target.value)}),
+        h('span',{class:'flab'},['Deposit %']), h('input',{class:'sm',type:'number', value:(pay().deposit&&pay().deposit.pct)||'', placeholder:'0', oninput:e=>setDeposit(e.target.value)}),
         h('span',{class:'flab'},['Order timer']), h('select',{onchange:e=>setTimer(e.target.value)}, [["off","none"],["aging","prep timer (turns red)"],["due","promise-by / due date"]].map(([v,l])=>h('option',{value:v, selected:(cfg.timer?cfg.timer.mode:'off')===v},[l]))),
         h('span',{class:'flab'},['Max in queue']), h('input',{class:'sm',type:'number', value:(cfg.capacity&&cfg.capacity.max)||'', placeholder:'∞', oninput:e=>setCapacity(e.target.value)}) ])
     ]);
