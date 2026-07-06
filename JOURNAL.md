@@ -225,7 +225,16 @@ That one sentence reorganized the whole product:
 
 We stopped calling them "lifecycle packs" and started calling them what they are: **paths.** The product is a
 place to draw the path from your customer to your payment, save it as code you own, and keep shaping it — alone
-or with an AI — forever. Written up in [docs/THE-MODEL.md](docs/THE-MODEL.md). Next, we start building the
-bedrock: the two endpoints and the flow that connects them.
+or with an AI — forever. Written up in [docs/THE-MODEL.md](docs/THE-MODEL.md).
+
+### One file, many stations
+Then the deployment model fell out of the same idea. If the order is information that different stations see and
+update, then **each device is just one station's window onto it.** So the single file, served as a website, is
+the *whole* POS — and a computer sets itself up by going to the site, signing in, and answering one question:
+*which station is this?* Counter, assembly, route phone, kitchen, customer tracker — the choices are exactly the
+stations in the flow the owner drew. Pick one, lock it in, done. Countless machines share one POS with no install
+and no IT project; a spare tablet is the kitchen screen today and the counter tomorrow. The visual builder does
+double duty — it lays out the path *and* defines the menu of stations every device gets to pick from. Next, the
+bedrock in code: the two endpoints, the flow between, and a device that binds itself to a station.
 
 *— to be continued —*
