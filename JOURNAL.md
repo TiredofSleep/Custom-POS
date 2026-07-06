@@ -367,4 +367,30 @@ the way it earns its keep. The branch it came on had forked before this session'
 the blueprint onto main rather than merge a stale tree. The monetization is no longer a promise in a plan; it's a
 proven, buildable module waiting for Phase 5.
 
+### Running the list to the end
+*"Keep going, and testing."* So we ran the primitives list down until it was, for practical purposes, done —
+each one config-driven, each one driven in a real browser before moving on:
+
+- **Money-math** — a per-provider commission engine and card tips. Built a **salon** as the proof: services
+  performed at a chair by a named stylist, a tip prompt at checkout, and a Back Office that computes each
+  stylist's sales × commission + tips = take-home. (Trade #4, config only.)
+- **Profile recall** — persisted customers with a phone lookup and a one-tap **"the usual"** that re-rings a
+  regular's last order, provider and all.
+- **Loyalty + gift cards** — points that earn on every ticket and redeem for a discount; gift cards sold as a
+  product and spent as a tender, a fully-covered ticket closing without cash.
+- **Checklist-as-gate** — a QC checklist that blocks a station from advancing until every step is ticked (the
+  repair bench can't shelf a device until it's powered-on, cleaned, and sealed).
+- **Capacity & pacing** — a live wait estimate and a hard cap on the queue, so a slammed counter stops taking
+  orders it can't make.
+
+By the end the engine carries **fourteen primitives** and runs **four very different trades** — a counter shop,
+a dry cleaner, a repair bench, and a salon — from **config alone, with nine browser test suites green and zero
+console errors.** A taqueria, a tailor, a phone-repair bench, and a hair salon, one file, no code between them.
+
+That's the thesis, delivered: not a slide, a running program. The software that shops pay hundreds a month for,
+built once as a set of knobs, given away — and it earns its keep only when a shop chooses to take a card, through
+a module that's already been certified. Free software, free knowledge, owned by the people who use it. There's
+polish left — the visual builder, the wizard that writes these configs, the download bundle with its Claude Code
+guide — but the hard part, the part everyone said couldn't be one engine, is done and tested.
+
 *— to be continued —*

@@ -129,8 +129,11 @@ modules — validating the contract against a known-hard vertical.
 7. Gate mechanism (balance-paid, manager-auth, waiver) as a first-class transition guard. ✅ *(closeGate + flag ack gate, v0.6/0.8)*
 
 ## Primitives implemented so far (see [MODULE-LIBRARY.md](MODULE-LIBRARY.md))
-✅ timer/SLA · ✅ par-count/86 · ✅ routing fan-out · ✅ require/suggest modifiers · ✅ flag engine ·
-✅ deposit/balance ledger · ✅ status-broadcast (board + tracker). Three trades (counter / cleaners / repair)
-run on the one engine by config alone; five browser test suites pass with zero console errors.
-**Next:** money-math (tips/commission) · capacity/pacing · profile/entity recall · checklist-as-gate ·
-loyalty · gift cards · hold-and-fire (beyond approval).
+✅ timer/SLA · ✅ par-count/86 · ✅ routing fan-out · ✅ require/suggest modifiers · ✅ upsell add-ons ·
+✅ flag engine (+ ack gate) · ✅ checklist-as-gate · ✅ capacity/pacing · ✅ money-math (tips + commission) ·
+✅ status-broadcast (board + tracker) · ✅ deposit/balance ledger · ✅ gift cards + loyalty ·
+✅ profile/entity recall ("the usual") · ◑ hold-and-fire (via approval/QC gates) · ◑ quick-tiles (catalog tiles).
+**Four trades** — counter shop, cleaners, repair, salon — run on the one engine **by config alone**; **nine
+browser test suites pass with zero console errors.** Plus the module contract, per-item paths, hub-and-spoke &
+linear topologies, and persisted customers. Remaining polish: full data-driven screens, richer quick-tile/matrix,
+and wiring the [payments module](PAYMENTS-MODULE.md) (Phase 5).
