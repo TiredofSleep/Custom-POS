@@ -56,6 +56,26 @@ lays out the path *and* defines the menu of stations every device gets to choose
 
 *(Single-device businesses — a food cart, a market booth — never see this: one device just is the whole POS.)*
 
+## Setting up your environment (you may not even need the visual editor)
+After the wizard's questions, you set up your workstations — and for most shops this is simpler than drawing a
+diagram. Two moves:
+
+1. **Say what your workstations are** (and pick a topology). Two shapes cover almost everyone:
+   - **Hub-and-spoke** — a central computer *starts and finishes* orders; work fans out to other stations and
+     comes back when complete. (A dry cleaner: the counter opens and closes the order; assembly and the rack
+     sit in the middle.)
+   - **Linear** — an order starts at one place, flows across a path, and ends somewhere else. (An assembly line.)
+2. **Give each item or category a path.** When you enter your catalog/prices, each item (or whole category)
+   carries the ordered list of workstations it flows through. An order's route is then **composed automatically
+   from the items on it** — no per-order setup. In a cleaner, *press* items get the path `Assembly → Rack` while
+   *Wash & Fold* gets just `Rack`, so most orders flow through assembly **but not all** — exactly right, with no
+   diagram drawn.
+
+The visual flow editor is still there for anyone who wants to arrange it by hand or handle an unusual shape — but
+"how many workstations + a path per item/category" is enough to stand up most businesses. *(Proven in
+[`../pos.html`](../pos.html): the same engine runs a linear counter shop and a hub-and-spoke cleaner from config
+alone, with wash-&-fold skipping assembly because the path lives on the item.)*
+
 ## The library (we compile what everyone builds)
 As people build flows and modules, **we keep compiling and organizing them into a shared, growing library** —
 so the next boutique starts from what the last boutique figured out, and the next food truck from the last one.

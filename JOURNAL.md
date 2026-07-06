@@ -296,4 +296,28 @@ errors. That's the exact mechanism the restaurant — our worst-scoring trade in
 running as a generic primitive on the same 200-line engine. One order, many hands, back to one. The machine is
 starting to breathe.
 
+### Two businesses, one engine — and your store's shape
+Then the owner made the setup dramatically simpler. Instead of forcing everyone to draw a flow diagram, he saw
+it: *"just prompt for how many types of workstations — then when you enter your prices, give each item or
+category a path. Path by item, or path by category."* An order's route isn't drawn per order; it's **composed
+from the paths of the items on it.** And two topologies cover almost everyone: **hub-and-spoke** (a central
+computer starts and finishes; work fans out and comes back) and **linear** (start here, end there). His own store
+is the hub-and-spoke case — two central computers that open and close orders, most items flowing through
+assembly, *but not all*: wash-&-fold skips it.
+
+So we built exactly that, and used it to prove the whole thesis in code. The engine now routes by a **per-item
+path**, and we stood up a **second, completely different business on the same engine — by config alone.** Flip a
+switch at the top of the file and the "Demo Counter" (linear: Order → Bar/Kitchen → Checkout) becomes "Demo
+Cleaners" (hub-and-spoke: a central Front Counter that starts *and* finishes; press items go Assembly → Rack;
+wash-&-fold goes straight to Rack). We drove it in a browser: at **Assembly**, only the shirt showed up — the
+wash-&-fold was never there, because its path skips assembly — and money stayed hidden; at **Rack** both
+re-converged; the central **Front Counter** checked the finished order out. Then we flipped back to the counter
+shop and its kitchen/bar fan-out still worked. Zero console errors, both businesses, **one unchanged engine.**
+
+That's the moment the vision stopped being a claim. "A trade is config, not a rebuild" — we can now *show* it: two
+trades, one file, no engine edits between them. Everything from here is more primitives and more config on a
+foundation that has now earned trust. (He also tossed in another feature on the way past — let servers *track
+their own order and items* down the path — logged in the ideas inbox as a filtered view of the same status
+broadcast that drives the customer tracker.)
+
 *— to be continued —*

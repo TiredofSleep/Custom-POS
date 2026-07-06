@@ -1,15 +1,20 @@
 <!--
-  customPOS — engine skeleton (v0.2)
+  customPOS — engine skeleton (v0.3)
   ==================================
-  The first code proved the spine (Customer -> state machine -> station -> Payment).
-  v0.2 adds the ROUTING FAN-OUT primitive: one order splits by a line attribute to parallel
-  maker stations (Bar, Kitchen), each seeing ONLY its own lines (money-blind), and the order
-  RE-CONVERGES to Ready only when every station has finished its part. This is the exact
-  mechanism a restaurant needs — proven here on a neutral demo.
+  v0.1 proved the spine. v0.2 added routing fan-out. v0.3 makes routing a PER-ITEM PATH:
+  every catalog item (or category) carries the ordered list of workstations it flows through,
+  and an order's route is composed from the paths of the items on it. No visual editor required
+  to set up a shop — you say what your workstations are, and tag items with their path.
 
-  Still: one self-contained file, no build, no deps, data in localStorage. Everything specific
-  lives in the FLOW object; the engine underneath is generic. See docs/FLOW-SCHEMA.md and
-  docs/MODULE-LIBRARY.md. Neutral demo config only — no real business data.
+  It also proves the whole thesis: TWO different businesses run on this ONE engine by config
+  alone (pick the demo flow up top) —
+    • "Counter shop"  — linear: Order -> (Bar | Kitchen) -> Checkout
+    • "Cleaners"      — hub-and-spoke: a central Counter starts AND finishes; press items flow
+                        Counter -> Assembly -> Rack -> back to Counter, but Wash & Fold skips
+                        Assembly. Same engine, different FLOW.
+
+  One self-contained file, no build, no deps, localStorage. Neutral demo config only.
+  See docs/FLOW-SCHEMA.md, docs/MODULE-LIBRARY.md, docs/THE-MODEL.md.
 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -20,34 +25,29 @@
   body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
   header { display:flex; align-items:center; gap:12px; padding:12px 16px; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; }
   header .dot { width:10px; height:10px; border-radius:50%; background:var(--brand); }
-  header b { font-size:16px; }
-  header .station { color:var(--dim); }
-  header .spacer { flex:1; }
+  header b { font-size:16px; } header .station { color:var(--dim); } header .spacer { flex:1; }
   header a.link { color:var(--brand); cursor:pointer; text-decoration:none; font-size:13px; }
   main { max-width:820px; margin:0 auto; padding:18px 16px 60px; }
   h2 { font-size:15px; letter-spacing:.02em; text-transform:uppercase; color:var(--dim); margin:22px 0 10px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin:10px 0; }
-  .row { display:flex; align-items:center; gap:10px; }
-  .row .spacer { flex:1; }
+  .row { display:flex; align-items:center; gap:10px; } .row .spacer { flex:1; }
   button { font:inherit; color:var(--ink); background:#222834; border:1px solid var(--line); border-radius:8px; padding:9px 14px; cursor:pointer; }
-  button:hover { border-color:var(--brand); }
-  button:disabled { opacity:.45; cursor:default; }
+  button:hover { border-color:var(--brand); } button:disabled { opacity:.45; cursor:default; }
   button.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
   button.good { background:var(--good); border-color:var(--good); color:#fff; }
-  .tile { display:inline-block; min-width:120px; text-align:left; margin:5px 6px 0 0; }
+  button.sel { border-color:var(--brand); color:var(--brand); }
+  .tile { display:inline-block; min-width:130px; text-align:left; margin:5px 6px 0 0; }
   .tile small { display:block; color:var(--dim); }
-  .muted { color:var(--dim); }
+  .muted { color:var(--dim); } .center { text-align:center; }
   .pill { font-size:12px; padding:2px 8px; border-radius:20px; background:#222834; color:var(--dim); border:1px solid var(--line); }
   .pill.route { border-color:var(--brand); color:var(--brand); }
   .line { display:flex; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); align-items:center; }
   .line:last-child { border-bottom:0; }
-  .line.done span.nm { color:var(--dim); text-decoration:line-through; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px; }
   .empty { color:var(--dim); padding:20px; text-align:center; }
-  .center { text-align:center; }
   .picker button { display:block; width:100%; text-align:left; margin:8px 0; padding:14px; }
-  .picker button b { font-size:16px; }
-  .picker button small { color:var(--dim); }
+  .picker button b { font-size:16px; } .picker button small { color:var(--dim); }
+  .flowsel { display:flex; gap:8px; margin:6px 0 18px; }
 </style>
 
 <header>
@@ -61,100 +61,76 @@
 
 <script>
 /* ============================================================================
-   THE FLOW — the single shared definition. Swap it and the engine is a different POS.
-   Demo: a counter shop where an order FANS OUT to two makers by each line's `route`.
-   Path:  Customer -> [ Order -> (Bar | Kitchen) -> Checkout ] -> Payment
+   THE FLOWS — two businesses as pure config on ONE engine. Path is PER ITEM:
+   each catalog item carries `path` = the ordered workstations it flows through.
    ==========================================================================*/
-const FLOW = {
-  flowId: "demo-counter", version: 2,
-  branding: { name: "Demo Counter", brandColor: "#1f6feb", vocabulary: { record:"order" } },
-
-  endpoints: {
-    customer: { persist:false },
-    payment:  { tenders:["cash"], points:["at-checkout"], closeGate:"balanceLE0" }
+const FLOWS = {
+  counter: {
+    label:"Counter shop", topology:"linear",
+    branding:{ name:"Demo Counter", brandColor:"#1f6feb" },
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash"], closeGate:"balanceLE0"} },
+    // path = which maker each item goes to (single step) -> fan-out
+    catalog:[
+      {id:"c1", name:"Coffee", price:3.50, category:"drink", path:["bar"]},
+      {id:"c2", name:"Latte",  price:4.75, category:"drink", path:["bar"]},
+      {id:"c3", name:"Muffin", price:3.25, category:"food",  path:["kitchen"]},
+      {id:"c4", name:"Bagel",  price:2.75, category:"food",  path:["kitchen"]}
+    ],
+    stations:[
+      {id:"order",    type:"intake",      label:"Order Counter", view:{money:true}},
+      {id:"bar",      type:"production",  label:"Bar",           view:{money:false}},
+      {id:"kitchen",  type:"production",  label:"Kitchen",       view:{money:false}},
+      {id:"checkout", type:"fulfillment", label:"Checkout",      view:{money:true}}
+    ]
   },
-
-  // neutral demo catalog — each item carries a `route` line-attribute (the fan-out key)
-  catalog: [
-    { id:"c1", name:"Coffee", price:3.50, route:"bar" },
-    { id:"c2", name:"Latte",  price:4.75, route:"bar" },
-    { id:"c3", name:"Muffin", price:3.25, route:"kitchen" },
-    { id:"c4", name:"Bagel",  price:2.75, route:"kitchen" }
-  ],
-
-  informationObject: {
-    name: "order",
-    lineItem: { routeKey:"route", perLineStatus:true },
-    stateMachine: {
-      initial: "OPEN",
-      states: ["OPEN","MAKING","READY","PAID","CLOSED"],
-      transitions: [
-        { from:"OPEN",   to:"MAKING", update:"send",       atStation:"order" },
-        { from:"MAKING", to:"READY",  update:"allMade",    atStation:"*" },     // auto re-converge when every line is made
-        { from:"READY",  to:"PAID",   update:"takeTender", atStation:"checkout", gate:"balanceLE0" },
-        { from:"PAID",   to:"CLOSED", update:"close",      atStation:"checkout" }
-      ]
-    }
-  },
-
-  stations: [
-    { id:"order",    type:"intake",      label:"Order Counter", device:"counter",
-      view:{ money:true }, updates:["addLine","send"] },
-    { id:"bar",      type:"production",  label:"Bar",     device:"screen",
-      view:{ money:false, route:"bar" },     updates:["markReady"] },   // sees only bar lines, no prices
-    { id:"kitchen",  type:"production",  label:"Kitchen", device:"screen",
-      view:{ money:false, route:"kitchen" }, updates:["markReady"] },   // sees only kitchen lines, no prices
-    { id:"checkout", type:"fulfillment", label:"Checkout", device:"counter",
-      view:{ money:true }, updates:["takeTender","close"] }
-  ],
-
-  // ROUTING primitive: on `send`, partition lines by `route` and fan out to the maker stations.
-  routing: [
-    { on:"send",    by:"route", to:["bar","kitchen"], carry:"lines" },
-    { on:"allMade", to:["checkout"],                  carry:"whole" }
-  ]
+  cleaners: {
+    label:"Cleaners", topology:"hub-and-spoke",
+    branding:{ name:"Demo Cleaners", brandColor:"#2ea043" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0"} },
+    // press items flow through Assembly then Rack; Wash & Fold SKIPS assembly (path by category)
+    catalog:[
+      {id:"g1", name:"Shirt",       price:6.50, category:"press", path:["assembly","rack"]},
+      {id:"g2", name:"Pants",       price:7.00, category:"press", path:["assembly","rack"]},
+      {id:"g3", name:"Wash & Fold", price:2.75, category:"wf",    path:["rack"]}
+    ],
+    stations:[
+      {id:"counter",  type:"central",    label:"Front Counter", view:{money:true}},   // starts AND finishes
+      {id:"assembly", type:"production",  label:"Assembly",     view:{money:false}},
+      {id:"rack",     type:"staging",     label:"Rack",         view:{money:false}}
+    ]
+  }
 };
 
 /* ============================================================================
-   THE ENGINE — generic; reads the FLOW.
+   THE ENGINE — generic; reads whichever FLOW is active.
    ==========================================================================*/
-const SKEY = "custompos_station_v0";
-const DKEY = "custompos_demo_v0";
-function loadDB(){ try { return JSON.parse(localStorage.getItem(DKEY)) || {records:[],seq:0}; } catch(e){ return {records:[],seq:0}; } }
-function saveDB(db){ localStorage.setItem(DKEY, JSON.stringify(db)); }
+function flowId(){ return localStorage.getItem("custompos_flow") || "counter"; }
+let FLOW = FLOWS[flowId()];
+function dkey(){ return "custompos_demo_"+flowId(); }
+function skey(){ return "custompos_station_"+flowId(); }
+function loadDB(){ try { return JSON.parse(localStorage.getItem(dkey())) || {records:[],seq:0}; } catch(e){ return {records:[],seq:0}; } }
+function saveDB(db){ localStorage.setItem(dkey(), JSON.stringify(db)); }
 let DB = loadDB();
 
-const SM = FLOW.informationObject.stateMachine;
-function transitionsAt(stationId){ return SM.transitions.filter(t => t.atStation===stationId); }
-function transitionFor(stationId, update){ return transitionsAt(stationId).find(t => t.update===update); }
+function setFlow(id){ localStorage.setItem("custompos_flow", id); FLOW = FLOWS[id]; draft=null; DB=loadDB(); render(); }
+function boundStation(){ const id = localStorage.getItem(skey()); return FLOW.stations.find(s=>s.id===id) || null; }
+function bindStation(id){ localStorage.setItem(skey(), id); render(); }
+function unbind(){ localStorage.removeItem(skey()); render(); }
 
 function recordTotal(r){ return r.lines.reduce((s,l)=> s + l.price*l.qty, 0); }
 function recordPaid(r){ return (r.tenders||[]).reduce((s,t)=> s + t.amount, 0); }
 function recordBalance(r){ return recordTotal(r) - recordPaid(r); }
-function gateOk(gate, r){ if(gate==="balanceLE0") return recordBalance(r) <= 0.0001; return true; }
-function linesFor(r, station){ const rt = station.view && station.view.route; return rt ? r.lines.filter(l=>l.route===rt) : r.lines; }
-function allMade(r){ return r.lines.every(l=>l.made); }
+function lineComplete(l){ return l.stage >= l.path.length; }        // reached the end of its own path
+function allComplete(r){ return r.lines.every(lineComplete); }
+function linesAtStation(r, stationId){ return r.lines.filter(l => !lineComplete(l) && l.path[l.stage]===stationId); }
 
-function advance(record, stationId, update){
-  const t = transitionFor(stationId, update);
-  if(!t) return;
-  if(t.gate && !gateOk(t.gate, record)){ flash("Balance must be paid first"); return; }
-  record.status = t.to; saveDB(DB); render();
-}
-// automatic re-converge transition (atStation "*"): fire when its 'update' condition holds
-function maybeReconverge(record){
-  if(record.status==="MAKING" && allMade(record)){ record.status="READY"; saveDB(DB); }
-}
+function afterChange(r){ if(r.status==="INPROGRESS" && allComplete(r)) r.status="READY"; saveDB(DB); }
 
-function boundStation(){ const id = localStorage.getItem(SKEY); return FLOW.stations.find(s=>s.id===id) || null; }
-function bindStation(id){ localStorage.setItem(SKEY, id); render(); }
-function unbind(){ localStorage.removeItem(SKEY); render(); }
+function boundIs(type){ const s=boundStation(); return s && s.type===type; }
 
-/* ============================================================================
-   RENDER
-   ==========================================================================*/
+/* ============================================================================ RENDER */
 function money(n){ return "$"+n.toFixed(2); }
-function flash(msg){ const a=document.getElementById("app"); const d=document.createElement("div"); d.className="card"; d.style.borderColor="var(--warn)"; d.textContent=msg; a.prepend(d); setTimeout(()=>d.remove(), 2200); }
+function flash(msg){ const a=document.getElementById("app"); const d=document.createElement("div"); d.className="card"; d.style.borderColor="var(--warn)"; d.textContent=msg; a.prepend(d); setTimeout(()=>d.remove(),2200); }
 
 function render(){
   DB = loadDB();
@@ -168,19 +144,34 @@ function render(){
   const app = document.getElementById("app"); app.innerHTML = "";
   if(!station){ renderPicker(app); return; }
   if(station.type==="intake")           renderIntake(app, station);
-  else if(station.type==="production")  renderProduction(app, station);
+  else if(station.type==="production" || station.type==="staging") renderPipeline(app, station);
   else if(station.type==="fulfillment") renderCheckout(app, station);
+  else if(station.type==="central"){ renderIntake(app, station); renderCheckout(app, station); }
 }
 
 function renderPicker(app){
-  const wrap = document.createElement("div"); wrap.className = "picker";
-  wrap.innerHTML = "<h2>Set up this device</h2><p class='muted'>Which station is this? Open this page in another "
-    + "tab or device and pick a different station to watch one order fan out and flow between them.</p>";
+  // choose which demo business to run (proves: same engine, different config)
+  const fs = document.createElement("div");
+  fs.innerHTML = "<h2>Demo business</h2>";
+  const bar = document.createElement("div"); bar.className="flowsel";
+  Object.keys(FLOWS).forEach(id=>{
+    const b=document.createElement("button"); if(id===flowId()) b.className="sel";
+    b.innerHTML = FLOWS[id].label+" <small class='muted'>("+FLOWS[id].topology+")</small>";
+    b.onclick=()=>setFlow(id); bar.appendChild(b);
+  });
+  fs.appendChild(bar); app.appendChild(fs);
+
+  const wrap = document.createElement("div"); wrap.className="picker";
+  wrap.innerHTML = "<h2>Set up this device</h2><p class='muted'>Which workstation is this? Open this page in "
+    + "another tab/device and pick a different station to watch an order flow between them.</p>";
   FLOW.stations.forEach(s=>{
-    const b = document.createElement("button");
-    const scope = s.view && s.view.route ? "sees only "+s.view.route+" items" : (s.type==="production"?"sees all items":"");
-    b.innerHTML = "<b>"+s.label+"</b><small>"+s.type+(scope?" · "+scope:"")+"</small>";
-    b.onclick = ()=> bindStation(s.id); wrap.appendChild(b);
+    const b=document.createElement("button");
+    let role = s.type==="central" ? "starts and finishes orders"
+             : s.type==="intake" ? "starts orders"
+             : s.type==="fulfillment" ? "finishes orders"
+             : "a workstation on the path";
+    b.innerHTML = "<b>"+s.label+"</b><small>"+s.type+" · "+role+"</small>";
+    b.onclick=()=>bindStation(s.id); wrap.appendChild(b);
   });
   app.appendChild(wrap);
 }
@@ -188,90 +179,72 @@ function renderPicker(app){
 let draft = null;
 function renderIntake(app, station){
   if(!draft) draft = { lines:[] };
-  const cat = document.createElement("div"); cat.innerHTML = "<h2>New order</h2>";
-  const grid = document.createElement("div"); grid.className="grid";
+  const cat=document.createElement("div"); cat.innerHTML="<h2>New order</h2>";
+  const grid=document.createElement("div"); grid.className="grid";
   FLOW.catalog.forEach(item=>{
     const b=document.createElement("button"); b.className="tile";
-    b.innerHTML = item.name + (station.view.money ? "<small>"+money(item.price)+"</small>" : "");
-    b.onclick = ()=> addToDraft(item); grid.appendChild(b);
+    const via = item.path.length ? item.path.join(" → ") : "no prep";
+    b.innerHTML = item.name + (station.view.money?"<small>"+money(item.price)+" · "+via+"</small>":"<small>"+via+"</small>");
+    b.onclick=()=>addToDraft(item); grid.appendChild(b);
   });
   cat.appendChild(grid); app.appendChild(cat);
 
-  const c = document.createElement("div"); c.className="card";
-  if(!draft.lines.length){ c.innerHTML = "<div class='empty'>Tap items to build the order.</div>"; }
+  const c=document.createElement("div"); c.className="card";
+  if(!draft.lines.length){ c.innerHTML="<div class='empty'>Tap items to build the order.</div>"; }
   else {
-    draft.lines.forEach(l=>{
-      const row=document.createElement("div"); row.className="line";
-      row.innerHTML = "<span class='nm'>"+l.qty+"× "+l.name+"</span><span class='pill route'>"+l.route+"</span><span class='spacer'></span>"
-        + (station.view.money ? "<span>"+money(l.price*l.qty)+"</span>" : "");
-      c.appendChild(row);
-    });
-    const tot=document.createElement("div"); tot.className="line";
-    tot.innerHTML="<b>Total</b><span class='spacer'></span><b>"+money(draft.lines.reduce((s,l)=>s+l.price*l.qty,0))+"</b>";
-    c.appendChild(tot);
+    draft.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
+      row.innerHTML="<span>"+l.qty+"× "+l.name+"</span><span class='pill route'>"+(l.path.join(" → ")||"—")+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":""); c.appendChild(row); });
+    const tot=document.createElement("div"); tot.className="line"; tot.innerHTML="<b>Total</b><span class='spacer'></span><b>"+money(draft.lines.reduce((s,l)=>s+l.price*l.qty,0))+"</b>"; c.appendChild(tot);
   }
   app.appendChild(c);
-
-  const send=document.createElement("button"); send.className="primary"; send.textContent="Send order →";
-  send.disabled = !draft.lines.length; send.onclick = sendDraft; app.appendChild(send);
+  const send=document.createElement("button"); send.className="primary"; send.textContent="Send order →"; send.disabled=!draft.lines.length; send.onclick=sendDraft; app.appendChild(send);
 }
 function addToDraft(item){
-  const ex = draft.lines.find(l=>l.catId===item.id);
-  if(ex) ex.qty++; else draft.lines.push({ id:"L"+Math.round(performance.now()), catId:item.id, name:item.name, price:item.price, qty:1, route:item.route, made:false });
+  const ex=draft.lines.find(l=>l.catId===item.id);
+  if(ex) ex.qty++; else draft.lines.push({id:"L"+Math.round(performance.now()), catId:item.id, name:item.name, price:item.price, qty:1, category:item.category, path:item.path.slice(), stage:0});
   render();
 }
 function sendDraft(){
-  DB = loadDB(); DB.seq++;
-  const rec = { id:"R"+DB.seq, number:DB.seq, status:SM.initial,
-    lines:draft.lines.map(l=>({...l, made:false})), tenders:[], createdAt:new Date().toISOString().slice(11,16) };
-  DB.records.push(rec); saveDB(DB);
-  advance(rec, "order", "send");   // OPEN -> MAKING; routing fans lines to bar + kitchen
-  draft = null; render();
+  DB=loadDB(); DB.seq++;
+  const rec={ id:"R"+DB.seq, number:DB.seq, lines:draft.lines.map(l=>({...l, stage:0})), tenders:[], createdAt:new Date().toISOString().slice(11,16) };
+  rec.status = allComplete(rec) ? "READY" : "INPROGRESS";   // retail (no path) -> ready immediately
+  DB.records.push(rec); saveDB(DB); draft=null; render();
 }
 
-/* PRODUCTION station: sees ONLY its routed lines (money-blind); marks them made; order re-converges */
-function renderProduction(app, station){
-  app.innerHTML = "<h2>"+station.label+"</h2>";
-  const recs = DB.records.filter(r=> r.status==="MAKING" && linesFor(r, station).some(l=>!l.made));
+/* pipeline workstation (production/staging): sees ONLY lines whose CURRENT step is here (money-blind) */
+function renderPipeline(app, station){
+  app.innerHTML="<h2>"+station.label+"</h2>";
+  const recs = DB.records.filter(r=> r.status==="INPROGRESS" && linesAtStation(r, station.id).length);
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nothing waiting."; app.appendChild(e); }
   recs.forEach(r=>{
-    const myLines = linesFor(r, station);
+    const mine=linesAtStation(r, station.id);
     const c=document.createElement("div"); c.className="card";
-    c.innerHTML = "<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span><span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
-    myLines.forEach(l=>{
-      const row=document.createElement("div"); row.className="line"+(l.made?" done":"");
-      row.innerHTML = "<span class='nm'>"+l.qty+"× "+l.name+"</span>"; // money:false -> no price shown
-      c.appendChild(row);
-    });
-    const b=document.createElement("button"); b.className="good"; b.textContent="Mark ready"; b.style.marginTop="10px";
-    b.onclick=()=>{ myLines.forEach(l=>l.made=true); saveDB(DB); maybeReconverge(r); render(); };
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span><span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    mine.forEach(l=>{ const row=document.createElement("div"); row.className="line";
+      const next = l.path[l.stage+1]; row.innerHTML="<span>"+l.qty+"× "+l.name+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"; c.appendChild(row); });
+    const b=document.createElement("button"); b.className="good"; b.textContent="Mark done here"; b.style.marginTop="10px";
+    b.onclick=()=>{ mine.forEach(l=>l.stage++); afterChange(r); render(); };
     c.appendChild(b); app.appendChild(c);
   });
 }
 
 function renderCheckout(app, station){
-  app.innerHTML = "<h2>"+station.label+"</h2>";
+  const h=document.createElement("h2"); h.textContent = station.type==="central" ? "Ready for pickup" : station.label; app.appendChild(h);
   const recs = DB.records.filter(r=> r.status==="READY" || r.status==="PAID");
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No orders ready to check out."; app.appendChild(e); }
   recs.forEach(r=>{
-    const c=document.createElement("div"); c.className="card"; const bal = recordBalance(r);
-    c.innerHTML = "<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span><span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
-    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span class='nm'>"+l.qty+"× "+l.name+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
-    const totrow=document.createElement("div"); totrow.className="line"; totrow.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(totrow);
-    if(r.status==="READY" && bal>0.0001){
-      const b=document.createElement("button"); b.className="primary"; b.textContent="Take cash "+money(recordTotal(r)); b.style.marginTop="10px";
-      b.onclick=()=>{ r.tenders.push({type:"cash", amount:recordTotal(r)}); saveDB(DB); advance(r,"checkout","takeTender"); };
-      c.appendChild(b);
-    } else if(r.status==="PAID"){
-      const b=document.createElement("button"); b.className="good"; b.textContent="Done — close"; b.style.marginTop="10px";
-      b.onclick=()=>advance(r,"checkout","close"); c.appendChild(b);
-    }
+    const c=document.createElement("div"); c.className="card"; const bal=recordBalance(r);
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span><span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
+    const t=document.createElement("div"); t.className="line"; t.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(t);
+    if(r.status==="READY" && bal>0.0001){ const b=document.createElement("button"); b.className="primary"; b.textContent="Take cash "+money(recordTotal(r)); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:recordTotal(r)}); r.status="PAID"; saveDB(DB); render(); }; c.appendChild(b); }
+    else if(r.status==="PAID"){ const b=document.createElement("button"); b.className="good"; b.textContent="Done — close"; b.style.marginTop="10px"; b.onclick=()=>{ r.status="CLOSED"; saveDB(DB); render(); }; c.appendChild(b); }
     app.appendChild(c);
   });
-  const closed = DB.records.filter(r=>r.status==="CLOSED").length;
+  const closed=DB.records.filter(r=>r.status==="CLOSED").length;
   if(closed){ const f=document.createElement("p"); f.className="muted center"; f.textContent=closed+" order(s) completed today."; app.appendChild(f); }
 }
 
-window.addEventListener("storage", (e)=>{ if(e.key===DKEY || e.key===SKEY) render(); });
+window.addEventListener("storage", (e)=>{ if(e.key===dkey()||e.key===skey()||e.key==="custompos_flow") render(); });
 render();
 </script>
