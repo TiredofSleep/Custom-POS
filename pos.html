@@ -108,6 +108,27 @@ const FLOWS = {
       {id:"board",    type:"board",       label:"Status Board",    view:{money:false}},
       {id:"tracker",  type:"tracker",     label:"Customer Tracker", view:{money:false, external:true}}
     ]
+  },
+  repair: {   // THIRD trade — added as pure config, no engine changes: approval/waiver gate, split path, aging, deposit
+    label:"Repair shop", topology:"hub-and-spoke",
+    branding:{ name:"Demo Repair", brandColor:"#e3893c" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}} },
+    timer:{ mode:"aging", warnSec:600, badSec:1200, label:"in shop" },
+    catalog:[
+      {id:"r1", name:"Phone screen", price:129.00, category:"repair", path:["diagnose","repair","ready"],
+        modifiers:[{group:"Device", required:true, options:[{name:"iPhone",price:0},{name:"Android",price:0},{name:"Other",price:20}]}],
+        flags:["Data-loss waiver"]},
+      {id:"r2", name:"Battery", price:59.00, category:"repair", path:["repair","ready"]},         // skips diagnostics
+      {id:"r3", name:"Diagnostic", price:25.00, category:"repair", path:["diagnose","ready"]}
+    ],
+    stations:[
+      {id:"counter",  type:"central",    label:"Front Counter",     view:{money:true}},
+      {id:"diagnose", type:"production",  label:"Diagnostics",      view:{money:false}},
+      {id:"repair",   type:"production",  label:"Repair Bench",     view:{money:false}},
+      {id:"ready",    type:"staging",     label:"Ready Shelf",      view:{money:false}},
+      {id:"board",    type:"board",       label:"Job Board",        view:{money:false}},
+      {id:"tracker",  type:"tracker",     label:"Customer Tracker", view:{money:false, external:true}}
+    ]
   }
 };
 
@@ -232,7 +253,6 @@ function renderPicker(app){
 /* ---- intake with the rules evaluator (modifiers + 86) ---- */
 let draft = null;      // the order being built
 let pending = null;    // an item being configured (required mods / add-ons / flags)
-let acked = {};        // station+record acknowledgements (flag gates)
 function renderIntake(app, station){
   if(!draft) draft = { lines:[] };
   const cat=document.createElement("div"); cat.innerHTML="<h2>New order</h2>";
@@ -328,8 +348,8 @@ function renderPipeline(app, station){
     mine.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const next=l.path[l.stage+1];
       const flagHtml=(l.flags||[]).map(f=>{ hasFlags=true; return " <span class='pill flag'>⚠ "+f+"</span>"; }).join("");
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+flagHtml+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"; c.appendChild(row); });
-    const needAck = hasFlags && !acked[station.id+":"+r.id];
-    if(needAck){ const a=document.createElement("button"); a.className="primary"; a.textContent="⚠ Acknowledge & continue"; a.style.marginTop="10px"; a.onclick=()=>{ acked[station.id+":"+r.id]=true; render(); }; c.appendChild(a); }
+    const needAck = hasFlags && !r.acked;   // acknowledged once per record; persists + broadcasts
+    if(needAck){ const a=document.createElement("button"); a.className="primary"; a.textContent="⚠ Acknowledge & continue"; a.style.marginTop="10px"; a.onclick=()=>{ r.acked=true; saveDB(DB); render(); }; c.appendChild(a); }
     else { const b=document.createElement("button"); b.className="good"; b.textContent="Mark done here"; b.style.marginTop="10px"; b.onclick=()=>{ mine.forEach(l=>l.stage++); afterChange(r); render(); }; c.appendChild(b); }
     app.appendChild(c); });
 }
