@@ -13,7 +13,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `board-tracker-modules.js` | internal status board, sanitized customer tracker, module registry (stations auto-enable modules) |
 | `repair-trade.js` | a THIRD trade (repair shop) running on the same engine by config alone — split path, waiver gate, deposit |
 | `tax-receipt.js` | sales tax on the discounted base, discount buttons, printable receipt (subtotal/discount/tax/total) |
-| `report.js` | end-of-day Z-report — sales summary, by-tender, by-category, cash-drawer expected/counted over-short |
+| `report.js` | end-of-day Z-report — sales summary, by-tender, by-category, cash-drawer over/short, and refund-to-original-tender |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
