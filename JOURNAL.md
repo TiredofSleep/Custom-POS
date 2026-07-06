@@ -420,4 +420,23 @@ own — free, owned, and customizable — in one sitting. Software is free. Know
 *What's left is polish and reach: more templates, a drag-to-arrange visual editor, the multi-device hub, and
 standing customPOS.com up in the world. The foundation is built, and it holds.*
 
+### Reach — the hub and the one-click builder
+*"Keep going."* Two more pieces of reach, both tested.
+
+**The hub** ([hub.js](hub.js)) — a zero-dependency Node server that lets *real, separate devices* share one live
+POS, not just tabs in one browser. It serves the app and exposes `/api/db`, union-merging orders by id so a
+counter, an assembly screen, and a route phone all see the same tickets. It's **opt-in** — a downloaded POS is
+fully local and owes nothing to anyone until a shop points it at a hub with `?hub=…`. We drove it end to end: an
+order rung up on one device pushes to the hub, and a *separate* device pulls it down. This is the "each device is
+a station" idea made real across a whole shop.
+
+**One-click customPOS.com** — the builder used to need a web server to fetch the engine. Now `node build.js`
+inlines the engine into the builder and emits a single **73 KB self-contained file** (`dist/custompos.html`) that
+runs the entire thing with **no server at all**: open it anywhere, pick a trade, and download your POS + its
+CLAUDE.md, offline. customPOS.com can be one static file you host anywhere — or email to someone.
+
+Fourteen test suites now, all green. The engine, four trades, the builder, payments, the hub, and a
+self-contained one-file distribution — the whole loop from *"help me set up a POS"* to *"here's your own
+software, and here's how to keep changing it with AI."* Free, owned, tested, and real.
+
 *— to be continued —*

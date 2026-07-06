@@ -64,17 +64,21 @@ ring up sales, print a receipt), with more business types to come.
   with your config baked in) plus a generated **`CLAUDE.md`** so your own Claude Code can take over. Live preview.
 - ✅ **Payments** — a processor-agnostic interface with a simulator that works out of the box; the certified
   CardConnect/CardPointe adapter ([docs/PAYMENTS-MODULE.md](docs/PAYMENTS-MODULE.md)) swaps in on your own server.
-- ✅ **Tested** — 12 browser test suites in [`tests/`](tests), zero console errors.
+- ✅ **Multi-device hub** — [`hub.js`](hub.js), a zero-dependency Node sync server so several devices (each a
+  different station) share one live POS. Sync is opt-in (`?hub=…`); the downloaded POS is fully local otherwise.
+- ✅ **One-click build** — `node build.js` → `dist/custompos.html`, a single self-contained file that runs the
+  whole builder with **no server** (host it anywhere as customPOS.com).
+- ✅ **Tested** — 14 browser test suites in [`tests/`](tests), zero console errors.
 
-**Next:** more trade templates, a drag-to-arrange visual flow editor, the optional multi-device hub, and
-hosting the builder at customPOS.com. The whole build story is in [JOURNAL.md](JOURNAL.md).
+**Next:** more trade templates, a drag-to-arrange visual flow editor, and hosting customPOS.com. The whole build
+story is in [JOURNAL.md](JOURNAL.md).
 
-### Try it locally
-Serve the folder over http (the builder fetches the engine), then open `builder.html`:
-```bash
-python3 -m http.server 8000    # then visit http://localhost:8000/builder.html
-```
-Or just open [`pos.html`](pos.html) directly to play with the four demo trades.
+### Try it
+- **Just the builder, no server:** `node build.js` then open `dist/custompos.html`.
+- **Builder + engine over http:** `python3 -m http.server 8000` → visit `http://localhost:8000/builder.html`.
+- **The demo engine:** open [`pos.html`](pos.html) directly to play with the four demo trades.
+- **Share a POS across devices:** `node hub.js` then open `http://<host>:8090/pos.html?hub=http://<host>:8090`
+  on each device.
 
 ## License
 
