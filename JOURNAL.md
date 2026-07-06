@@ -554,4 +554,15 @@ The last share always settles to the exact remaining penny, so a $30 split three
 It rides on the same multi-tender balance math the checkout already had; splitting is just a nicer way to reach
 zero. One builder toggle turns it on. Twenty-four suites, all green.
 
+### Put it on my tab
+Regulars and B2B customers don't pay at the counter — they run a tab and settle up later, and a POS that can't
+do that loses them. So *house accounts* became a tender. With a customer attached, checkout offers **Charge to
+account**; the order closes now, and the amount lands on the customer's balance as accounts-receivable. The honest
+part is in the close-out: an on-account charge is money *owed*, not money *collected*, so the Z-report keeps them
+separate — *Total collected* excludes it and a distinct **On account (A/R)** line reports it, while the drawer
+count is untouched. The report also grows a **House accounts** card: who owes, how much, a running total, and a
+**Record payment** box to settle a balance in part or full. Refund an on-account order and it credits the tab back,
+too. It's real A/R, built from the same customer records and tender math already in the engine. Twenty-five
+suites, all green.
+
 *— to be continued —*
