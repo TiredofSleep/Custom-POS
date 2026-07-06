@@ -41,6 +41,21 @@ deposit, appointment, asset check-in, and so on. **Customer** and **Payment** ar
 there. A per-trade **flow template** is simply a pre-arranged set of stations — the starting point you then
 adjust.
 
+## One file, many stations (how devices share it)
+The same single file, served as a website, *is* the whole POS — and **each device becomes one screen of it.** A
+computer or phone opens the site, enters credentials, and is asked **"which station is this?"** — the choices
+are exactly the stations in the flow the owner built (Counter, Assembly, Route phone, Kitchen, Bar, Customer
+tracker…). It picks one and **locks it in** (remembered on that device). From then on, that device runs as that
+station: it sees *that station's view* of every order and performs *that station's updates*, and nothing else.
+
+This is the multi-device story with no IT project: **go to the site → sign in → tell it what this workstation
+is → done.** Countless computers and phones can share one POS — each is just a different window onto the same
+flowing information (kept in sync through the optional hub). Change a device's station anytime; a spare tablet
+can be the kitchen screen today and the counter tomorrow. The visual flow builder therefore does double duty: it
+lays out the path *and* defines the menu of stations every device gets to choose from.
+
+*(Single-device businesses — a food cart, a market booth — never see this: one device just is the whole POS.)*
+
 ## The library (we compile what everyone builds)
 As people build flows and modules, **we keep compiling and organizing them into a shared, growing library** —
 so the next boutique starts from what the last boutique figured out, and the next food truck from the last one.
