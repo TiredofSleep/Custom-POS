@@ -38,6 +38,9 @@
   .pill { font-size:12px; padding:2px 8px; border-radius:20px; background:#222834; color:var(--dim); border:1px solid var(--line); }
   .pill.route { border-color:var(--brand); color:var(--brand); }
   .pill.x86 { border-color:var(--bad); color:var(--bad); }
+  .pill.clock.good { border-color:var(--good); color:var(--good); }
+  .pill.clock.warn { border-color:var(--warn); color:var(--warn); }
+  .pill.clock.bad  { border-color:var(--bad);  color:var(--bad); }
   .line { display:flex; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); align-items:center; }
   .line:last-child { border-bottom:0; } .line small.mods { color:var(--dim); display:block; }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px; }
@@ -68,6 +71,7 @@ const FLOWS = {
     label:"Counter shop", topology:"linear",
     branding:{ name:"Demo Counter", brandColor:"#1f6feb" },
     endpoints:{ customer:{persist:false}, payment:{tenders:["cash"], closeGate:"balanceLE0"} },
+    timer:{ mode:"aging", warnSec:300, badSec:600, label:"prep" },   // ticket ages green->yellow->red
     catalog:[
       {id:"c1", name:"Coffee", price:3.50, category:"drink", path:["bar"]},
       {id:"c2", name:"Latte",  price:4.75, category:"drink", path:["bar"],
@@ -87,6 +91,7 @@ const FLOWS = {
     label:"Cleaners", topology:"hub-and-spoke",
     branding:{ name:"Demo Cleaners", brandColor:"#2ea043" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0"} },
+    timer:{ mode:"due", promiseSec:172800, warnSec:86400, label:"promise" },   // back-scheduled ready-by date
     catalog:[
       {id:"g1", name:"Shirt", price:6.50, category:"press", path:["assembly","rack"],
         modifiers:[{group:"Starch", required:true, options:[{name:"None",price:0},{name:"Light",price:0},{name:"Heavy",price:0.50}]}]},
@@ -122,6 +127,17 @@ function lineComplete(l){ return l.stage >= l.path.length; }
 function allComplete(r){ return r.lines.every(lineComplete); }
 function linesAtStation(r, stationId){ return r.lines.filter(l => !lineComplete(l) && l.path[l.stage]===stationId); }
 function afterChange(r){ if(r.status==="INPROGRESS" && allComplete(r)) r.status="READY"; saveDB(DB); }
+
+/* --- TIMER / SLA service: one primitive, aging or back-scheduled-due, threshold colors --- */
+function fmtDur(s){ s=Math.max(0,Math.round(s)); if(s>=3600){ const h=Math.floor(s/3600), m=Math.round((s%3600)/60); return h+"h "+m+"m"; } const m=Math.floor(s/60); return m+":"+String(s%60).padStart(2,"0"); }
+function clockChip(r){
+  const t=FLOW.timer; if(!t||!r.ts) return "";
+  let cls, txt;
+  if(t.mode==="due"){ const rem=(r.ts + t.promiseSec*1000 - Date.now())/1000;
+    cls = rem<0 ? "bad" : rem<=t.warnSec ? "warn" : "good"; txt = rem<0 ? "OVERDUE" : "due "+fmtDur(rem); }
+  else { const el=(Date.now()-r.ts)/1000; cls = el>=t.badSec ? "bad" : el>=t.warnSec ? "warn" : "good"; txt = fmtDur(el); }
+  return " <span class='pill clock "+cls+"'>"+txt+"</span>";
+}
 
 /* --- the RULES EVALUATOR: par/86 remaining, and modifier requirements --- */
 function soldOf(catId){
@@ -230,7 +246,7 @@ function addLine(item, choices, addons){
 }
 function sendDraft(){
   DB=loadDB(); DB.seq++;
-  const rec={ id:"R"+DB.seq, number:DB.seq, lines:draft.lines.map(l=>({...l, stage:0})), tenders:[], createdAt:new Date().toISOString().slice(11,16) };
+  const rec={ id:"R"+DB.seq, number:DB.seq, lines:draft.lines.map(l=>({...l, stage:0})), tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now() };
   rec.status = allComplete(rec) ? "READY" : "INPROGRESS";
   DB.records.push(rec); saveDB(DB); draft=null; render();
 }
@@ -240,7 +256,7 @@ function renderPipeline(app, station){
   const recs=DB.records.filter(r=> r.status==="INPROGRESS" && linesAtStation(r, station.id).length);
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nothing waiting."; app.appendChild(e); }
   recs.forEach(r=>{ const mine=linesAtStation(r, station.id); const c=document.createElement("div"); c.className="card";
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span><span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     mine.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const next=l.path[l.stage+1];
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"; c.appendChild(row); });
     const b=document.createElement("button"); b.className="good"; b.textContent="Mark done here"; b.style.marginTop="10px";
@@ -252,7 +268,7 @@ function renderCheckout(app, station){
   const recs=DB.records.filter(r=> r.status==="READY"||r.status==="PAID");
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No orders ready to check out."; app.appendChild(e); }
   recs.forEach(r=>{ const c=document.createElement("div"); c.className="card"; const bal=recordBalance(r);
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span><span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
     const t=document.createElement("div"); t.className="line"; t.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(t);
     if(r.status==="READY"&&bal>0.0001){ const b=document.createElement("button"); b.className="primary"; b.textContent="Take cash "+money(recordTotal(r)); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:recordTotal(r)}); r.status="PAID"; saveDB(DB); render(); }; c.appendChild(b); }
