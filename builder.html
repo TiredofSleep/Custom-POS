@@ -167,7 +167,8 @@ server**, never in this file.
 
 /* ---- assemble the downloadable POS: engine (pos.html) + injected flow ---- */
 async function assemble(cfg){
-  const engine = await fetch('pos.html').then(r=>r.text());
+  // prefer an embedded engine (self-contained build); otherwise fetch it (served over http)
+  const engine = (typeof window!=="undefined" && window.__ENGINE_SRC__) ? window.__ENGINE_SRC__ : await fetch('pos.html').then(r=>r.text());
   const inject = "<script>window.CUSTOMPOS_FLOW = "+JSON.stringify(cfg)+";<\/script>\n";
   const html = engine.replace("<script>", inject+"<script>");   // prepend injection before the engine script
   const claudeMd = genClaudeMd(cfg);
