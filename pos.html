@@ -267,23 +267,45 @@ function render(){
 
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
 function renderReport(app, station){
-  app.innerHTML="<h2>"+station.label+" — commission & tips</h2>";
-  const pct=(FLOW.commission&&FLOW.commission.pct)||0;
+  app.innerHTML="<h2>"+station.label+" — today</h2>";
   const done=DB.records.filter(r=>r.status==="PAID"||r.status==="CLOSED");
-  const per={};
-  done.forEach(r=>{
-    r.lines.filter(l=>l.performer && l.category==="service").forEach(l=>{ per[l.performer]=per[l.performer]||{svc:0,tips:0}; per[l.performer].svc += l.price*l.qty; });
-    if(r.tip && r.tipTo){ per[r.tipTo]=per[r.tipTo]||{svc:0,tips:0}; per[r.tipTo].tips += r.tip; }
+  const L=(lab,val,bold)=>"<div class='line'>"+(bold?"<b>":"<span>")+lab+(bold?"</b>":"</span>")+"<span class='spacer'></span>"+(bold?"<b>":"<span>")+val+(bold?"</b>":"</span>")+"</div>";
+  // ---- daily sales summary ----
+  let net=0, tax=0, tips=0, disc=0, items=0; const byTender={}, byCat={};
+  done.forEach(r=>{ net += lineSubtotal(r)-recordDiscount(r); tax += recordTax(r); tips += r.tip||0; disc += recordDiscount(r);
+    r.lines.forEach(l=>{ items += l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty; });
+    (r.tenders||[]).forEach(t=>{ byTender[t.type]=(byTender[t.type]||0)+t.amount; });
   });
-  const names=Object.keys(per);
-  if(!names.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No completed services yet."; app.appendChild(e); return; }
-  names.forEach(n=>{ const d=per[n]; const comm=+(d.svc*pct/100).toFixed(2); const c=document.createElement("div"); c.className="card";
-    c.innerHTML="<div class='row'><b>"+n+"</b></div>"
-      +"<div class='line'><span>Service sales</span><span class='spacer'></span><span>"+money(d.svc)+"</span></div>"
-      +"<div class='line'><span>Commission ("+pct+"%)</span><span class='spacer'></span><span>"+money(comm)+"</span></div>"
-      +"<div class='line'><span>Tips</span><span class='spacer'></span><span>"+money(d.tips)+"</span></div>"
-      +"<div class='line'><b>Take-home</b><span class='spacer'></span><b>"+money(comm+d.tips)+"</b></div>";
-    app.appendChild(c); });
+  const collected=Object.values(byTender).reduce((s,v)=>s+v,0);
+  const sum=document.createElement("div"); sum.className="card";
+  sum.innerHTML="<div class='row'><b>Sales summary</b></div>"
+    + L("Orders", String(done.length)) + L("Items sold", String(items))
+    + L("Net sales", money(net)) + (disc?L("Discounts","−"+money(disc)):"") + L("Tax collected", money(tax)) + (tips?L("Tips", money(tips)):"")
+    + L("Total collected", money(collected), true);
+  app.appendChild(sum);
+  if(Object.keys(byTender).length){ const tc=document.createElement("div"); tc.className="card"; tc.innerHTML="<div class='row'><b>By tender</b></div>"+Object.keys(byTender).map(k=>L(k[0].toUpperCase()+k.slice(1), money(byTender[k]))).join(""); app.appendChild(tc); }
+  if(Object.keys(byCat).length){ const cc=document.createElement("div"); cc.className="card"; cc.innerHTML="<div class='row'><b>By category</b></div>"+Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]).map(k=>L(k, money(byCat[k]))).join(""); app.appendChild(cc); }
+  // ---- cash drawer count ----
+  const dc=document.createElement("div"); dc.className="card";
+  dc.innerHTML="<div class='row'><b>Cash drawer</b></div>"+L("Expected cash", money(byTender.cash||0));
+  const cnt=document.createElement("div"); cnt.className="fld"; cnt.innerHTML="<span class='flab'>Counted</span>";
+  const inp=document.createElement("input"); inp.id="cashCount"; inp.type="number"; inp.placeholder="$"; inp.style.width="100px";
+  const diff=document.createElement("span"); diff.className="muted"; diff.style.marginLeft="10px";
+  inp.oninput=()=>{ const c=Number(inp.value); if(inp.value===""){ diff.textContent=""; return; } const d=+(c-(byTender.cash||0)).toFixed(2); diff.textContent = d===0?"balanced ✓":(d>0?"over +"+money(d):"short "+money(-d)); diff.style.color = d===0?"var(--good)":"var(--warn)"; };
+  cnt.appendChild(inp); cnt.appendChild(diff); dc.appendChild(cnt); app.appendChild(dc);
+  // ---- commission (only when the trade pays commission) ----
+  const pct=(FLOW.commission&&FLOW.commission.pct)||0;
+  if(FLOW.performers){
+    const per={};
+    done.forEach(r=>{ r.lines.filter(l=>l.performer && l.category==="service").forEach(l=>{ per[l.performer]=per[l.performer]||{svc:0,tips:0}; per[l.performer].svc += l.price*l.qty; }); if(r.tip && r.tipTo){ per[r.tipTo]=per[r.tipTo]||{svc:0,tips:0}; per[r.tipTo].tips += r.tip; } });
+    Object.keys(per).forEach(n=>{ const d=per[n]; const comm=+(d.svc*pct/100).toFixed(2); const c=document.createElement("div"); c.className="card";
+      c.innerHTML="<div class='row'><b>"+n+"</b></div>"
+        +"<div class='line'><span>Service sales</span><span class='spacer'></span><span>"+money(d.svc)+"</span></div>"
+        +"<div class='line'><span>Commission ("+pct+"%)</span><span class='spacer'></span><span>"+money(comm)+"</span></div>"
+        +"<div class='line'><span>Tips</span><span class='spacer'></span><span>"+money(d.tips)+"</span></div>"
+        +"<div class='line'><b>Take-home</b><span class='spacer'></span><b>"+money(comm+d.tips)+"</b></div>";
+      app.appendChild(c); });
+  }
 }
 
 /* STATUS BOARD — internal broadcast: every live record by status, read-only, with location + clock */
