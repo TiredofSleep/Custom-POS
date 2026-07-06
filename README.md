@@ -55,12 +55,26 @@ Small businesses that want a real POS without a monthly bill or a vendor holding
 with **service shops** (dry cleaners, laundromats, alterations, repair) and **simple retail** (track inventory,
 ring up sales, print a receipt), with more business types to come.
 
-## Roadmap (short version)
+## Status (working prototype)
 
-1. Generalize the engine (separate the universal core from business-specific config).
-2. Ship the first two templates: **simple retail** and **service shop**.
-3. Launch the **builder** at customPOS.com — configure, then download your file + its Claude Code guide.
-4. Release the free card-payment module once processor certification lands.
+- ✅ **Config-driven engine** — [`pos.html`](pos.html), one self-contained file. 14 primitives (routing/fan-out,
+  timers, deposits, flags, modifiers, 86, checklists, capacity, tips/commission, loyalty, gift cards, profile
+  recall, status board + customer tracker…) that four very different trades run on **by config alone**.
+- ✅ **The builder** — [`builder.html`](builder.html): pick a trade, name it, **download your POS** (the engine
+  with your config baked in) plus a generated **`CLAUDE.md`** so your own Claude Code can take over. Live preview.
+- ✅ **Payments** — a processor-agnostic interface with a simulator that works out of the box; the certified
+  CardConnect/CardPointe adapter ([docs/PAYMENTS-MODULE.md](docs/PAYMENTS-MODULE.md)) swaps in on your own server.
+- ✅ **Tested** — 12 browser test suites in [`tests/`](tests), zero console errors.
+
+**Next:** more trade templates, a drag-to-arrange visual flow editor, the optional multi-device hub, and
+hosting the builder at customPOS.com. The whole build story is in [JOURNAL.md](JOURNAL.md).
+
+### Try it locally
+Serve the folder over http (the builder fetches the engine), then open `builder.html`:
+```bash
+python3 -m http.server 8000    # then visit http://localhost:8000/builder.html
+```
+Or just open [`pos.html`](pos.html) directly to play with the four demo trades.
 
 ## License
 
