@@ -1,0 +1,8 @@
+# hub runtime data (a business's live orders — never commit)
+hub-data/
+*.hub.json
+# local deps / build output
+node_modules/
+dist/
+# editor / OS
+.DS_Store
