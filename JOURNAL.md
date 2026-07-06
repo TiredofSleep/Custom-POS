@@ -393,4 +393,31 @@ a module that's already been certified. Free software, free knowledge, owned by 
 polish left — the visual builder, the wizard that writes these configs, the download bundle with its Claude Code
 guide — but the hard part, the part everyone said couldn't be one engine, is done and tested.
 
+### All the way through — customPOS.com, end to end
+*"Keep going, all the way through!"* So we built the last mile — the part that turns an engine into a product.
+
+First the seam: the engine now honors an **injected config** (`window.CUSTOMPOS_FLOW`). A *downloaded POS* is
+just the engine plus one inlined flow — no demo picker, its own name in the header, ready to run.
+
+Then the thing itself: **the builder** ([builder.html](builder.html)) — customPOS.com in one file. You pick your
+trade from a handful of starter templates, name your business, and hit **"Build it for me."** It shows a live
+preview of your *actual* POS running right there, and hands you two downloads: **your self-contained POS** (the
+engine with your flow baked in) and a **generated `CLAUDE.md`** written for *your* build — your stations, your
+catalog, plain-English things to ask Claude Code — so the moment you download it, your own AI developer already
+understands your shop. That's the whole promise made real: configure it, download it, own the code, keep shaping
+it with Claude. The Webflow-for-POS idea, except what you export is a working data-driven app, not dead markup.
+
+And the money: **payments** are wired through the processor-agnostic interface from the certified blueprint. A
+simulator adapter ships by default so a fresh download can take a (pretend) card out of the box — the ticket even
+shows `💳 Visa ••NNNN` — while the real CardConnect adapter drops in on the business's own server, the browser
+never touching a card number. The free software; the certified way it earns its keep; both in the repo.
+
+By the end: an engine of fourteen primitives, four trades on it by config alone, a builder that stamps out an
+owned POS with its own AI guide, payments on the processor-agnostic seam, and **twelve browser test suites, all
+green, zero console errors.** From a single shop's hand-built POS to a machine that hands *any* small business its
+own — free, owned, and customizable — in one sitting. Software is free. Knowledge is free. The code is yours.
+
+*What's left is polish and reach: more templates, a drag-to-arrange visual editor, the multi-device hub, and
+standing customPOS.com up in the world. The foundation is built, and it holds.*
+
 *— to be continued —*
