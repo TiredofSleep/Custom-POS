@@ -53,6 +53,13 @@ same change** — before it is ever committed. Treat every commit as world-reada
   neutral `CONFIG` object (no real business data). Then add the five abstractions (Phase 2), a second template —
   simple retail (Phase 3), the builder site (Phase 4), and the payment module (Phase 5).
 
+## Keep the journal current (standing instruction)
+[JOURNAL.md](JOURNAL.md) is a living, narrative build log — the story of how customPOS was made. **After every
+meaningful milestone, decision, pivot, or experiment, add an honest entry** (newest at the bottom of the day;
+new day = new heading). Write it as story, not a changelog — the *why* behind decisions, the dead ends, the
+reasons. Keep it PII-free like the rest of this repo. This is a deliberate part of the project: giving the
+knowledge away means showing the work.
+
 ## Notes for collaborators
 - The detailed vision, engine/module/config audit, and research findings live in **private** planning docs in
   the origin repo (not published here to keep this repo clean of business-internal references). Ask the owner if
