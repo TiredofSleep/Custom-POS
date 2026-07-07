@@ -693,4 +693,14 @@ the default. It's the same prorated-discount, per-line-taxable math as before, j
 instead of adding it — one config flag, both worlds correct. The builder toggles it right next to the rate.
 Thirty-seven suites, all green.
 
+### Stock moves for real reasons
+"Receive more stock" was only half the truth — real shelves lose count to spoilage, breakage, transfers to the
+other store, and the dreaded physical recount. So the Stock card's one Receive button became a reason-coded
+**adjustment**: pick *Receive*, *Transfer in*, *Transfer out*, *Waste*, or *Recount*, type a number, Apply.
+Receive and transfer-in add; waste and transfer-out subtract; **Recount** is the important one — it sets on-hand
+to exactly the number you counted, doing the arithmetic for you regardless of what the system thought. Every
+non-receive change lands in an **Adjustments** audit trail on the same card (time · item · reason · delta), so the
+owner can see where the shrinkage went — the "periodic loss/theft count" the plan always wanted. Same derived
+on-hand underneath; now it can go down for a reason, not just up. Thirty-seven suites, all green.
+
 *— to be continued —*
