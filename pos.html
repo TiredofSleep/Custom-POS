@@ -33,6 +33,7 @@
   .row { display:flex; align-items:center; gap:10px; } .row .spacer { flex:1; }
   button { font:inherit; color:var(--ink); background:#222834; border:1px solid var(--line); border-radius:8px; padding:9px 14px; cursor:pointer; }
   button:hover { border-color:var(--brand); } button:disabled { opacity:.4; cursor:default; }
+  button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, label:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }   /* keyboard nav */
   button.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
   button.good { background:var(--good); border-color:var(--good); color:#fff; }
   button.danger { border-color:var(--bad); color:var(--bad); }
@@ -296,7 +297,7 @@ function money(n){ return "$"+n.toFixed(2); }
 function dayOf(ts){ return new Date(ts||Date.now()).toLocaleDateString("en-CA"); }   // local YYYY-MM-DD
 function todayStr(){ return new Date().toLocaleDateString("en-CA"); }
 function shiftDay(dstr, delta){ const d=new Date(dstr+"T12:00:00"); d.setDate(d.getDate()+delta); return d.toLocaleDateString("en-CA"); }
-function flash(msg){ let t=document.getElementById("toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.style.cssText="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--bad);color:#fff;padding:10px 16px;border-radius:8px;z-index:99;font-weight:600"; document.body.appendChild(t); } t.textContent=msg; t.style.display="block"; }
+function flash(msg){ let t=document.getElementById("toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.setAttribute("role","status"); t.setAttribute("aria-live","polite"); t.style.cssText="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--bad);color:#fff;padding:10px 16px;border-radius:8px;z-index:99;font-weight:600"; document.body.appendChild(t); } t.textContent=msg; t.style.display="block"; }
 // data ownership: your data is yours to take out. Everything below builds plain files from the local DB.
 function downloadFile(name, text, type){ const blob=new Blob([text],{type:type||"text/plain"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function csvCell(v){ v=(v==null?"":String(v)); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
