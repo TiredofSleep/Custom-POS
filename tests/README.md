@@ -30,6 +30,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `import.js` | bulk item import — paste CSV (name/price/category/barcode), header auto-skip, into the built catalog |
 | `backup.js` | data ownership — JSON backup download, customers CSV export, and restore-from-backup replacing the DB |
 | `build-stamp.js` | downloads carry a build banner + CUSTOMPOS_BUILD (version/date/business); CLAUDE.md + setup screen show the version |
+| `pwa.js` | install-as-app — a branded web manifest, theme-color, apple web-app meta, and a generated home-screen icon |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

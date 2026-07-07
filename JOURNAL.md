@@ -662,4 +662,13 @@ and build date, and the running POS quietly shows *customPOS engine v0.32 · you
 screen. Nothing fancy — just the difference between a mystery file and a file that tells you what it is. Thirty-
 four suites, all green.
 
+### Add to home screen
+On a phone at the counter, a browser tab feels like a toy; an app icon feels like a tool. So the POS is now
+installable. It builds its own **web manifest** at runtime — branded with the shop's name and color — sets the
+**theme color** to match, flips on the Apple "web-app capable" flags, and even draws its own **home-screen icon**:
+a rounded square in the brand color with the business's first initial, generated as an inline SVG so there's still
+no external file to host. Add it to your home screen and it launches full-screen, standalone, named for your shop.
+No service worker, because it doesn't need one — the app has been offline-first from the start; this just gives it
+the icon and the chrome-less window to match. Thirty-five suites, all green.
+
 *— to be continued —*
