@@ -642,4 +642,15 @@ zero and a missing category to "item", and treats the barcode as optional, so wh
 its old till or a spreadsheet drops straight in. It's the answer to one of the trust questions the whole project
 is built around — *how do I move my existing data in?* — and now it's a paste away. Thirty-two suites, all green.
 
+### Your data, in your hands
+Two other Claudes reviewed the repo and landed on the same first note: the whole pitch is *you own your data*,
+but the app itself had no button to take it out. Fair. So the back office grew a **Data & backup** card that says
+the quiet part out loud — *your data lives only in this file, plus your optional hub; back it up regularly* — and
+then makes it true. **Backup (JSON)** downloads the entire database as one portable file named for the shop and
+the date. **Customers (CSV)** and **Sales (CSV)** export the lists a spreadsheet or an accountant wants. And
+**Restore backup** reads a backup file back in and replaces the device's data, so a dead hard drive is a
+five-second recovery, not a catastrophe. No server round-trip, no export queue — it's a Blob and a download, the
+same offline-first way everything else works. The ownership promise stopped being a paragraph and became a row of
+buttons. Thirty-three suites, all green.
+
 *— to be continued —*

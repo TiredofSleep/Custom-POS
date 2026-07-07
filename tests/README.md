@@ -28,6 +28,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `report-history.js` | the Z-report is scoped to a single day (fixes counting all history) + pages back through prior days |
 | `landing.js` | the customPOS.com landing page — pitch, honest monetization, trust FAQ, feature grid, CTA links, mobile no-overflow |
 | `import.js` | bulk item import — paste CSV (name/price/category/barcode), header auto-skip, into the built catalog |
+| `backup.js` | data ownership — JSON backup download, customers CSV export, and restore-from-backup replacing the DB |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
