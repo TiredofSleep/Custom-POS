@@ -800,4 +800,16 @@ same synced DB as everything else, so it'll ride the hub to every device on the 
 drag-drop floor *designer* and turn-time analytics — but the beating heart of the vertical, the table that knows
 what's happening to it, is real and tested. Forty-one suites, all green.
 
+### Fire the entrées
+Fine dining runs on timing: the apps go out, the table eats, *then* the kitchen fires the mains — you don't want
+the steak plated while they're still on calamari. So the engine learned **course pacing**. Give an item a
+**course** (Appetizers = 1, Entrées = 2, Desserts = 3) and turn coursing on, and only the *fired* course reaches
+the line — later courses **hold** in the kitchen, listed but not cooking. The KDS shows which course is up, what's
+held behind it, and a **🔥 Fire Entrées** button; tap it and the held course releases to the line and the bump.
+It rides the exact machinery that was already there — a held line just isn't "released" to its station yet, so
+the order simply isn't *done* until every course has been fired and made, which is the truth of the table. Turn
+it off and nothing changes; every non-restaurant trade is untouched. The bistro template ships with it wired
+(apps/salads/drinks fire now, entrées hold, dessert holds behind them), and the builder gets a *course pacing*
+toggle plus a Course dropdown on each item. Forty-two suites, all green.
+
 *— to be continued —*

@@ -161,7 +161,8 @@ const TEMPLATES = {
     ] },
   bistro: { flowId:"bistro", label:"Full-service restaurant", topology:"hub-and-spoke", blurb:"Dine-in — tables, floor plan, kitchen & bar",
     branding:{ name:"My Bistro", brandColor:"#7a1f2b" },
-    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[18,20,22]}, split:true} },
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[18,20,22]}, split:true}, coursing:true },
+    courses:["Appetizers","Entrées","Desserts"],
     timer:{ mode:"aging", warnSec:600, badSec:1200, label:"ticket" }, kds:{warnSec:420,badSec:900},
     floor:{ label:"Dining Room", warnSec:900, sections:["Main","Patio","Bar"], tables:[
       {id:"t1",label:"1",seats:2,section:"Main"}, {id:"t2",label:"2",seats:2,section:"Main"}, {id:"t3",label:"3",seats:4,section:"Main"},
@@ -169,14 +170,14 @@ const TEMPLATES = {
       {id:"p1",label:"P1",seats:4,section:"Patio"}, {id:"p2",label:"P2",seats:4,section:"Patio"},
       {id:"b1",label:"B1",seats:1,section:"Bar"}, {id:"b2",label:"B2",seats:1,section:"Bar"}, {id:"b3",label:"B3",seats:1,section:"Bar"} ] },
     catalog:[
-      {id:"cala",name:"Calamari",price:12,category:"app",path:["line"]},
-      {id:"wedge",name:"Wedge Salad",price:9,category:"salad",path:["cold"]},
-      {id:"steak",name:"Ribeye",price:34,category:"entree",path:["line"],modifiers:[{group:"Temp",required:true,options:[{name:"Rare",price:0},{name:"Med rare",price:0},{name:"Medium",price:0},{name:"Well",price:0}]}]},
-      {id:"salmon",name:"Salmon",price:26,category:"entree",path:["line"]},
-      {id:"burger",name:"Bistro Burger",price:16,category:"entree",path:["line"]},
-      {id:"wine",name:"House Wine",price:11,category:"drink",path:["bar"]},
-      {id:"beer",name:"Draft Beer",price:7,category:"drink",path:["bar"]},
-      {id:"cake",name:"Chocolate Cake",price:10,category:"dessert",path:["cold"]}
+      {id:"cala",name:"Calamari",price:12,category:"app",path:["line"],course:1},
+      {id:"wedge",name:"Wedge Salad",price:9,category:"salad",path:["cold"],course:1},
+      {id:"steak",name:"Ribeye",price:34,category:"entree",path:["line"],course:2,modifiers:[{group:"Temp",required:true,options:[{name:"Rare",price:0},{name:"Med rare",price:0},{name:"Medium",price:0},{name:"Well",price:0}]}]},
+      {id:"salmon",name:"Salmon",price:26,category:"entree",path:["line"],course:2},
+      {id:"burger",name:"Bistro Burger",price:16,category:"entree",path:["line"],course:2},
+      {id:"wine",name:"House Wine",price:11,category:"drink",path:["bar"],course:1},
+      {id:"beer",name:"Draft Beer",price:7,category:"drink",path:["bar"],course:1},
+      {id:"cake",name:"Chocolate Cake",price:10,category:"dessert",path:["cold"],course:3}
     ],
     stations:[
       {id:"floor",type:"floor",label:"Floor",view:{}},
@@ -251,6 +252,7 @@ function toggleNotify(){ if(cfg.endpoints.notify) delete cfg.endpoints.notify; e
 function toggleSplit(){ if(pay().split) delete pay().split; else pay().split=true; render(); }
 function toggleScan(){ if(cfg.endpoints.scan) delete cfg.endpoints.scan; else cfg.endpoints.scan=true; render(); }
 function toggleQuotes(){ if(cfg.endpoints.quotes) delete cfg.endpoints.quotes; else cfg.endpoints.quotes=true; render(); }
+function toggleCoursing(){ if(cfg.endpoints.coursing) delete cfg.endpoints.coursing; else { cfg.endpoints.coursing=true; if(!cfg.courses) cfg.courses=["Appetizers","Entrées","Desserts"]; } render(); }
 function couponList(){ return Array.isArray(cfg.endpoints.discounts)?cfg.endpoints.discounts:[]; }
 function addCoupon(){ const list=couponList(); list.push({code:"SAVE10", pct:10}); cfg.endpoints.discounts=list; render(); }
 function removeCoupon(i){ const list=couponList(); list.splice(i,1); cfg.endpoints.discounts=list.length?list:true; render(); }
@@ -350,6 +352,11 @@ function itemEditor(i){
       h('span',{class:'flab'},['Barcode / SKU']), h('input',{class:'nm',value:it.barcode||'', placeholder:'scan or type', oninput:e=>{ if(e.target.value) it.barcode=e.target.value; else delete it.barcode; }}),
       h('span',{class:'hint'},['a scanner types this + Enter to ring it (turn on "barcode scan")'])
     ]),
+    cfg.endpoints.coursing ? h('div',{class:'fld'},[
+      h('span',{class:'flab'},['Course']), h('select',{onchange:e=>{ const v=Number(e.target.value); if(v>1) it.course=v; else delete it.course; }},
+        (cfg.courses||['Course 1','Course 2','Course 3']).map((lab,idx)=>h('option',{value:idx+1, selected:(it.course||1)===idx+1},[lab]))),
+      h('span',{class:'hint'},['later courses hold in the kitchen until the expo fires them'])
+    ]) : null,
     h('div',{style:'margin-top:12px'},[ h('button',{class:'danger', onclick:()=>removeItem(i)},['Delete item']), h('button',{onclick:()=>{selItem=-1;render();}},['Done']) ])
   ]);
 }
@@ -439,7 +446,8 @@ function render(){
         h('button',{class:cfg.endpoints.notify?'on':'', onclick:()=>toggleNotify()},['text when ready']),
         h('button',{class:pay().split?'on':'', onclick:()=>toggleSplit()},['split checks']),
         h('button',{class:cfg.endpoints.scan?'on':'', onclick:()=>toggleScan()},['barcode scan']),
-        h('button',{class:cfg.endpoints.quotes?'on':'', onclick:()=>toggleQuotes()},['quotes / estimates']) ]),
+        h('button',{class:cfg.endpoints.quotes?'on':'', onclick:()=>toggleQuotes()},['quotes / estimates']),
+        h('button',{class:cfg.endpoints.coursing?'on':'', onclick:()=>toggleCoursing()},['course pacing']) ]),
       h('div',{class:'fld'},[ h('span',{class:'flab'},['Sales tax %']), h('input',{class:'sm',type:'number', step:'0.01', value:(cfg.endpoints.tax&&(cfg.endpoints.tax.rate*100))||'', placeholder:'0', oninput:e=>setTax(e.target.value)}),
         h('button',{class:(cfg.endpoints.tax&&cfg.endpoints.tax.included)?'on':'', onclick:()=>toggleTaxIncluded()},[(cfg.endpoints.tax&&cfg.endpoints.tax.included)?'✓ tax included in price':'tax added on top']),
         h('span',{class:'flab'},['Deposit %']), h('input',{class:'sm',type:'number', value:(pay().deposit&&pay().deposit.pct)||'', placeholder:'0', oninput:e=>setDeposit(e.target.value)}),
