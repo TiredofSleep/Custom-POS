@@ -75,7 +75,7 @@
    THE FLOWS — businesses as config on ONE engine. Items carry `path` (workstations),
    `modifiers` (required choices), `addons` (suggested upsells), and `par` (86 count).
    ==========================================================================*/
-const CUSTOMPOS_VERSION = "0.37";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.38";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -238,6 +238,19 @@ function refundRecord(r){
   (r.tenders||[]).filter(t=>!t.refund).slice().forEach(t=>{ r.tenders.push({ type:t.type, amount:+(-t.amount).toFixed(2), refund:true, ref:t.ref }); });
   r.status="REFUNDED"; r.refundedAt=new Date().toISOString().slice(11,16);
 }
+function returnedSubtotal(r){ return (r.lines||[]).filter(l=>l.returned).reduce((s,l)=>s+l.price*l.qty,0); }
+// LINE-LEVEL return: refund selected lines' share of the total to the original tender(s), mark them returned
+function returnLines(r, lineIds){
+  const allSub=lineSubtotal(r); if(allSub<=0) return;
+  const retSub=r.lines.filter(l=>lineIds.includes(l.id)).reduce((s,l)=>s+l.price*l.qty,0); if(retSub<=0) return;
+  const amount=+((retSub/allSub)*recordTotal(r)).toFixed(2);
+  const pos=(r.tenders||[]).filter(t=>!t.refund && t.amount>0); const posTotal=pos.reduce((s,t)=>s+t.amount,0)||amount;
+  pos.forEach(t=>{ const share=+(-(amount*t.amount/posTotal)).toFixed(2); if(share){ if(t.type==="card"&&payAdapter().refund) payAdapter().refund(t.ref, Math.round(-share*100)); r.tenders.push({ type:t.type, amount:share, refund:true, ref:t.ref }); } });
+  if(r.customer){ const cust=(DB.customers||[]).find(x=>x.phone===r.customer.phone); if(cust){ const acctPos=pos.filter(t=>t.type==="account").reduce((s,t)=>s+t.amount,0); if(acctPos>0){ const acctShare=+((amount*acctPos/posTotal)).toFixed(2); cust.balance=+((cust.balance||0)-acctShare).toFixed(2); if(cust.balance<0) cust.balance=0; } } }
+  lineIds.forEach(id=>{ const l=r.lines.find(x=>x.id===id); if(l) l.returned=true; });
+  if(r.lines.every(l=>l.returned)) r.status="REFUNDED";
+  r.refundedAt=new Date().toISOString().slice(11,16); saveDB(DB); render();
+}
 
 /* Processor-agnostic PAYMENTS interface (matches docs/PAYMENTS-MODULE.md). A simulator adapter ships by
    default so a downloaded POS takes card payments out of the box; the certified CardConnect adapter swaps in
@@ -381,8 +394,12 @@ function renderReport(app, station){
   let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0; const byTender={}, byCat={};
   done.forEach(r=>{ const rf=r.status==="REFUNDED";
     if(rf){ refunds += recordTotal(r); }
-    else { orders++; net += recordNet(r); tax += recordTax(r); tips += r.tip||0; disc += recordDiscount(r);
-      r.lines.forEach(l=>{ items += l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty; }); }
+    else { orders++;
+      const allSub=lineSubtotal(r), frac = allSub>0 ? (allSub-returnedSubtotal(r))/allSub : 1;   // proportion still sold (line-level returns)
+      net += recordNet(r)*frac; tax += recordTax(r)*frac; tips += r.tip||0; disc += recordDiscount(r)*frac;
+      r.lines.filter(l=>!l.returned).forEach(l=>{ items += l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty; });
+      const ret = -((r.tenders||[]).filter(t=>t.refund).reduce((s,t)=>s+t.amount,0)); if(ret>0.0001) refunds += ret;   // partial line returns
+    }
     (r.tenders||[]).forEach(t=>{ byTender[t.type]=(byTender[t.type]||0)+t.amount; });   // refund pushes offsetting negative tenders, so this nets
   });
   const onAccount=byTender.account||0;   // charged to house accounts today — money owed, not money collected
@@ -449,12 +466,25 @@ function renderReport(app, station){
   const refundable=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED") && recordPaid(r)>0.0001);
   const rc=document.createElement("div"); rc.className="card"; rc.innerHTML="<div class='row'><b>Refund an order</b></div>";
   if(!refundable.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="No paid orders to refund."; rc.appendChild(e); }
-  refundable.forEach(r=>{ const tl=[...new Set((r.tenders||[]).map(t=>t.type))].join(", ");
+  refundable.forEach(r=>{ const tl=[...new Set((r.tenders||[]).filter(t=>!t.refund).map(t=>t.type))].join(", ");
+    const wrap=document.createElement("div"); wrap.style.cssText="border-top:1px solid var(--line);padding-top:8px;margin-top:8px";
     const row=document.createElement("div"); row.className="line";
-    row.innerHTML="<span>#"+r.number+" · "+money(recordPaid(r))+" <small class='muted'>"+tl+"</small></span><span class='spacer'></span>";
+    row.innerHTML="<span>#"+r.number+" · "+money(recordPaid(r))+" left <small class='muted'>"+tl+"</small></span><span class='spacer'></span>";
     const rb=document.createElement("button"); rb.className="danger"; rb.textContent="Refund"; rb.style.padding="4px 10px";
     rb.onclick=()=>{ if(!confirm("Refund #"+r.number+" "+money(recordPaid(r))+" to "+tl+"?")) return; refundRecord(r); saveDB(DB); render(); };
-    row.appendChild(rb); rc.appendChild(row); });
+    row.appendChild(rb); wrap.appendChild(row);
+    // line-level return: tick the items coming back, refund just their share
+    const active=r.lines.filter(l=>!l.returned);
+    if(active.length){ const picks=[];
+      active.forEach(l=>{ const lab=document.createElement("label"); lab.style.cssText="display:inline-flex;align-items:center;gap:5px;margin:4px 10px 0 0;font-size:13px";
+        const cb=document.createElement("input"); cb.type="checkbox"; cb.className="retline"; cb.dataset.rec=r.id; cb.dataset.line=l.id;
+        lab.appendChild(cb); lab.appendChild(document.createTextNode(l.qty+"× "+l.name+" "+money(l.price*l.qty))); wrap.appendChild(lab); picks.push({cb, id:l.id}); });
+      const retBtn=document.createElement("button"); retBtn.textContent="Return selected"; retBtn.style.cssText="padding:4px 10px;margin-top:6px;display:block";
+      retBtn.onclick=()=>{ const ids=picks.filter(x=>x.cb.checked).map(x=>x.id); if(!ids.length){ flash("Tick the items to return"); return; } returnLines(r, ids); };
+      wrap.appendChild(retBtn);
+    }
+    const ret=r.lines.filter(l=>l.returned); if(ret.length){ const rr=document.createElement("div"); rr.className="muted"; rr.style.marginTop="4px"; rr.textContent="Returned: "+ret.map(l=>l.name).join(", "); wrap.appendChild(rr); }
+    rc.appendChild(wrap); });
   app.appendChild(rc);
   // ---- commission (only when the trade pays commission) ----
   const pct=(FLOW.commission&&FLOW.commission.pct)||0;
