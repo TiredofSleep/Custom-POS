@@ -39,6 +39,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `floor.js` | floor / table state machine — tables render + color by state, advance through the service flow, jump states, section filter, persistence |
 | `coursing.js` | course pacing / hold-until — kitchen sees only fired courses, held courses wait, expo fires the next course |
 | `floor-designer.js` | builder floor designer — canvas of tiles, add/edit tables, drag to position (x,y) into the built flow |
+| `schedule.js` | staff scheduling — weekly staff×day grid, set shifts, weekly hours + overtime flag, publish→notify, edit un-publishes |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

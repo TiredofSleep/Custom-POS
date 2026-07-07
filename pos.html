@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.42";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.43";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -201,7 +201,8 @@ const MODULES = {
   clock:   { label:"Time clock",              stationTypes:["timeclock"] },
   booking: { label:"Appointments",            stationTypes:["booking"] },
   kds:     { label:"Kitchen display (bump)",  stationTypes:["kds"] },
-  floor:   { label:"Floor / table plan",      stationTypes:["floor"] }
+  floor:   { label:"Floor / table plan",      stationTypes:["floor"] },
+  schedule:{ label:"Staff scheduling",        stationTypes:["schedule"] }
 };
 function enabledModules(flow){ const types=new Set(flow.stations.map(s=>s.type)); return Object.keys(MODULES).filter(m=>MODULES[m].stationTypes.some(t=>types.has(t))); }
 const STATUS_LABEL = { INPROGRESS:"In progress", READY:"Ready for pickup", PAID:"Ready for pickup", CLOSED:"Picked up" };
@@ -213,7 +214,7 @@ function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FL
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{}}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},shifts:[],schedule:{}}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -411,6 +412,7 @@ function render(){
   else if(station.type==="booking")     renderBooking(app, station);
   else if(station.type==="kds")         renderKDS(app, station);
   else if(station.type==="floor")       renderFloor(app, station);
+  else if(station.type==="schedule")    renderSchedule(app, station);
 }
 
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
@@ -726,6 +728,67 @@ function renderFloor(app, station){
   }
 }
 
+/* ===================================== STAFF SCHEDULING =====================================
+   Worker-rights foundation (see docs/WORKER-RIGHTS.md, Phase 1): a weekly grid of staff × days.
+   Set a shift per cell, see weekly hours with an overtime warning, publish → notify each worker.
+   Shifts live in DB.shifts; DB.schedule holds the published stamp. Defaults tilt toward the worker. */
+const SCHED_DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const OT_THRESHOLD = 40;   // weekly hours over this flag as overtime (US federal default)
+function parseHM(s){ if(!s) return null; const [h,m]=String(s).split(":").map(Number); return h*60+(m||0); }
+function shiftHrs(s){ const a=parseHM(s.start), b=parseHM(s.end); if(a==null||b==null||b<=a) return 0; return (b-a)/60; }
+function staffShifts(id){ return (DB.shifts||[]).filter(s=>s.staffId===id); }
+function cellShift(id, day){ return (DB.shifts||[]).find(s=>s.staffId===id && s.day===day); }
+function weeklyHours(id){ return staffShifts(id).reduce((h,s)=>h+shiftHrs(s),0); }
+function setShift(id, day, start, end){
+  DB=loadDB(); DB.shifts=(DB.shifts||[]).filter(s=>!(s.staffId===id && s.day===day));
+  if(start && end) DB.shifts.push({ id:"S"+Date.now()+day, staffId:id, day, start, end });
+  DB.schedule=DB.schedule||{}; delete DB.schedule.published; delete DB.schedule.notified;   // any edit un-publishes (change requires re-publish)
+  saveDB(DB); render();
+}
+function publishSchedule(){
+  DB=loadDB(); DB.schedule=DB.schedule||{}; DB.schedule.published=Date.now(); DB.schedule.notified=[];
+  if(FLOW.endpoints && FLOW.endpoints.notify){ (FLOW.staff||[]).forEach(w=>{ const sh=staffShifts(w.id); if(sh.length){
+    const body="Hi "+w.name+", your shifts are posted — "+sh.sort((a,b)=>a.day-b.day).map(s=>SCHED_DAYS[s.day]+" "+s.start+"–"+s.end).join(", ")+".";
+    notifyAdapter().send(w.phone||"", body); DB.schedule.notified.push(w.name); } }); }
+  saveDB(DB); render();
+}
+function renderSchedule(app, station){
+  app.innerHTML="<h2>"+station.label+"</h2><p class='muted'>Set each shift, then publish. Editing a published week un-publishes it until you re-post — staff never get a silent change.</p>";
+  const staff=FLOW.staff||[];
+  if(!staff.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No staff configured. Add staff (name + PIN) in the builder."; app.appendChild(e); return; }
+  // the week grid
+  const wrap=document.createElement("div"); wrap.className="card"; wrap.style.overflowX="auto";
+  const tbl=document.createElement("table"); tbl.style.cssText="border-collapse:collapse;width:100%;min-width:560px;font-size:13px";
+  tbl.innerHTML="<tr><th style='text-align:left;padding:6px'>Staff</th>"+SCHED_DAYS.map(d=>"<th style='padding:6px'>"+d+"</th>").join("")+"<th style='padding:6px'>Hrs</th></tr>";
+  staff.forEach(w=>{ const tr=document.createElement("tr"); const hrs=weeklyHours(w.id); const ot=hrs>OT_THRESHOLD;
+    const name=document.createElement("td"); name.style.cssText="padding:6px;font-weight:600"; name.textContent=w.name; tr.appendChild(name);
+    SCHED_DAYS.forEach((d,di)=>{ const td=document.createElement("td"); td.style.cssText="padding:3px;text-align:center";
+      const sh=cellShift(w.id, di); const b=document.createElement("button"); b.style.cssText="width:100%;padding:5px 4px;font-size:12px"; if(selCell&&selCell.id===w.id&&selCell.day===di) b.className="sel";
+      b.textContent= sh ? (sh.start+"–"+sh.end) : "+"; b.onclick=()=>{ selCell={ id:w.id, day:di }; render(); };
+      td.appendChild(b); tr.appendChild(td); });
+    const tot=document.createElement("td"); tot.style.cssText="padding:6px;text-align:center;font-weight:600"; tot.innerHTML=hrs.toFixed(1)+(ot?" <span class='pill flag'>OT</span>":""); tr.appendChild(tot);
+    tbl.appendChild(tr); });
+  wrap.appendChild(tbl); app.appendChild(wrap);
+  // cell editor
+  if(selCell){ const w=staff.find(x=>x.id===selCell.id); const sh=cellShift(selCell.id, selCell.day)||{};
+    const c=document.createElement("div"); c.className="card";
+    c.innerHTML="<div class='row'><b>"+w.name+" · "+SCHED_DAYS[selCell.day]+"</b></div>";
+    const start=document.createElement("input"); start.type="time"; start.id="shiftStart"; start.value=sh.start||"09:00"; start.style.margin="0 8px 0 0";
+    const end=document.createElement("input"); end.type="time"; end.id="shiftEnd"; end.value=sh.end||"17:00";
+    const fld=document.createElement("div"); fld.className="fld"; fld.innerHTML="<span class='flab'>Shift</span>"; fld.appendChild(start); fld.appendChild(document.createTextNode(" to ")); fld.appendChild(end); c.appendChild(fld);
+    const save=document.createElement("button"); save.className="primary"; save.textContent="Save shift"; save.style.margin="8px 8px 0 0"; save.onclick=()=>{ setShift(selCell.id, selCell.day, start.value, end.value); selCell=null; }; c.appendChild(save);
+    if(sh.start){ const clr=document.createElement("button"); clr.textContent="Clear"; clr.style.marginTop="8px"; clr.onclick=()=>{ setShift(selCell.id, selCell.day, null, null); selCell=null; }; c.appendChild(clr); }
+    app.appendChild(c);
+  }
+  // publish + notify
+  const pub=document.createElement("div"); pub.className="card";
+  const total=staff.reduce((h,w)=>h+weeklyHours(w.id),0);
+  pub.innerHTML="<div class='line'><span>Scheduled this week</span><span class='spacer'></span><b>"+total.toFixed(1)+" h</b></div>";
+  if(DB.schedule && DB.schedule.published){ const pl=document.createElement("div"); pl.className="muted"; pl.style.margin="6px 0"; pl.textContent="✓ Published"+((DB.schedule.notified&&DB.schedule.notified.length)?" · texted "+DB.schedule.notified.join(", "):""); pub.appendChild(pl); }
+  const pb=document.createElement("button"); pb.className="primary"; pb.textContent=(DB.schedule&&DB.schedule.published)?"Re-publish":"📣 Publish schedule"; pb.style.marginTop="6px"; pb.onclick=()=>{ publishSchedule(); }; pub.appendChild(pb);
+  app.appendChild(pub);
+}
+
 /* STATUS BOARD — internal broadcast: every live record by status, read-only, with location + clock */
 function renderBoard(app, station){
   app.innerHTML="<h2>"+station.label+"</h2>";
@@ -788,6 +851,7 @@ let clockWelcome = null; // {name, inbound} — the welcome/goodbye screen shown
 let reportDay = null;  // which day the Z-report shows (YYYY-MM-DD, local); null = today
 let selTable = null;   // floor plan: the table currently opened
 let floorSection = null; // floor plan: active section filter (null = all)
+let selCell = null;    // scheduling: the {staffId, day} cell being edited
 function attachCustomer(phone, name){
   phone=(phone||"").trim(); if(!phone) return;
   DB=loadDB(); const found=(DB.customers||[]).find(c=>c.phone===phone);
