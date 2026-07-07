@@ -38,4 +38,19 @@ the shop: where each item is on the path right now (in the kitchen, at the bar, 
 
 ---
 
+## Deep design handoffs (from ClaudeChat sessions)
+
+Bigger, roadmap-scale design docs — reconciled against the current build at the top of each, so we configure
+what already exists and only build the net-new:
+
+- **[RESTAURANT-VERTICAL.md](RESTAURANT-VERTICAL.md)** — spatial floor plan + table state machine, section
+  auto-sorter, station-flow designer with printers as nodes, course pacing, category-level menu wizards. Much
+  of the station/KDS/86/split/welcome groundwork already ships; the floor plan + table state machine are the
+  real net-new (and generalize to salon chairs, auto bays, spa rooms).
+- **[WORKER-RIGHTS.md](WORKER-RIGHTS.md)** — cross-vertical scheduling grid, break-rules engine, real-time
+  earnings, coverage marketplace, PTO, incident/panic reporting, state labor-law modules, a worker portal.
+  Worker-protective **defaults**; builds on the existing time-clock + notify seam.
+
+---
+
 *More to come — keep them coming.*

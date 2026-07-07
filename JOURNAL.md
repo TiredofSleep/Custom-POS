@@ -769,4 +769,20 @@ reference, the two-step "integrate any POS" recipe, the per-merchant go-live che
 rules — and a pure-Node test that drives charge, decline, refund, void, inquire, and the terminal against the
 simulator. Free software; the one honest paid path is now a product anyone can plug in. Forty suites, all green.
 
+### Two big maps arrive from the other room
+Brayden had been designing in a ClaudeChat window in parallel, and handed over two substantial roadmap docs — a
+**restaurant vertical** (spatial floor plan + table state machine, a section auto-sorter, a station-flow designer
+with printers as first-class nodes, course pacing, category-level menu wizards) and a cross-vertical **worker
+rights + scheduling** suite (a scheduling grid with predictive-scheduling compliance, a break-rules engine,
+real-time earnings, a coverage marketplace, PTO, incident + panic reporting, state labor-law modules, a worker
+portal — with the quiet radical premise that *the defaults tilt toward the worker* and taking protections away
+takes deliberate editing, not a toggle). They landed in `docs/RESTAURANT-VERTICAL.md` and `docs/WORKER-RIGHTS.md`,
+each with a reconciliation header written against the current v0.39 build so nothing gets rebuilt: a lot of the
+groundwork — routing/fan-out, the KDS, 86, split checks, the clock-in briefing, tips/commission, the time-clock,
+the notify seam, the export/ownership principle — already ships, which means both roadmaps start from primitives
+that exist rather than from zero. The net-new in each (a spatial floor/table state machine; a scheduling grid +
+break engine) are the natural next big builds, and both generalize far past their first vertical — a table state
+machine is a salon chair, an auto bay, a spa room. Captured, cross-referenced from the Ideas inbox, nothing lost.
+Forty suites, still green.
+
 *— to be continued —*
