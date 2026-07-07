@@ -31,6 +31,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `backup.js` | data ownership — JSON backup download, customers CSV export, and restore-from-backup replacing the DB |
 | `build-stamp.js` | downloads carry a build banner + CUSTOMPOS_BUILD (version/date/business); CLAUDE.md + setup screen show the version |
 | `pwa.js` | install-as-app — a branded web manifest, theme-color, apple web-app meta, and a generated home-screen icon |
+| `hub-merge.js` | hub conflict resolution (unit) — version-aware last-write-wins: newer `upd` wins, stale push rejected, union add, seq-max |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

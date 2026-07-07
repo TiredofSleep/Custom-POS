@@ -8,7 +8,11 @@
        computers/phones (each a different station) share one live POS.
 
   Merge is by record id (a union — new records added, existing ones updated), seq = max, and
-  customers by phone. Data persists to a JSON file so it survives a restart.
+  customers by phone. Conflict resolution is LAST-WRITE-WINS per record, but version-aware: each
+  record carries `upd` (a modification timestamp the client stamps when the record's content
+  changes), and the hub keeps the copy with the newer `upd` — so a device that pushes a stale copy
+  of a record can't clobber a newer edit made elsewhere. Records with no `upd` fall back to plain
+  last-write-wins. Data persists to a JSON file so it survives a restart. See docs/HUB-SYNC.md.
 
   Run:  node hub.js            (serves this folder on :8090, data in ./hub-data/db.json)
         PORT=9000 DATA=/tmp/db.json node hub.js
@@ -32,12 +36,16 @@ const TYPES = { '.html':'text/html', '.js':'text/javascript', '.md':'text/markdo
 function load(){ try { return JSON.parse(fs.readFileSync(DATA, 'utf8')); } catch (e) { return { records:[], seq:0, customers:[] }; } }
 function save(db){ try { fs.mkdirSync(path.dirname(DATA), { recursive:true }); fs.writeFileSync(DATA, JSON.stringify(db)); } catch (e) {} }
 
-// union merge: incoming records upsert by id; seq = max; customers upsert by phone
+// union merge: incoming records upsert by id (version-aware last-write-wins); seq = max; customers upsert by phone
 function merge(store, incoming){
   if (!incoming) return store;
   store.records = store.records || []; store.customers = store.customers || [];
   const byId = new Map(store.records.map(r => [r.id, r]));
-  (incoming.records || []).forEach(r => byId.set(r.id, r));
+  (incoming.records || []).forEach(r => {
+    const cur = byId.get(r.id);
+    // keep the newer copy by modification stamp; ties / missing stamps keep the incoming write
+    if (!cur || (r.upd || 0) >= (cur.upd || 0)) byId.set(r.id, r);
+  });
   store.records = [...byId.values()];
   const byPhone = new Map(store.customers.map(c => [c.phone, c]));
   (incoming.customers || []).forEach(c => byPhone.set(c.phone, c));
