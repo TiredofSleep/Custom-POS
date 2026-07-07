@@ -320,11 +320,12 @@ function itemEditor(i){
 }
 
 /* ---- generated CLAUDE.md ---- */
-function genClaudeMd(cfg){
+function genClaudeMd(cfg, build){
   const stations=cfg.stations.map(s=>"- **"+s.label+"** ("+s.type+")"+(s.checklist?" · checklist: "+s.checklist.join(", "):"")).join("\n");
   const items=cfg.catalog.map(i=>"- "+i.name+" — $"+i.price+(i.path&&i.path.length?" (flows: "+i.path.join(" → ")+")":"")+(i.performer?" · by staff":"")+(i.par!=null?" · 86 at "+i.par:"")).join("\n");
+  const stamp = build ? `\n> Engine **v${build.version}** · built **${build.builtAt}**. Keep this file with your POS so you know what you're running.\n` : "";
   return `# CLAUDE.md — ${cfg.branding.name} (your point-of-sale)
-
+${stamp}
 This is **your** customPOS, generated for a ${(TEMPLATES[tradeKey]||{label:'business'}).label.toLowerCase()}. One self-contained
 HTML file, runs in a browser, stores data locally. **You own it.** Open this folder in
 [Claude Code](https://claude.com/claude-code) and change anything in plain English.
@@ -362,10 +363,13 @@ processor credentials live only on your own server.
 /* ---- assemble + download ---- */
 async function assemble(cfg){
   const engine = (typeof window!=="undefined" && window.__ENGINE_SRC__) ? window.__ENGINE_SRC__ : await fetch('pos.html').then(r=>r.text());
-  const inject = "<script>window.CUSTOMPOS_FLOW = "+JSON.stringify(cfg)+";<\/script>\n";
-  const html = engine.replace("<script>", inject+"<script>");
-  const claudeMd = genClaudeMd(cfg);
-  window.__build = { flow:cfg, html, claudeMd };
+  const verM = engine.match(/CUSTOMPOS_VERSION\s*=\s*"([^"]+)"/);
+  const build = { version: verM?verM[1]:"?", builtAt: new Date().toISOString().slice(0,10), business: cfg.branding.name };
+  const banner = "<!-- customPOS · "+build.business+" · engine v"+build.version+" · built "+build.builtAt+" · your software, your data -->\n";
+  const inject = "<script>window.CUSTOMPOS_FLOW = "+JSON.stringify(cfg)+"; window.CUSTOMPOS_BUILD = "+JSON.stringify(build)+";<\/script>\n";
+  const html = banner + engine.replace("<script>", inject+"<script>");
+  const claudeMd = genClaudeMd(cfg, build);
+  window.__build = { flow:cfg, html, claudeMd, build };
   return { html, claudeMd };
 }
 function blobUrl(text, type){ return URL.createObjectURL(new Blob([text], {type:type||'text/plain'})); }

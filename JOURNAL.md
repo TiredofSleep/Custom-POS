@@ -653,4 +653,13 @@ five-second recovery, not a catastrophe. No server round-trip, no export queue �
 same offline-first way everything else works. The ownership promise stopped being a paragraph and became a row of
 buttons. Thirty-three suites, all green.
 
+### Know what you're running
+The reviewers also asked for the small, professional thing: stamp the downloads so an owner (or their Claude Code)
+knows what they've got. The engine now carries a version, and when the builder bakes a POS it reads that version,
+adds an HTML comment banner — *customPOS · Your Shop · engine v0.32 · built 2026-07-07 · your software, your data*
+— and injects a `CUSTOMPOS_BUILD` record right beside the flow. The generated `CLAUDE.md` opens with the version
+and build date, and the running POS quietly shows *customPOS engine v0.32 · your build 2026-07-07* on its setup
+screen. Nothing fancy — just the difference between a mystery file and a file that tells you what it is. Thirty-
+four suites, all green.
+
 *— to be continued —*
