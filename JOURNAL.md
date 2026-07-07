@@ -873,4 +873,15 @@ un-publish-on-change honesty as the rest of the grid: approving a day off un-pos
 goes out clean. Small feature, real principle — the roster is now a conversation, and the default answer protects
 the person asking. Forty-seven suites, all green.
 
+### Somebody cover me
+Life happens mid-week, and the honest response to "I can't make my shift" isn't "tough" — it's "who can?" So the
+grid got **coverage**. A worker **offers** a shift up; it wears a little ↔ so everyone can see it's looking for a
+taker. The manager opens it and reassigns it to a co-worker — and the software does the bookkeeping that keeps it
+fair: it **won't hand the shift to anyone approved off that day** or **already working it**, and it **flags** when
+picking someone would push them into overtime, so coverage doesn't quietly become exploitation. Accept and the
+shift simply moves — off one plate, onto another — and the week un-publishes so the new lineup goes out clean.
+The real worker-to-worker marketplace (claim it yourself from your phone) waits on the worker portal; but the
+thing that actually matters — a shift can change hands without anyone getting hurt by it — works today. Forty-eight
+suites, all green.
+
 *— to be continued —*
