@@ -74,7 +74,7 @@
    THE FLOWS — businesses as config on ONE engine. Items carry `path` (workstations),
    `modifiers` (required choices), `addons` (suggested upsells), and `par` (86 count).
    ==========================================================================*/
-const CUSTOMPOS_VERSION = "0.33";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.34";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -198,7 +198,14 @@ const SYNC = {
   pull(){ if(!this.on) return; try{ fetch(this.url().replace(/\/$/,"")+"/api/db").then(r=>r.json()).then(j=>this.adopt(j.db)).catch(()=>{}); }catch(e){} },
   adopt(db){ if(!db) return; this.applying=true; try{ localStorage.setItem(dkey(), JSON.stringify(db)); }catch(e){} this.applying=false; render(); }
 };
-function saveDB(db){ localStorage.setItem(dkey(), JSON.stringify(db)); if(SYNC.on && !SYNC.applying) SYNC.push(); }
+function saveDB(db){
+  // stamp a modification time on any record whose content changed, so hub merge keeps the newer copy
+  try{ const prev=JSON.parse(localStorage.getItem(dkey())||"{}"); const norm=r=>JSON.stringify({...r, upd:0});
+    const was=new Map((prev.records||[]).map(r=>[r.id, norm(r)]));
+    (db.records||[]).forEach(r=>{ if(was.get(r.id)!==norm(r)) r.upd=Date.now(); });
+  }catch(e){}
+  localStorage.setItem(dkey(), JSON.stringify(db)); if(SYNC.on && !SYNC.applying) SYNC.push();
+}
 let DB = loadDB();
 
 function setFlow(id){ localStorage.setItem("custompos_flow", id); FLOW=FLOWS[id]; draft=null; pending=null; DB=loadDB(); render(); }

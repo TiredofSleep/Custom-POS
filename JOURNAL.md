@@ -671,4 +671,16 @@ no external file to host. Add it to your home screen and it launches full-screen
 No service worker, because it doesn't need one — the app has been offline-first from the start; this just gives it
 the icon and the chrome-less window to match. Thirty-five suites, all green.
 
+### Whose write wins?
+The reviewers put a sharp question to the sync hub: *is it just implicit last-write-wins, and what stops a stale
+device from clobbering good data?* Fair, and worth answering in code, not just prose. So records now carry an
+`upd` stamp — the client bumps it in `saveDB` only when a record's content actually changes (it diffs against
+the last save, so idle saves don't churn it) — and the hub merge keeps the copy with the **newer** stamp. A
+back-office tab that's been sitting open can no longer push a stale order state over a fresher one from the
+register; its older `upd` loses. Records with no stamp still fall back to plain last-write-wins, so nothing older
+breaks. It's honest last-write-wins *at the record level*, not silent data loss — and it's unit-tested
+(newer-wins, stale-rejected, union-add, seq-max) alongside the end-to-end two-device test. The whole model, plus
+the "before you put this on the internet, add HTTPS and an access key" security note, is now written down in
+`docs/HUB-SYNC.md`. Thirty-six suites, all green.
+
 *— to be continued —*
