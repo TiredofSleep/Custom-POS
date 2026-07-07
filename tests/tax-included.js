@@ -1,5 +1,5 @@
 const { chromium } = require('playwright-core');
-const url = 'file:///workspace/custom-pos/pos.html';
+const url = ('file://' + require('path').resolve(__dirname, '..', 'pos.html'));
 const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const FLOW = {
   flowId:"vat", label:"VAT Shop", topology:"linear",

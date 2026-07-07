@@ -34,6 +34,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `hub-merge.js` | hub conflict resolution (unit) — version-aware last-write-wins: newer `upd` wins, stale push rejected, union add, seq-max |
 | `tax-included.js` | VAT-style tax-included pricing — tax extracted from the price (total unchanged), net-of-tax in the report |
 | `line-return.js` | line-level returns — refund selected items' share of the total; report nets sales/tax/refunds proportionally |
+| `station-reorder.js` | builder flow editing — move a workstation earlier/later reorders the generated flow |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

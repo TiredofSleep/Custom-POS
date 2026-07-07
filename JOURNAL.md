@@ -723,4 +723,15 @@ shows up under Refunds, and collected drops to match — while a full return (ev
 same clean REFUNDED state as before. A $30 order, return the $20 item, and the books read exactly right: $10 sold,
 $1 tax, $22 refunded, $11 in the drawer. Thirty-eight suites, all green.
 
+### Green somewhere other than here
+Then CI told the truth the local run couldn't: the moment the tests ran on a real GitHub runner, a third of them
+failed — not on logic, but because they hard-coded `file:///workspace/custom-pos/pos.html`, a path that only
+exists in this one container. Exactly the kind of "works on my machine" the reviewers meant. So every test now
+derives the file URL from `__dirname`, and the suite is portable: a CI workflow installs Chromium and runs all of
+it on every push, a Pages workflow publishes the landing page and the live builder, and the README carries a
+tests badge. While the plumbing was open, the builder's flow gained real editing — select a workstation and move
+it **earlier / later** to reorder the whole pipeline — and the two big engine files got a table-of-contents banner
+up top and section markers throughout, so the next person (or the next Claude) can find their way. Thirty-nine
+suites, green — now provably, on someone else's computer.
+
 *— to be continued —*
