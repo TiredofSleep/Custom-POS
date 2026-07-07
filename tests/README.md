@@ -35,6 +35,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `tax-included.js` | VAT-style tax-included pricing — tax extracted from the price (total unchanged), net-of-tax in the report |
 | `line-return.js` | line-level returns — refund selected items' share of the total; report nets sales/tax/refunds proportionally |
 | `station-reorder.js` | builder flow editing — move a workstation earlier/later reorders the generated flow |
+| `pay-server.js` | the standalone payments service — health, auth gate, charge/decline/refund/void/inquire/terminal (sim provider) |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

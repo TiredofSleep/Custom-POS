@@ -751,4 +751,22 @@ came in as a clean, additive commit on top of a green tree, so it fast-forwarded
 runner). The free software stays free — and the one paid, opt-in path it rests on just got a lot easier to turn
 on. Thirty-nine suites, still green.
 
+### Processing for anyone, not just us
+*"Write it up for general use — I'd like to provide the credit-card processing to anyone who wants it."* That's
+the whole business turned into a product: the certified integration shouldn't be welded to customPOS, it should
+be a thing any shop with any POS can switch on. So the adapter became a **standalone service** —
+`payments/pay-server.js`, zero dependencies, runs on the merchant's own server. It exposes one small, neutral
+REST API — `/charge`, `/refund`, `/void`, `/inquire`, a card-present terminal pair, and a `/tokenizer` endpoint
+that hands back the hosted-iFrame URL — and behind it sits the certified CardConnect adapter, with every
+processor quirk (dollar-string vs integer-cents, `capture:"N"` on a $0 verify, CVV only on the initial capture,
+`cof`/`ecomind` for recurring) hidden so the caller only ever speaks **cents**. The security model is the point:
+the browser tokenizes the card straight to the processor's iFrame, the POS backend charges the *token*, and card
+data never touches the service or the POS at all — PCI SAQ-A by construction. A shared `PAY_KEY` gates every
+money call; a **simulator** provider means a third-party POS can integrate and demo the whole flow before any
+merchant account exists, then flip three env vars to go live. Any system that can POST JSON and show an iFrame
+can now take certified card payments. It ships with a full general-use guide (`payments/README.md`) — REST
+reference, the two-step "integrate any POS" recipe, the per-merchant go-live checklist, and the deploy/PCI
+rules — and a pure-Node test that drives charge, decline, refund, void, inquire, and the terminal against the
+simulator. Free software; the one honest paid path is now a product anyone can plug in. Forty suites, all green.
+
 *— to be continued —*
