@@ -236,6 +236,7 @@ function setWelcome(field,v){ cfg.welcome=cfg.welcome||{}; if(field==='specials'
 /* ---- stations ---- */
 function addStation(){ cfg.stations.push({ id:uid(), type:"production", label:"New station", view:{money:false} }); selStation=cfg.stations.length-1; selItem=-1; render(); }
 function removeStation(i){ const id=cfg.stations[i].id; cfg.stations.splice(i,1); cfg.catalog.forEach(it=>{ it.path=(it.path||[]).filter(p=>p!==id); }); selStation=-1; render(); }
+function moveStation(i, dir){ const j=i+dir; if(j<0||j>=cfg.stations.length) return; const s=cfg.stations; const t=s[i]; s[i]=s[j]; s[j]=t; selStation=j; render(); }   // reorder the flow
 function stationEditor(i){
   const s=cfg.stations[i];
   const typeSel=h('select',{onchange:e=>{ s.type=e.target.value; if(!PATH_TYPES.includes(s.type)&&s.type!=='production') s.view=s.view||{money:false}; render(); }},
@@ -256,6 +257,10 @@ function stationEditor(i){
     h('div',{class:'fld'},[h('span',{class:'flab'},['Money view']), moneyBtn, h('span',{class:'hint'},['work stations usually hide prices'])]),
     h('div',{class:'fld'},[h('span',{class:'flab'},['QC checklist']), h('span',{class:'hint'},['all steps must be ticked before this station can pass an order on'])]),
     clRows, addStep,
+    h('div',{class:'fld'},[ h('span',{class:'flab'},['Order in flow']),
+      h('button',{disabled:i===0, onclick:()=>moveStation(i,-1)},['▲ earlier']),
+      h('button',{disabled:i===cfg.stations.length-1, onclick:()=>moveStation(i,1)},['▼ later']),
+      h('span',{class:'hint'},['position '+(i+1)+' of '+cfg.stations.length]) ]),
     h('div',{style:'margin-top:12px'},[ h('button',{class:'danger', onclick:()=>removeStation(i)},['Delete workstation']), h('button',{onclick:()=>{selStation=-1;render();}},['Done']) ])
   ]);
 }

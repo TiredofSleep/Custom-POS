@@ -72,10 +72,28 @@
 
 <script>
 /* ============================================================================
-   THE FLOWS — businesses as config on ONE engine. Items carry `path` (workstations),
-   `modifiers` (required choices), `addons` (suggested upsells), and `par` (86 count).
+   customPOS ENGINE — MAP (search these banners to jump between sections)
+   ----------------------------------------------------------------------------
+   THE FLOWS ............. demo businesses as config (injected flow replaces these)
+   MODULES / STATUS ..... module registry (station type → feature) + status labels
+   ENGINE / SYNC ........ flow selection, localStorage DB, optional hub sync (saveDB)
+   MONEY MATH ........... subtotal/discount/tax(incl or added)/total/paid/balance, refunds, returns
+   INVENTORY ............ stock on-hand, low/out, reason-coded adjustments
+   PAYMENTS / NOTIFY .... processor-agnostic charge/refund + notify seam (sim adapters)
+   DATA & BACKUP ........ export (JSON/CSV), import, restore
+   RULES EVALUATOR ...... required modifiers, 86/par, needsConfig
+   RENDER ............... router (station.type → renderer) + install/PWA
+   INTAKE ............... catalog, search/scan, config panel, deposits, capacity, quotes
+   PIPELINE / KDS ....... production stations, checklists, kitchen display + bump
+   CHECKOUT ............. tips, discounts/coupons, split, tenders, receipts, notify
+   REPORT ............... Z-report, drawer, labor, inventory, A/R, refunds/returns, backup
+   TIMECLOCK / BOOKING .. staff PIN + welcome; appointments → check-in
+   BOARD / TRACKER ...... internal status board; sanitized customer tracker
+   PICKER / BOOT ........ device setup screen; storage-event resync; first render
    ==========================================================================*/
-const CUSTOMPOS_VERSION = "0.38";   // engine version (the builder stamps this into downloads)
+
+/* ===================================== THE FLOWS ===================================== */
+const CUSTOMPOS_VERSION = "0.39";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -214,6 +232,7 @@ function boundStation(){ const id=localStorage.getItem(skey()); return FLOW.stat
 function bindStation(id){ localStorage.setItem(skey(), id); render(); }
 function unbind(){ localStorage.removeItem(skey()); render(); }
 
+/* ===================================== MONEY MATH ===================================== */
 function lineSubtotal(r){ return r.lines.reduce((s,l)=> s + l.price*l.qty, 0); }
 function recordDiscount(r){ return Math.min(r.discount||0, lineSubtotal(r)); }
 function taxIncluded(){ return !!(FLOW.endpoints.tax && FLOW.endpoints.tax.included); }
@@ -302,6 +321,7 @@ function soldOf(catId){
 function remainingOf(item){ return item.par==null ? Infinity : item.par - soldOf(item.id); }
 function is86(item){ return remainingOf(item) <= 0; }
 // INVENTORY: on-hand = starting stock + any received − everything sold. Tracked only when item.stock is set.
+/* ===================================== INVENTORY ===================================== */
 function tracksStock(item){ return item.stock!=null; }
 function stockOnHand(item){ return (item.stock||0) + ((DB.received||{})[item.id]||0) - soldOf(item.id); }
 // reason-coded stock change: receive/transfer add or remove, waste removes, recount sets the on-hand
@@ -325,6 +345,7 @@ function todayStr(){ return new Date().toLocaleDateString("en-CA"); }
 function shiftDay(dstr, delta){ const d=new Date(dstr+"T12:00:00"); d.setDate(d.getDate()+delta); return d.toLocaleDateString("en-CA"); }
 function flash(msg){ let t=document.getElementById("toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.setAttribute("role","status"); t.setAttribute("aria-live","polite"); t.style.cssText="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--bad);color:#fff;padding:10px 16px;border-radius:8px;z-index:99;font-weight:600"; document.body.appendChild(t); } t.textContent=msg; t.style.display="block"; }
 // data ownership: your data is yours to take out. Everything below builds plain files from the local DB.
+/* ===================================== DATA & BACKUP ===================================== */
 function downloadFile(name, text, type){ const blob=new Blob([text],{type:type||"text/plain"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function csvCell(v){ v=(v==null?"":String(v)); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
 function csvRows(rows){ return rows.map(r=>r.map(csvCell).join(",")).join("\n"); }
@@ -728,6 +749,7 @@ function renderCustomerBar(app, station){
   }
   app.appendChild(c);
 }
+/* ===================================== INTAKE ===================================== */
 function renderIntake(app, station){
   if(!draft) draft = { lines:[] };
   renderCustomerBar(app, station);
@@ -905,6 +927,7 @@ function receiptPanel(r){
   const pr=document.createElement("button"); pr.className="primary"; pr.textContent="Print"; pr.onclick=()=>window.print(); wrap.appendChild(pr);
   return wrap;
 }
+/* ===================================== CHECKOUT ===================================== */
 function renderCheckout(app, station){
   const h=document.createElement("h2"); h.textContent=station.type==="central"?"Ready for pickup":station.label; app.appendChild(h);
   const recs=DB.records.filter(r=> r.status==="READY"||r.status==="PAID");

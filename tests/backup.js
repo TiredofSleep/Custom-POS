@@ -1,6 +1,6 @@
 const { chromium } = require('playwright-core');
 const fs = require('fs'), path = require('path');
-const url = 'file:///workspace/custom-pos/pos.html';
+const url = ('file://' + require('path').resolve(__dirname, '..', 'pos.html'));
 const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const TMP = process.env.SCRATCH || '/tmp';
 const FLOW = {
