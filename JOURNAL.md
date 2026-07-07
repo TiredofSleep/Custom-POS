@@ -861,4 +861,16 @@ the states are `FLOW.floor.states`, so a salon counts chair-turns and an auto sh
 line of special-case code. Nothing new to configure, nothing to switch on — seat a table and clear it and the
 math just accrues. The floor plan told you *where*; now it tells you *how fast*. Forty-six suites, all green.
 
+### Asking for a day
+A schedule that only ever flows one way — manager pencils you in, you find out — isn't really a schedule, it's
+a summons. So the grid learned to listen. A worker can **request a day off** right on their cell, with a reason
+if they want; it lands as **pending**, the cell shows *off?*, and a **manager queue** collects every open request
+in one place. Approve it and the day flips to a plain **OFF** — and, quietly, the software takes the worker's
+side: an approved day off **clears any shift that was there** and **blocks scheduling over it**, so nobody gets
+penciled onto a day they were promised free. Try it anyway and the grid stops you — *"Alex is approved off Wed —
+clear the day off first."* Change your mind and cancel; the day's schedulable again. It's the same
+un-publish-on-change honesty as the rest of the grid: approving a day off un-posts the week so the new version
+goes out clean. Small feature, real principle — the roster is now a conversation, and the default answer protects
+the person asking. Forty-seven suites, all green.
+
 *— to be continued —*

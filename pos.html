@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.45";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.46";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -214,7 +214,7 @@ function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FL
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{}}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[]}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -794,8 +794,24 @@ function shiftHrs(s){ const a=parseHM(s.start), b=parseHM(s.end); if(a==null||b=
 function staffShifts(id){ return (DB.shifts||[]).filter(s=>s.staffId===id); }
 function cellShift(id, day){ return (DB.shifts||[]).find(s=>s.staffId===id && s.day===day); }
 function weeklyHours(id){ return staffShifts(id).reduce((h,s)=>h+shiftHrs(s),0); }
+// --- time off: a worker requests a day, a manager approves; approved days block scheduling (worker-protective) ---
+function timeoffReq(id, day){ return (DB.timeoff||[]).find(t=>t.staffId===id && t.day===day && t.status!=="denied"); }
+function pendingTimeoff(){ return (DB.timeoff||[]).filter(t=>t.status==="pending"); }
+function requestTimeoff(id, name, day, reason){ DB=loadDB(); DB.timeoff=DB.timeoff||[];
+  if(DB.timeoff.some(t=>t.staffId===id && t.day===day && t.status!=="denied")){ render(); return; }   // one open request per day
+  DB.timeoff.push({ id:"T"+Date.now()+day, staffId:id, name, day, reason:reason||"", status:"pending", ts:Date.now() }); saveDB(DB); render();
+}
+function setTimeoff(reqId, status){ DB=loadDB(); const t=(DB.timeoff||[]).find(x=>x.id===reqId); if(!t) return;
+  t.status=status;
+  if(status==="approved"){ DB.shifts=(DB.shifts||[]).filter(s=>!(s.staffId===t.staffId && s.day===t.day));   // can't be both off and scheduled
+    DB.schedule=DB.schedule||{}; delete DB.schedule.published; delete DB.schedule.notified; }
+  saveDB(DB); render();
+}
 function setShift(id, day, start, end){
-  DB=loadDB(); DB.shifts=(DB.shifts||[]).filter(s=>!(s.staffId===id && s.day===day));
+  DB=loadDB();
+  if(start && end && (DB.timeoff||[]).some(t=>t.staffId===id && t.day===day && t.status==="approved")){
+    flash(((FLOW.staff||[]).find(s=>s.id===id)||{}).name+" is approved off "+SCHED_DAYS[day]+" — clear the day off first"); render(); return; }
+  DB.shifts=(DB.shifts||[]).filter(s=>!(s.staffId===id && s.day===day));
   if(start && end) DB.shifts.push({ id:"S"+Date.now()+day, staffId:id, day, start, end });
   DB.schedule=DB.schedule||{}; delete DB.schedule.published; delete DB.schedule.notified;   // any edit un-publishes (change requires re-publish)
   saveDB(DB); render();
@@ -818,22 +834,49 @@ function renderSchedule(app, station){
   staff.forEach(w=>{ const tr=document.createElement("tr"); const hrs=weeklyHours(w.id); const ot=hrs>OT_THRESHOLD;
     const name=document.createElement("td"); name.style.cssText="padding:6px;font-weight:600"; name.textContent=w.name; tr.appendChild(name);
     SCHED_DAYS.forEach((d,di)=>{ const td=document.createElement("td"); td.style.cssText="padding:3px;text-align:center";
-      const sh=cellShift(w.id, di); const b=document.createElement("button"); b.style.cssText="width:100%;padding:5px 4px;font-size:12px"; if(selCell&&selCell.id===w.id&&selCell.day===di) b.className="sel";
-      b.textContent= sh ? (sh.start+"–"+sh.end) : "+"; b.onclick=()=>{ selCell={ id:w.id, day:di }; render(); };
+      const sh=cellShift(w.id, di); const to=timeoffReq(w.id, di);
+      const b=document.createElement("button"); b.style.cssText="width:100%;padding:5px 4px;font-size:12px"; if(selCell&&selCell.id===w.id&&selCell.day===di) b.className="sel";
+      if(to && to.status==="approved"){ b.textContent="OFF"; b.style.opacity=".65"; b.title="Approved time off"; }
+      else if(to){ b.textContent="off?"; b.title="Time-off requested — pending"; }
+      else b.textContent= sh ? (sh.start+"–"+sh.end) : "+";
+      b.onclick=()=>{ selCell={ id:w.id, day:di }; render(); };
       td.appendChild(b); tr.appendChild(td); });
     const tot=document.createElement("td"); tot.style.cssText="padding:6px;text-align:center;font-weight:600"; tot.innerHTML=hrs.toFixed(1)+(ot?" <span class='pill flag'>OT</span>":""); tr.appendChild(tot);
     tbl.appendChild(tr); });
   wrap.appendChild(tbl); app.appendChild(wrap);
   // cell editor
-  if(selCell){ const w=staff.find(x=>x.id===selCell.id); const sh=cellShift(selCell.id, selCell.day)||{};
+  if(selCell){ const w=staff.find(x=>x.id===selCell.id); const sh=cellShift(selCell.id, selCell.day)||{}; const to=timeoffReq(selCell.id, selCell.day);
     const c=document.createElement("div"); c.className="card";
     c.innerHTML="<div class='row'><b>"+w.name+" · "+SCHED_DAYS[selCell.day]+"</b></div>";
-    const start=document.createElement("input"); start.type="time"; start.id="shiftStart"; start.value=sh.start||"09:00"; start.style.margin="0 8px 0 0";
-    const end=document.createElement("input"); end.type="time"; end.id="shiftEnd"; end.value=sh.end||"17:00";
-    const fld=document.createElement("div"); fld.className="fld"; fld.innerHTML="<span class='flab'>Shift</span>"; fld.appendChild(start); fld.appendChild(document.createTextNode(" to ")); fld.appendChild(end); c.appendChild(fld);
-    const save=document.createElement("button"); save.className="primary"; save.textContent="Save shift"; save.style.margin="8px 8px 0 0"; save.onclick=()=>{ setShift(selCell.id, selCell.day, start.value, end.value); selCell=null; }; c.appendChild(save);
-    if(sh.start){ const clr=document.createElement("button"); clr.textContent="Clear"; clr.style.marginTop="8px"; clr.onclick=()=>{ setShift(selCell.id, selCell.day, null, null); selCell=null; }; c.appendChild(clr); }
-    app.appendChild(c);
+    if(to && to.status==="approved"){
+      const note=document.createElement("div"); note.className="muted"; note.textContent="✓ Approved day off"+(to.reason?" — "+to.reason:"")+". Clear the day off to schedule a shift."; c.appendChild(note);
+    } else {
+      const start=document.createElement("input"); start.type="time"; start.id="shiftStart"; start.value=sh.start||"09:00"; start.style.margin="0 8px 0 0";
+      const end=document.createElement("input"); end.type="time"; end.id="shiftEnd"; end.value=sh.end||"17:00";
+      const fld=document.createElement("div"); fld.className="fld"; fld.innerHTML="<span class='flab'>Shift</span>"; fld.appendChild(start); fld.appendChild(document.createTextNode(" to ")); fld.appendChild(end); c.appendChild(fld);
+      const save=document.createElement("button"); save.className="primary"; save.textContent="Save shift"; save.style.margin="8px 8px 0 0"; save.onclick=()=>{ setShift(selCell.id, selCell.day, start.value, end.value); selCell=null; }; c.appendChild(save);
+      if(sh.start){ const clr=document.createElement("button"); clr.textContent="Clear"; clr.style.marginTop="8px"; clr.onclick=()=>{ setShift(selCell.id, selCell.day, null, null); selCell=null; }; c.appendChild(clr); }
+    }
+    // time-off controls — request (worker), approve/deny (manager), cancel an approved day off
+    const tw=document.createElement("div"); tw.style.cssText="margin-top:10px;border-top:1px solid var(--line);padding-top:8px";
+    if(!to){ const ri=document.createElement("input"); ri.id="offReason"; ri.placeholder="reason (optional)"; ri.style.cssText="margin-right:8px;max-width:180px";
+      const rb=document.createElement("button"); rb.textContent="Request day off"; rb.onclick=()=>{ requestTimeoff(selCell.id, w.name, selCell.day, ri.value); selCell=null; }; tw.appendChild(ri); tw.appendChild(rb);
+    } else if(to.status==="pending"){ const m=document.createElement("div"); m.className="muted"; m.textContent="Time-off requested"+(to.reason?": "+to.reason:""); tw.appendChild(m);
+      const ap=document.createElement("button"); ap.className="primary"; ap.textContent="Approve day off"; ap.style.margin="6px 8px 0 0"; ap.onclick=()=>{ setTimeoff(to.id,"approved"); selCell=null; }; tw.appendChild(ap);
+      const dn=document.createElement("button"); dn.textContent="Deny"; dn.style.marginTop="6px"; dn.onclick=()=>{ setTimeoff(to.id,"denied"); selCell=null; }; tw.appendChild(dn);
+    } else { const cancel=document.createElement("button"); cancel.textContent="Cancel day off"; cancel.onclick=()=>{ setTimeoff(to.id,"denied"); selCell=null; }; tw.appendChild(cancel); }
+    c.appendChild(tw); app.appendChild(c);
+  }
+  // manager queue — pending time-off requests at a glance
+  const pend=pendingTimeoff();
+  if(pend.length){ const q=document.createElement("div"); q.className="card"; q.innerHTML="<div class='row'><b>Time-off requests</b> <span class='pill'>"+pend.length+"</span></div>";
+    pend.forEach(t=>{ const row=document.createElement("div"); row.className="line";
+      row.innerHTML="<span>"+t.name+" · "+SCHED_DAYS[t.day]+(t.reason?" — "+t.reason:"")+"</span>";
+      const sp=document.createElement("span"); sp.className="spacer"; row.appendChild(sp);
+      const ap=document.createElement("button"); ap.className="primary"; ap.textContent="Approve"; ap.style.marginRight="6px"; ap.onclick=()=>setTimeoff(t.id,"approved"); row.appendChild(ap);
+      const dn=document.createElement("button"); dn.textContent="Deny"; dn.onclick=()=>setTimeoff(t.id,"denied"); row.appendChild(dn);
+      q.appendChild(row); });
+    app.appendChild(q);
   }
   // publish + notify
   const pub=document.createElement("div"); pub.className="card";

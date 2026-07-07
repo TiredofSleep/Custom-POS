@@ -1,6 +1,6 @@
 # Worker Rights and Scheduling
 
-> **Status (reconciled against the current build, engine v0.44).** Design intent handed over from a ClaudeChat
+> **Status (reconciled against the current build, engine v0.46).** Design intent handed over from a ClaudeChat
 > session — *not* implementation-ready. A growing foundation exists; much is still roadmap.
 >
 > **Already shipped (foundations to build on):** PIN **time-clock** (punches in `DB.punches`), **paid labor
@@ -17,10 +17,14 @@
 >   **break-rules engine** (`FLOW.labor`, worker-protective `LABOR_DEFAULTS`) surfaces a **meal-break reminder**
 >   once a shift passes the threshold with none taken — defaults protect workers even when the operator
 >   configures nothing; thresholds tune, the protection has no accidental off switch.
+> - **v0.46** — ✅ **time-off requests.** A worker requests a day off on the schedule grid (with a reason);
+>   it lands **pending** in a **manager approve/deny queue**. Approving flips the day to **OFF**, **clears any
+>   shift** already there, and **blocks scheduling over it** (the grid refuses and explains) — the default
+>   protects the person who asked. Approving un-publishes the week so the change goes out clean.
 >
 > **Net-new (this doc's remaining value):** rest-break reminders + enforceable rest-rules, the **coverage
-> marketplace**, **PTO / time-off**, **incident / injury reporting** + **panic button**, **state labor-law
-> modules**, the separate **worker portal**, and payroll / government export.
+> marketplace** (shift swaps), calendar-dated PTO **balances**, **incident / injury reporting** + **panic
+> button**, **state labor-law modules**, the separate **worker portal**, and payroll / government export.
 >
 > **Honor the design principle:** worker-protective **defaults**, **core-with-configuration** — an operator can
 > tune parameters but removing protections takes deliberate code editing, not a toggle.
