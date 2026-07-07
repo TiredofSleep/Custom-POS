@@ -226,7 +226,8 @@ function toggleQuotes(){ if(cfg.endpoints.quotes) delete cfg.endpoints.quotes; e
 function couponList(){ return Array.isArray(cfg.endpoints.discounts)?cfg.endpoints.discounts:[]; }
 function addCoupon(){ const list=couponList(); list.push({code:"SAVE10", pct:10}); cfg.endpoints.discounts=list; render(); }
 function removeCoupon(i){ const list=couponList(); list.splice(i,1); cfg.endpoints.discounts=list.length?list:true; render(); }
-function setTax(v){ v=Number(v)||0; if(v>0) cfg.endpoints.tax={rate:v/100}; else delete cfg.endpoints.tax; }
+function setTax(v){ v=Number(v)||0; const inc=cfg.endpoints.tax&&cfg.endpoints.tax.included; if(v>0){ cfg.endpoints.tax={rate:v/100}; if(inc) cfg.endpoints.tax.included=true; } else delete cfg.endpoints.tax; }
+function toggleTaxIncluded(){ if(!cfg.endpoints.tax) return; if(cfg.endpoints.tax.included) delete cfg.endpoints.tax.included; else cfg.endpoints.tax.included=true; render(); }
 /* ---- staff & time clock ---- */
 function addStaff(){ cfg.staff=cfg.staff||[]; cfg.staff.push({ id:uid(), name:"New person", pin:String(1000+cfg.staff.length) }); render(); }
 function removeStaff(i){ cfg.staff.splice(i,1); if(!cfg.staff.length) delete cfg.staff; render(); }
@@ -407,6 +408,7 @@ function render(){
         h('button',{class:cfg.endpoints.scan?'on':'', onclick:()=>toggleScan()},['barcode scan']),
         h('button',{class:cfg.endpoints.quotes?'on':'', onclick:()=>toggleQuotes()},['quotes / estimates']) ]),
       h('div',{class:'fld'},[ h('span',{class:'flab'},['Sales tax %']), h('input',{class:'sm',type:'number', step:'0.01', value:(cfg.endpoints.tax&&(cfg.endpoints.tax.rate*100))||'', placeholder:'0', oninput:e=>setTax(e.target.value)}),
+        h('button',{class:(cfg.endpoints.tax&&cfg.endpoints.tax.included)?'on':'', onclick:()=>toggleTaxIncluded()},[(cfg.endpoints.tax&&cfg.endpoints.tax.included)?'✓ tax included in price':'tax added on top']),
         h('span',{class:'flab'},['Deposit %']), h('input',{class:'sm',type:'number', value:(pay().deposit&&pay().deposit.pct)||'', placeholder:'0', oninput:e=>setDeposit(e.target.value)}),
         h('span',{class:'flab'},['Order timer']), h('select',{onchange:e=>setTimer(e.target.value)}, [["off","none"],["aging","prep timer (turns red)"],["due","promise-by / due date"]].map(([v,l])=>h('option',{value:v, selected:(cfg.timer?cfg.timer.mode:'off')===v},[l]))),
         h('span',{class:'flab'},['Max in queue']), h('input',{class:'sm',type:'number', value:(cfg.capacity&&cfg.capacity.max)||'', placeholder:'∞', oninput:e=>setCapacity(e.target.value)}) ])

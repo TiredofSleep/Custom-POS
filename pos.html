@@ -75,7 +75,7 @@
    THE FLOWS — businesses as config on ONE engine. Items carry `path` (workstations),
    `modifiers` (required choices), `addons` (suggested upsells), and `par` (86 count).
    ==========================================================================*/
-const CUSTOMPOS_VERSION = "0.34";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.35";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -216,14 +216,17 @@ function unbind(){ localStorage.removeItem(skey()); render(); }
 
 function lineSubtotal(r){ return r.lines.reduce((s,l)=> s + l.price*l.qty, 0); }
 function recordDiscount(r){ return Math.min(r.discount||0, lineSubtotal(r)); }
+function taxIncluded(){ return !!(FLOW.endpoints.tax && FLOW.endpoints.tax.included); }
 function recordTax(r){                                   // per-line taxable; rate from config; discount prorated
   const rate=(FLOW.endpoints.tax&&FLOW.endpoints.tax.rate)||0; if(!rate) return 0;
   const sub=lineSubtotal(r); if(sub<=0) return 0;
   const taxable=r.lines.filter(l=>l.taxable!==false && l.category!=="giftcard").reduce((s,l)=>s+l.price*l.qty,0);
-  const eff=taxable*(sub-recordDiscount(r))/sub;
-  return +(eff*rate).toFixed(2);
+  const eff=taxable*(sub-recordDiscount(r))/sub;                       // taxable base after prorated discount
+  return taxIncluded() ? +(eff*rate/(1+rate)).toFixed(2)              // VAT-style: tax is the portion already inside the price
+                       : +(eff*rate).toFixed(2);                       // added on top
 }
-function recordTotal(r){ return +(lineSubtotal(r) - recordDiscount(r) + recordTax(r) + (r.tip||0)).toFixed(2); }
+function recordNet(r){ return +(lineSubtotal(r) - recordDiscount(r) - (taxIncluded()?recordTax(r):0)).toFixed(2); }   // sales excluding tax
+function recordTotal(r){ return +(lineSubtotal(r) - recordDiscount(r) + (taxIncluded()?0:recordTax(r)) + (r.tip||0)).toFixed(2); }   // included tax is already inside the price
 function recordPaid(r){ return (r.tenders||[]).reduce((s,t)=> s + t.amount, 0); }
 function recordBalance(r){ return +(recordTotal(r) - recordPaid(r)).toFixed(2); }
 function firstPerformer(r){ const l=r.lines.find(x=>x.performer); return l?l.performer:null; }
@@ -362,7 +365,7 @@ function renderReport(app, station){
   let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0; const byTender={}, byCat={};
   done.forEach(r=>{ const rf=r.status==="REFUNDED";
     if(rf){ refunds += recordTotal(r); }
-    else { orders++; net += lineSubtotal(r)-recordDiscount(r); tax += recordTax(r); tips += r.tip||0; disc += recordDiscount(r);
+    else { orders++; net += recordNet(r); tax += recordTax(r); tips += r.tip||0; disc += recordDiscount(r);
       r.lines.forEach(l=>{ items += l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty; }); }
     (r.tenders||[]).forEach(t=>{ byTender[t.type]=(byTender[t.type]||0)+t.amount; });   // refund pushes offsetting negative tenders, so this nets
   });
@@ -843,7 +846,7 @@ function receiptPanel(r){
   const line=(l,v,b)=>"<div class='line'>"+(b?"<b>":"<span class='muted'>")+l+(b?"</b>":"</span>")+"<span class='spacer'></span>"+(b?"<b>":"<span>")+v+(b?"</b>":"</span>")+"</div>";
   const rows=r.lines.map(l=>"<div class='line'><span>"+l.qty+"× "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span></div>").join("");
   const hr="<hr style='border:none;border-top:1px dashed var(--line)'>";
-  const totals=(disc||tax?line("Subtotal",money(sub)):"")+(disc?line("Discount","−"+money(disc)):"")+(tax?line("Tax",money(tax)):"")+(tip?line("Tip",money(tip)):"")+line("Total",money(tot),true);
+  const totals=(disc||tax?line("Subtotal",money(sub)):"")+(disc?line("Discount","−"+money(disc)):"")+(tax?line(taxIncluded()?"Tax (incl.)":"Tax",money(tax)):"")+(tip?line("Tip",money(tip)):"")+line("Total",money(tot),true);
   const tenders=(r.tenders||[]).map(t=>line(t.type==="card"?("💳 "+t.brand+" ••"+t.last4):t.type[0].toUpperCase()+t.type.slice(1), money(t.amount))).join("");
   const wrap=document.createElement("div"); wrap.className="card"; wrap.style.borderColor="var(--brand)"; wrap.id="receipt";
   wrap.innerHTML="<div class='center'><b>"+FLOW.branding.name+"</b><div class='muted'>Order #"+r.number+" · "+r.createdAt+"</div></div>"+hr+rows+hr+totals+(tenders?hr+tenders:"")+"<p class='center muted' style='margin-top:8px'>Thank you!</p>";
@@ -901,7 +904,7 @@ function renderCheckout(app, station){
     const totLine=(lab,val)=>{ const d=document.createElement("div"); d.className="line"; d.innerHTML="<span class='muted'>"+lab+"</span><span class='spacer'></span><span>"+val+"</span>"; c.appendChild(d); };
     if(disc||tax){ totLine("Subtotal", money(sub)); }
     if(disc){ totLine("Discount", "−"+money(disc)); }
-    if(tax){ totLine("Tax", money(tax)); }
+    if(tax){ totLine(taxIncluded()?"Tax (incl.)":"Tax", money(tax)); }
     const t=document.createElement("div"); t.className="line"; t.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(t);
     if(r.status==="READY"&&bal>0.0001){ const paid=recordPaid(r);
       // split the check evenly N ways (opt-in) — each tap takes one equal share until the balance clears
