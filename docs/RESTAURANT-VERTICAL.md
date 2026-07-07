@@ -1,6 +1,6 @@
 # Restaurant Vertical Design Notes
 
-> **Status (reconciled against the current build, engine v0.39).** Design intent handed over from a ClaudeChat
+> **Status (reconciled against the current build, engine v0.45).** Design intent handed over from a ClaudeChat
 > session — *not* implementation-ready. Some already exists; the rest is roadmap.
 >
 > **Already shipped (configure, don't rebuild):** per-item routing + **fan-out** (production stations), an
@@ -16,9 +16,11 @@
 > "Full-service restaurant" builder template. It's the general spatial primitive (a table = a salon chair, an
 > auto bay, a spa room). The **drag-drop floor designer** now ships too (v0.42) — a builder canvas where you add
 > tables and drag them to lay out the real room (x,y persisted; the engine renders the spatial layout). Also
-> shipped: **course pacing / hold-until** (v0.41). Still net-new: covers/turn analytics per section.
+> shipped: **course pacing / hold-until** (v0.41), and **table turn-time analytics** (v0.45) — a turn runs
+> seated→cleared and the floor shows **turns today / average turn / covers served** (section filter already
+> scopes the view). Still net-new: per-section turn breakdown + a seat-time SLA.
 >
-> **Net-new (this doc's real value):** the **section auto-sorter**, **course pacing / hold-until**, **printers as
+> **Net-new (this doc's real value):** the **section auto-sorter**, **printers as
 > first-class flow nodes** + a print-format editor,
 > **bidirectional push** to servers (beyond board/tracker), and **category-level menu wizards** + menu import
 > (CSV/OCR/URL/PDF). Split checks exist but only "evenly N ways" — by-seat / by-item is net-new.
