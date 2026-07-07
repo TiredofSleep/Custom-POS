@@ -1,0 +1,45 @@
+name: deploy demo to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Publish a static site: the landing page + the builder + the engine + the self-contained one-file build.
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          node build.js                       # produces dist/custompos.html (engine inlined)
+          cp index.html builder.html pos.html _site/
+          cp dist/custompos.html _site/app.html
+          # land on the marketing page by default
+          cp index.html _site/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

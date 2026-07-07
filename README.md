@@ -6,6 +6,10 @@
   <em>No subscription. No lock-in. Your software, your machine, your data.</em>
 </p>
 
+<p align="center">
+  <a href="https://github.com/TiredofSleep/Custom-POS/actions/workflows/ci.yml"><img src="https://github.com/TiredofSleep/Custom-POS/actions/workflows/ci.yml/badge.svg" alt="tests"></a>
+</p>
+
 ---
 
 > **Status: working product, active build.** The public home of customPOS — generalized from a real,
@@ -94,6 +98,16 @@ The whole build story is in [JOURNAL.md](JOURNAL.md).
 - **The demo engine:** open [`pos.html`](pos.html) directly to play with the demo trades.
 - **Share a POS across devices:** `node hub.js` then open `http://<host>:8090/pos.html?hub=http://<host>:8090`
   on each device.
+
+### Run the tests
+```bash
+npm install
+npx playwright install chromium              # playwright-core ships no browser
+export CHROMIUM_EXE="$(node -e "console.log(require('playwright-core').chromium.executablePath())")"
+npm test                                     # runs every tests/*.js, fails on any console error
+```
+CI runs the same suite on every push (see the badge above). A GitHub Pages workflow publishes the landing page +
+builder + demo engine (`.github/workflows/pages.yml`).
 
 ## License
 
