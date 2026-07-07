@@ -37,6 +37,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `station-reorder.js` | builder flow editing — move a workstation earlier/later reorders the generated flow |
 | `pay-server.js` | the standalone payments service — health, auth gate, charge/decline/refund/void/inquire/terminal (sim provider) |
 | `floor.js` | floor / table state machine — tables render + color by state, advance through the service flow, jump states, section filter, persistence |
+| `coursing.js` | course pacing / hold-until — kitchen sees only fired courses, held courses wait, expo fires the next course |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

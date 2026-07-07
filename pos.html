@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.40";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.41";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -304,7 +304,15 @@ function composeNotify(r){
 }
 function lineComplete(l){ return l.stage >= l.path.length; }
 function allComplete(r){ return r.lines.every(lineComplete); }
-function linesAtStation(r, stationId){ return r.lines.filter(l => !lineComplete(l) && l.path[l.stage]===stationId); }
+// COURSE PACING: with coursing on, only fired courses reach the line; later courses hold until "fired".
+function coursingOn(){ return !!(FLOW.endpoints && FLOW.endpoints.coursing); }
+function courseOf(l){ return l.course||1; }
+function courseReleased(r, l){ return !coursingOn() || courseOf(l) <= (r.firedCourse||1); }
+function courseLabel(n){ const c=(FLOW.endpoints&&FLOW.endpoints.coursing&&FLOW.endpoints.coursing.labels)||FLOW.courses; return (c&&c[n-1]) || ("Course "+n); }
+function maxCourse(r){ return Math.max(1, ...r.lines.map(courseOf)); }
+function heldCourses(r){ return coursingOn() && (r.firedCourse||1) < maxCourse(r) && r.status==="INPROGRESS"; }
+function fireNextCourse(r){ r.firedCourse=(r.firedCourse||1)+1; saveDB(DB); render(); }
+function linesAtStation(r, stationId){ return r.lines.filter(l => !lineComplete(l) && courseReleased(r,l) && l.path[l.stage]===stationId); }
 function afterChange(r){ if(r.status==="INPROGRESS" && allComplete(r)) r.status="READY"; saveDB(DB); }
 
 /* --- TIMER / SLA service: one primitive, aging or back-scheduled-due, threshold colors --- */
@@ -640,16 +648,22 @@ function kdsChip(r){
   const cls = el>=k.badSec ? "bad" : el>=k.warnSec ? "warn" : "good";
   return "<span class='pill clock "+cls+"'>"+fmtDur(el)+"</span>";
 }
-function bumpRecord(r){ r.lines.forEach(l=>{ l.stage=(l.path||[]).length; }); r.bumpedAt=new Date().toISOString().slice(11,16); afterChange(r); render(); }
+// bump only fires the released (current-course) lines; held courses wait until fired
+function bumpRecord(r){ r.lines.forEach(l=>{ if(courseReleased(r,l)) l.stage=(l.path||[]).length; }); r.bumpedAt=new Date().toISOString().slice(11,16); afterChange(r); render(); }
 function renderKDS(app, station){
   app.innerHTML="<h2>"+station.label+"</h2><p class='muted'>Oldest first. Bump a ticket when it's up.</p>";
   const live=DB.records.filter(r=>r.status==="INPROGRESS").sort((a,b)=>(a.ts||0)-(b.ts||0));
   if(!live.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="All caught up — no tickets working."; app.appendChild(e); }
   live.forEach(r=>{ const c=document.createElement("div"); c.className="card";
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> "+kdsChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
-    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const where=lineComplete(l)?"ready":("at "+l.path[l.stage]);
+    const fc=r.firedCourse||1;
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> "+kdsChip(r)+(coursingOn()?" <span class='pill'>"+courseLabel(fc)+"</span>":"")+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    r.lines.filter(l=>courseReleased(r,l)).forEach(l=>{ const row=document.createElement("div"); row.className="line"; const where=lineComplete(l)?"ready":("at "+l.path[l.stage]);
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span class='muted'>"+where+"</span>"; c.appendChild(row); });
+    // held courses waiting to be fired
+    if(coursingOn()){ const held=r.lines.filter(l=>!courseReleased(r,l));
+      if(held.length){ const h=document.createElement("div"); h.className="muted"; h.style.marginTop="4px"; h.textContent="held: "+held.map(l=>l.qty+"× "+l.name).join(", ")+" ("+courseLabel(fc+1)+")"; c.appendChild(h); } }
     const bump=document.createElement("button"); bump.className="primary"; bump.textContent="Bump ✓"; bump.style.marginTop="10px"; bump.onclick=()=>{ bumpRecord(r); saveDB(DB); render(); }; c.appendChild(bump);
+    if(heldCourses(r)){ const fire=document.createElement("button"); fire.textContent="🔥 Fire "+courseLabel((r.firedCourse||1)+1); fire.style.margin="10px 0 0 8px"; fire.onclick=()=>fireNextCourse(r); c.appendChild(fire); }
     app.appendChild(c); });
 }
 
@@ -933,7 +947,7 @@ function addLine(item, choices, addons, flags, performer){
   const mods=[...Object.values(choices||{}), ...(addons||[])];
   const price=item.price + mods.reduce((s,m)=>s+(m.price||0),0);
   const modLabel=mods.map(m=>m.name).filter(Boolean).join(", ");
-  draft.lines.push({ id:"L"+Math.round(performance.now()), catId:item.id, name:item.name, modLabel, flags:(flags||[]).slice(), performer:performer||null, price, qty:1, category:item.category, path:item.path.slice(), stage:0 });
+  draft.lines.push({ id:"L"+Math.round(performance.now()), catId:item.id, name:item.name, modLabel, flags:(flags||[]).slice(), performer:performer||null, price, qty:1, category:item.category, path:item.path.slice(), stage:0, course:item.course||1 });
   render();
 }
 function sendDraft(){
