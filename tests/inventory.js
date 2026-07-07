@@ -48,9 +48,24 @@ const FLOW = {
   const rep = await T();
   const reorderOk = /Stock/.test(rep) && /to reorder/.test(rep) && /Widget/.test(rep) && /0 on hand/.test(rep);
   await p.locator('input.rcv').first().fill('5');
-  await p.getByRole('button',{name:/^Receive/}).first().click();
+  await p.locator('select.rcvreason').first().selectOption('Receive');
+  await p.getByRole('button',{name:/^Apply/}).first().click();
   const afterRcv = await T();
   const receivedOk = /5 on hand/.test(afterRcv) && !/to reorder/.test(afterRcv);
+
+  // waste 2 -> 3 on hand, logged as an adjustment
+  await p.locator('input.rcv').first().fill('2');
+  await p.locator('select.rcvreason').first().selectOption('Waste');
+  await p.getByRole('button',{name:/^Apply/}).first().click();
+  const afterWaste = await T();
+  const wasteOk = /3 on hand/.test(afterWaste) && /Adjustments/.test(afterWaste) && /Waste -2/.test(afterWaste);
+
+  // recount to exactly 10 -> on hand becomes 10 regardless of prior math
+  await p.locator('input.rcv').first().fill('10');
+  await p.locator('select.rcvreason').first().selectOption('Recount');
+  await p.getByRole('button',{name:/^Apply/}).first().click();
+  const afterRecount = await T();
+  const recountOk = /10 on hand/.test(afterRecount) && /Recount/.test(afterRecount);
 
   await b.close();
   console.log('start:', start.replace(/\n+/g,' | '));
@@ -62,6 +77,8 @@ const FLOW = {
   console.log('out-of-stock tile is disabled:', tileDisabled);
   console.log('Office reorder list flags the item (0 on hand):', reorderOk);
   console.log('receiving stock restores on-hand + clears reorder:', receivedOk);
+  console.log('waste removes stock + logs an adjustment:', wasteOk);
+  console.log('recount sets on-hand to the counted number:', recountOk);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!startOk||!lowOk||!outOk||!tileDisabled||!reorderOk||!receivedOk?1:0);
+  process.exit(errors.length||!startOk||!lowOk||!outOk||!tileDisabled||!reorderOk||!receivedOk||!wasteOk||!recountOk?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });

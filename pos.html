@@ -75,7 +75,7 @@
    THE FLOWS — businesses as config on ONE engine. Items carry `path` (workstations),
    `modifiers` (required choices), `addons` (suggested upsells), and `par` (86 count).
    ==========================================================================*/
-const CUSTOMPOS_VERSION = "0.35";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.36";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -189,7 +189,7 @@ function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FL
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[]}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[]}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -291,6 +291,16 @@ function is86(item){ return remainingOf(item) <= 0; }
 // INVENTORY: on-hand = starting stock + any received − everything sold. Tracked only when item.stock is set.
 function tracksStock(item){ return item.stock!=null; }
 function stockOnHand(item){ return (item.stock||0) + ((DB.received||{})[item.id]||0) - soldOf(item.id); }
+// reason-coded stock change: receive/transfer add or remove, waste removes, recount sets the on-hand
+const STOCK_REASONS = { "Receive":1, "Transfer in":1, "Transfer out":-1, "Waste":-1, "Recount":0 };
+function adjustStock(item, qty, reason){
+  qty=Number(qty)||0; if(!qty && reason!=="Recount") return;
+  const sign=STOCK_REASONS[reason]!=null?STOCK_REASONS[reason]:1;
+  const delta = reason==="Recount" ? +(qty - stockOnHand(item)) : sign*Math.abs(qty);
+  DB.received=DB.received||{}; DB.received[item.id]=(DB.received[item.id]||0)+delta;
+  DB.adjustLog=DB.adjustLog||[]; DB.adjustLog.push({ catId:item.id, name:item.name, reason, delta, at:new Date().toISOString().slice(11,16), day:todayStr() });
+  saveDB(DB); render();
+}
 function isLowStock(item){ return tracksStock(item) && stockOnHand(item) <= (item.reorderAt!=null?item.reorderAt:0); }
 function isOutOfStock(item){ return tracksStock(item) && stockOnHand(item) <= 0; }
 function needsConfig(item){ return (item.modifiers&&item.modifiers.length) || (item.addons&&item.addons.length) || (item.flags&&item.flags.length) || item.performer; }
@@ -396,7 +406,7 @@ function renderReport(app, station){
     lc.innerHTML+=L("Total hours", tot.toFixed(2)+" h", true) + (stillOn?"<div class='muted' style='margin-top:4px'>Some staff are still on the clock.</div>":"");
     app.appendChild(lc);
   }
-  // ---- inventory: on-hand + reorder list, with a receive-stock control ----
+  // ---- inventory: on-hand + reorder list, with reason-coded adjustments (receive / waste / transfer / recount) ----
   const tracked=FLOW.catalog.filter(tracksStock);
   if(tracked.length){
     const low=tracked.filter(isLowStock);
@@ -404,10 +414,15 @@ function renderReport(app, station){
     tracked.forEach(item=>{ const oh=stockOnHand(item); const row=document.createElement("div"); row.className="line";
       const status=isOutOfStock(item)?"<span class='pill x86'>out</span>":isLowStock(item)?"<span class='pill flag'>low</span>":"";
       row.innerHTML="<span>"+item.name+" "+status+"</span><span class='spacer'></span><span class='muted'>"+oh+" on hand</span>";
-      const qty=document.createElement("input"); qty.type="number"; qty.placeholder="qty"; qty.style.width="64px"; qty.style.margin="0 6px"; qty.className="rcv"; qty.dataset.cat=item.id;
-      const rb=document.createElement("button"); rb.textContent="Receive"; rb.style.padding="4px 10px";
-      rb.onclick=()=>{ const n=Number(qty.value); if(!n) return; DB.received=DB.received||{}; DB.received[item.id]=(DB.received[item.id]||0)+n; saveDB(DB); render(); };
-      row.appendChild(qty); row.appendChild(rb); ic.appendChild(row); });
+      const qty=document.createElement("input"); qty.type="number"; qty.placeholder="qty"; qty.style.width="60px"; qty.style.margin="0 6px"; qty.className="rcv"; qty.dataset.cat=item.id;
+      const sel=document.createElement("select"); sel.className="rcvreason"; Object.keys(STOCK_REASONS).forEach(rz=>{ const o=document.createElement("option"); o.value=rz; o.textContent=rz; sel.appendChild(o); });
+      const rb=document.createElement("button"); rb.textContent="Apply"; rb.style.padding="4px 10px"; rb.style.marginLeft="6px";
+      rb.onclick=()=>adjustStock(item, qty.value, sel.value);
+      row.appendChild(qty); row.appendChild(sel); row.appendChild(rb); ic.appendChild(row); });
+    // recent adjustments (audit trail for waste / transfers / recounts)
+    const log=(DB.adjustLog||[]).filter(a=>a.day===day && a.reason!=="Receive");
+    if(log.length){ const lg=document.createElement("div"); lg.className="muted"; lg.style.marginTop="8px"; lg.innerHTML="<b>Adjustments</b>";
+      log.slice(-8).forEach(a=>{ const d=document.createElement("div"); d.textContent=a.at+" · "+a.name+" · "+a.reason+" "+(a.delta>0?"+":"")+a.delta; lg.appendChild(d); }); ic.appendChild(lg); }
     app.appendChild(ic);
   }
   // ---- house accounts (A/R): who owes, with a record-payment to settle ----
