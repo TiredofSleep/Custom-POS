@@ -42,6 +42,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `schedule.js` | staff scheduling — weekly staff×day grid, set shifts, weekly hours + overtime flag, publish→notify, edit un-publishes |
 | `breaks.js` | worker-rights breaks + pay — on-shift action screen, start/end unpaid break, real-time earnings ($/h), meal-break reminder surfaced after 5h (worker-protective default) |
 | `turns.js` | table turn-time analytics — a turn runs from seated→cleared, floor shows turns today / average turn / covers served, cleared table returns to empty |
+| `timeoff.js` | time-off requests — worker requests a day off, manager queue + approve/deny, approved day shows OFF and blocks scheduling (worker-protective), cancel restores it |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
