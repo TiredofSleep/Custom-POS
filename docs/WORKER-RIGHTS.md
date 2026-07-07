@@ -1,6 +1,6 @@
 # Worker Rights and Scheduling
 
-> **Status (reconciled against the current build, engine v0.46).** Design intent handed over from a ClaudeChat
+> **Status (reconciled against the current build, engine v0.47).** Design intent handed over from a ClaudeChat
 > session — *not* implementation-ready. A growing foundation exists; much is still roadmap.
 >
 > **Already shipped (foundations to build on):** PIN **time-clock** (punches in `DB.punches`), **paid labor
@@ -21,10 +21,14 @@
 >   it lands **pending** in a **manager approve/deny queue**. Approving flips the day to **OFF**, **clears any
 >   shift** already there, and **blocks scheduling over it** (the grid refuses and explains) — the default
 >   protects the person who asked. Approving un-publishes the week so the change goes out clean.
+> - **v0.47** — ✅ **shift coverage.** A worker **offers** a shift (↔ marker); the manager **reassigns** it to
+>   a co-worker. Coverage refuses anyone **approved off** or **already scheduled** that day and **flags OT**, so
+>   getting a shift covered can't quietly turn into exploitation. Reassignment un-publishes the week.
 >
-> **Net-new (this doc's remaining value):** rest-break reminders + enforceable rest-rules, the **coverage
-> marketplace** (shift swaps), calendar-dated PTO **balances**, **incident / injury reporting** + **panic
-> button**, **state labor-law modules**, the separate **worker portal**, and payroll / government export.
+> **Net-new (this doc's remaining value):** rest-break reminders + enforceable rest-rules, worker-to-worker
+> **self-serve pickup** (the marketplace half — needs the portal), calendar-dated PTO **balances**, **incident /
+> injury reporting** + **panic button**, **state labor-law modules**, the separate **worker portal**, and
+> payroll / government export.
 >
 > **Honor the design principle:** worker-protective **defaults**, **core-with-configuration** — an operator can
 > tune parameters but removing protections takes deliberate code editing, not a toggle.

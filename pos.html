@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.46";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.47";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -807,6 +807,17 @@ function setTimeoff(reqId, status){ DB=loadDB(); const t=(DB.timeoff||[]).find(x
     DB.schedule=DB.schedule||{}; delete DB.schedule.published; delete DB.schedule.notified; }
   saveDB(DB); render();
 }
+// --- shift coverage: a worker offers a shift, the manager reassigns it to an eligible co-worker ---
+function offeredShifts(){ return (DB.shifts||[]).filter(s=>s.offered); }
+function offerShift(shiftId){ DB=loadDB(); const s=(DB.shifts||[]).find(x=>x.id===shiftId); if(s) s.offered=true; saveDB(DB); render(); }
+function cancelOffer(shiftId){ DB=loadDB(); const s=(DB.shifts||[]).find(x=>x.id===shiftId); if(s) delete s.offered; saveDB(DB); render(); }
+function coverShift(shiftId, toId){ DB=loadDB(); const s=(DB.shifts||[]).find(x=>x.id===shiftId); if(!s) return;
+  if((DB.timeoff||[]).some(t=>t.staffId===toId && t.day===s.day && t.status==="approved")){ flash("They're approved off that day"); render(); return; }
+  if((DB.shifts||[]).some(x=>x.staffId===toId && x.day===s.day)){ flash("They're already scheduled that day"); render(); return; }
+  s.staffId=toId; delete s.offered;
+  DB.schedule=DB.schedule||{}; delete DB.schedule.published; delete DB.schedule.notified;   // reassignment un-publishes
+  saveDB(DB); render();
+}
 function setShift(id, day, start, end){
   DB=loadDB();
   if(start && end && (DB.timeoff||[]).some(t=>t.staffId===id && t.day===day && t.status==="approved")){
@@ -838,6 +849,7 @@ function renderSchedule(app, station){
       const b=document.createElement("button"); b.style.cssText="width:100%;padding:5px 4px;font-size:12px"; if(selCell&&selCell.id===w.id&&selCell.day===di) b.className="sel";
       if(to && to.status==="approved"){ b.textContent="OFF"; b.style.opacity=".65"; b.title="Approved time off"; }
       else if(to){ b.textContent="off?"; b.title="Time-off requested — pending"; }
+      else if(sh && sh.offered){ b.textContent=sh.start+"–"+sh.end+" ↔"; b.title="Offered for coverage"; }
       else b.textContent= sh ? (sh.start+"–"+sh.end) : "+";
       b.onclick=()=>{ selCell={ id:w.id, day:di }; render(); };
       td.appendChild(b); tr.appendChild(td); });
@@ -856,6 +868,20 @@ function renderSchedule(app, station){
       const fld=document.createElement("div"); fld.className="fld"; fld.innerHTML="<span class='flab'>Shift</span>"; fld.appendChild(start); fld.appendChild(document.createTextNode(" to ")); fld.appendChild(end); c.appendChild(fld);
       const save=document.createElement("button"); save.className="primary"; save.textContent="Save shift"; save.style.margin="8px 8px 0 0"; save.onclick=()=>{ setShift(selCell.id, selCell.day, start.value, end.value); selCell=null; }; c.appendChild(save);
       if(sh.start){ const clr=document.createElement("button"); clr.textContent="Clear"; clr.style.marginTop="8px"; clr.onclick=()=>{ setShift(selCell.id, selCell.day, null, null); selCell=null; }; c.appendChild(clr); }
+      // shift coverage — offer this shift, then reassign it to an eligible co-worker
+      if(sh.id){ const cv=document.createElement("div"); cv.style.cssText="margin-top:10px;border-top:1px solid var(--line);padding-top:8px";
+        if(!sh.offered){ const off=document.createElement("button"); off.textContent="Offer for coverage"; off.onclick=()=>{ offerShift(sh.id); selCell=null; }; cv.appendChild(off); }
+        else { const m=document.createElement("div"); m.className="muted"; m.textContent="↔ Needs coverage — reassign to:"; cv.appendChild(m);
+          const opts=document.createElement("div"); opts.className="opts";
+          staff.filter(o=>o.id!==selCell.id).forEach(o=>{ const offday=timeoffReq(o.id, selCell.day); const busy=cellShift(o.id, selCell.day);
+            const blocked=(offday&&offday.status==="approved")||busy; const ot=(weeklyHours(o.id)+shiftHrs(sh))>OT_THRESHOLD;
+            const bt=document.createElement("button"); bt.textContent=o.name+(ot?" (OT)":""); if(blocked){ bt.disabled=true; bt.title=busy?"already scheduled that day":"approved off that day"; }
+            bt.onclick=()=>{ coverShift(sh.id, o.id); selCell=null; }; opts.appendChild(bt); });
+          cv.appendChild(opts);
+          const cancel=document.createElement("button"); cancel.textContent="Cancel offer"; cancel.style.marginTop="8px"; cancel.onclick=()=>{ cancelOffer(sh.id); selCell=null; }; cv.appendChild(cancel);
+        }
+        c.appendChild(cv);
+      }
     }
     // time-off controls — request (worker), approve/deny (manager), cancel an approved day off
     const tw=document.createElement("div"); tw.style.cssText="margin-top:10px;border-top:1px solid var(--line);padding-top:8px";
