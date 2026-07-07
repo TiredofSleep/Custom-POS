@@ -84,6 +84,11 @@ staff, commission, and a booking calendar). More business types to come.
   Onboarding a new merchant is one command: [`tools/validate-cardconnect.js`](tools/validate-cardconnect.js) runs
   the full Fiserv Integration-Validation transaction gauntlet against your UAT credentials and prints every
   retref mapped to the form's boxes (credentials come from env vars — no secrets in the repo).
+- ✅ **Payments service (any POS)** — [`payments/pay-server.js`](payments/pay-server.js): a standalone,
+  zero-dependency card-processing microservice. Gives customPOS *or a third-party POS* certified CardConnect
+  payments behind one neutral REST API (`/charge`, `/refund`, `/void`, `/inquire`, terminal + hosted-tokenizer) —
+  PCI SAQ-A (card data never touches it), a shared-key gate, and a simulator so you can integrate before any
+  merchant account exists. Full guide: [`payments/README.md`](payments/README.md).
 - ✅ **Multi-device hub** — [`hub.js`](hub.js), a zero-dependency Node sync server so several devices (each a
   different station) share one live POS. Sync is opt-in (`?hub=…`); the downloaded POS is fully local otherwise.
 - ✅ **One-click build** — `node build.js` → `dist/custompos.html`, a single self-contained file that runs the
