@@ -734,4 +734,21 @@ it **earlier / later** to reorder the whole pipeline — and the two big engine 
 up top and section markers throughout, so the next person (or the next Claude) can find their way. Thirty-nine
 suites, green — now provably, on someone else's computer.
 
+### The money on-ramp, from another bench
+A sibling Claude — running on the Arkadelphia assembly PC, against live Fiserv UAT — built the piece that turns
+the payments blueprint into a business: **`tools/validate-cardconnect.js`**, a one-command runner for the
+certified CardConnect/CardPointe integration. Getting a merchant approved by Fiserv means passing an "Integration
+Validation" gauntlet — a couple dozen specific transactions (card-not-present, customer-initiated, merchant-
+initiated/recurring, void, full and partial refund, and the card-present taps) whose retrefs you paste into a
+form, usually across several rounds of back-and-forth. This runs all of them and prints each retref mapped to its
+box. What makes it worth its weight is that it bakes in the rules that otherwise cost real round-trips to learn:
+the gateway wants a dollar *string* while the terminal wants integer *cents*; a $0 verification must use
+`capture:"N"` or it's rejected as "Invalid amount"; the CVV rides the initial capture and token-storage calls but
+never a stored-token reuse; recurring needs `cof:"M"` + `ecomind:"R"`; the $1,100.xx amounts are *supposed* to
+decline. Credentials come from env vars — no secrets in the file — and it uses Fiserv's public UAT test cards. It
+came in as a clean, additive commit on top of a green tree, so it fast-forwarded straight into `main`; the
+39-suite browser sweep is untouched (the runner needs live UAT creds, so it lives in `tools/`, outside the test
+runner). The free software stays free — and the one paid, opt-in path it rests on just got a lot easier to turn
+on. Thirty-nine suites, still green.
+
 *— to be continued —*

@@ -81,6 +81,9 @@ staff, commission, and a booking calendar). More business types to come.
   and the real **Hamburger Barn**) each ship with their trade's features already on. Live preview.
 - ✅ **Payments** — a processor-agnostic interface with a simulator that works out of the box; the certified
   CardConnect/CardPointe adapter ([docs/PAYMENTS-MODULE.md](docs/PAYMENTS-MODULE.md)) swaps in on your own server.
+  Onboarding a new merchant is one command: [`tools/validate-cardconnect.js`](tools/validate-cardconnect.js) runs
+  the full Fiserv Integration-Validation transaction gauntlet against your UAT credentials and prints every
+  retref mapped to the form's boxes (credentials come from env vars — no secrets in the repo).
 - ✅ **Multi-device hub** — [`hub.js`](hub.js), a zero-dependency Node sync server so several devices (each a
   different station) share one live POS. Sync is opt-in (`?hub=…`); the downloaded POS is fully local otherwise.
 - ✅ **One-click build** — `node build.js` → `dist/custompos.html`, a single self-contained file that runs the
