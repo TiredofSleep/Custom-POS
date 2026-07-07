@@ -12,8 +12,13 @@
   Docs: FLOW-SCHEMA.md · MODULE-LIBRARY.md · THE-MODEL.md
 -->
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>customPOS — engine skeleton</title>
+<!-- install-as-app: standalone display + home-screen icon (no service worker; the app is already offline via localStorage) -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1f6feb" id="themeColor">
 <style>
   :root { --brand:#1f6feb; --bg:#0f1115; --card:#181b22; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; --good:#2ea043; --warn:#e3893c; --bad:#d0433a; }
   * { box-sizing:border-box; }
@@ -69,7 +74,7 @@
    THE FLOWS — businesses as config on ONE engine. Items carry `path` (workstations),
    `modifiers` (required choices), `addons` (suggested upsells), and `par` (86 count).
    ==========================================================================*/
-const CUSTOMPOS_VERSION = "0.32";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.33";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -296,8 +301,23 @@ function salesCSV(day){ const d=loadDB(); const done=d.records.filter(r=>(r.stat
     ...done.map(r=>[r.number, r.createdAt||"", r.status, r.lines.map(l=>l.qty+"x "+l.name).join("; "), lineSubtotal(r).toFixed(2), recordDiscount(r).toFixed(2), recordTax(r).toFixed(2), (r.tip||0).toFixed(2), recordTotal(r).toFixed(2), (r.tenders||[]).map(t=>t.type+":"+t.amount).join("; ")])]); }
 function slug(){ return (FLOW.branding.name||"custompos").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
 function restoreBackup(text){ const obj=JSON.parse(text); const db=obj&&obj.data?obj.data:obj; if(!db||!Array.isArray(db.records)) throw new Error("not a customPOS backup"); localStorage.setItem(dkey(), JSON.stringify(db)); }
+// install-as-app: brand the manifest + theme with the business so "Add to Home Screen" shows the shop's name/color
+let __installReady=false;
+function setupInstall(){
+  if(__installReady) return; __installReady=true;
+  const name=FLOW.branding.name||"customPOS", color=FLOW.branding.brandColor||"#1f6feb";
+  const tc=document.getElementById("themeColor"); if(tc) tc.content=color;
+  const at=document.createElement("meta"); at.name="apple-mobile-web-app-title"; at.content=name; document.head.appendChild(at);
+  const letter=(name.trim()[0]||"C").toUpperCase();
+  const svg="<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'><rect width='512' height='512' rx='96' fill='"+color+"'/><text x='256' y='352' font-family='sans-serif' font-size='300' font-weight='bold' fill='#fff' text-anchor='middle'>"+letter+"</text></svg>";
+  const icon="data:image/svg+xml,"+encodeURIComponent(svg);
+  const manifest={ name, short_name:name.slice(0,12), display:"standalone", start_url:".", background_color:"#0f1115", theme_color:color, icons:[{src:icon, sizes:"any", type:"image/svg+xml"}] };
+  const link=document.createElement("link"); link.rel="manifest"; link.href=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:"application/manifest+json"})); document.head.appendChild(link);
+  const ai=document.createElement("link"); ai.rel="apple-touch-icon"; ai.href=icon; document.head.appendChild(ai);
+}
 function render(){
   DB = loadDB();
+  setupInstall();
   document.getElementById("brandDot").style.background = FLOW.branding.brandColor;
   document.getElementById("bizName").textContent = FLOW.branding.name;
   const station = boundStation();
