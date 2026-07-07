@@ -703,4 +703,13 @@ non-receive change lands in an **Adjustments** audit trail on the same card (tim
 owner can see where the shrinkage went — the "periodic loss/theft count" the plan always wanted. Same derived
 on-hand underneath; now it can go down for a reason, not just up. Thirty-seven suites, all green.
 
+### Data in, data out — the whole way
+Backup answered "get it all out"; the reviewers also wanted the everyday lists — prices, inventory, customers —
+to move both directions. So the Data & backup card rounded out. **Catalog (CSV)** exports every item with its
+price, category, barcode, and live on-hand — the price book an accountant or a spreadsheet wants. And **Import
+customers (CSV)** reads a `name, phone, points, gift, balance` file and merges it into the book, upserting by
+phone, so a shop switching from another system brings its regulars along instead of retyping them. Paired with
+the builder's item import, customPOS now takes data in and hands it back at every layer that matters — catalog,
+customers, sales, and the whole database — all plain CSV/JSON, all offline. Thirty-seven suites, all green.
+
 *— to be continued —*
