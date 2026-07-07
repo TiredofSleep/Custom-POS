@@ -75,7 +75,7 @@
    THE FLOWS — businesses as config on ONE engine. Items carry `path` (workstations),
    `modifiers` (required choices), `addons` (suggested upsells), and `par` (86 count).
    ==========================================================================*/
-const CUSTOMPOS_VERSION = "0.36";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.37";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -320,6 +320,12 @@ function customersCSV(){ const cs=(loadDB().customers||[]); return csvRows([["na
 function salesCSV(day){ const d=loadDB(); const done=d.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED") && dayOf(r.ts)===day);
   return csvRows([["order","time","status","items","subtotal","discount","tax","tip","total","tenders"],
     ...done.map(r=>[r.number, r.createdAt||"", r.status, r.lines.map(l=>l.qty+"x "+l.name).join("; "), lineSubtotal(r).toFixed(2), recordDiscount(r).toFixed(2), recordTax(r).toFixed(2), (r.tip||0).toFixed(2), recordTotal(r).toFixed(2), (r.tenders||[]).map(t=>t.type+":"+t.amount).join("; ")])]); }
+function catalogCSV(){ return csvRows([["name","price","category","barcode","taxable","on_hand","reorder_at"],
+  ...FLOW.catalog.map(i=>[i.name, i.price, i.category||"", i.barcode||"", i.taxable!==false, tracksStock(i)?stockOnHand(i):"", i.reorderAt!=null?i.reorderAt:""])]); }
+function importCustomersCSV(text){ const rows=(text||"").split(/\r?\n/).map(r=>r.trim()).filter(Boolean); const d=loadDB(); const byPhone=new Map((d.customers||[]).map(c=>[c.phone,c])); let n=0;
+  rows.forEach((row,i)=>{ const c=row.split(",").map(s=>s.trim()); if(i===0 && /name/i.test(c[0]) && /phone/i.test(c[1]||"")) return; const phone=c[1]; if(!phone) return;
+    const cust=byPhone.get(phone)||{phone}; cust.name=c[0]||cust.name; if(c[2]!==undefined&&c[2]!=="") cust.points=Number(c[2])||0; if(c[3]!==undefined&&c[3]!=="") cust.gift=Number(c[3])||0; if(c[4]!==undefined&&c[4]!=="") cust.balance=Number(c[4])||0; byPhone.set(phone,cust); n++; });
+  d.customers=[...byPhone.values()]; saveDB(d); return n; }
 function slug(){ return (FLOW.branding.name||"custompos").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
 function restoreBackup(text){ const obj=JSON.parse(text); const db=obj&&obj.data?obj.data:obj; if(!db||!Array.isArray(db.records)) throw new Error("not a customPOS backup"); localStorage.setItem(dkey(), JSON.stringify(db)); }
 // install-as-app: brand the manifest + theme with the business so "Add to Home Screen" shows the shop's name/color
@@ -469,11 +475,12 @@ function renderReport(app, station){
   const mkBtn=(label,fn,cls)=>{ const b=document.createElement("button"); if(cls) b.className=cls; b.textContent=label; b.style.margin="0 8px 8px 0"; b.onclick=fn; return b; };
   bk.appendChild(mkBtn("⬇ Backup (JSON)", ()=>downloadFile(slug()+"-backup-"+todayStr()+".json", backupJSON(), "application/json"), "primary"));
   bk.appendChild(mkBtn("⬇ Customers (CSV)", ()=>downloadFile(slug()+"-customers.csv", customersCSV(), "text/csv")));
+  bk.appendChild(mkBtn("⬇ Catalog (CSV)", ()=>downloadFile(slug()+"-catalog.csv", catalogCSV(), "text/csv")));
   bk.appendChild(mkBtn("⬇ Sales "+day+" (CSV)", ()=>downloadFile(slug()+"-sales-"+day+".csv", salesCSV(day), "text/csv")));
-  const rl=document.createElement("label"); rl.textContent="⬆ Restore backup"; rl.className="btn"; rl.style.cssText="display:inline-block;padding:9px 15px;border:1px solid var(--line);border-radius:8px;cursor:pointer";
-  const ri=document.createElement("input"); ri.type="file"; ri.accept=".json,application/json"; ri.id="restoreFile"; ri.style.display="none";
-  ri.onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ if(!confirm("Restore this backup? It replaces the current data on this device.")) return; restoreBackup(rd.result); flash("Backup restored"); render(); }catch(err){ flash("Not a valid backup file"); } }; rd.readAsText(f); };
-  rl.appendChild(ri); bk.appendChild(rl);
+  const fileBtn=(label,id,accept,handler)=>{ const l=document.createElement("label"); l.textContent=label; l.className="btn"; l.style.cssText="display:inline-block;padding:9px 15px;margin:0 8px 8px 0;border:1px solid var(--line);border-radius:8px;cursor:pointer";
+    const inp=document.createElement("input"); inp.type="file"; inp.accept=accept; inp.id=id; inp.style.display="none"; inp.onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>handler(rd.result); rd.readAsText(f); }; l.appendChild(inp); return l; };
+  bk.appendChild(fileBtn("⬆ Restore backup", "restoreFile", ".json,application/json", txt=>{ try{ if(!confirm("Restore this backup? It replaces the current data on this device.")) return; restoreBackup(txt); flash("Backup restored"); render(); }catch(err){ flash("Not a valid backup file"); } }));
+  bk.appendChild(fileBtn("⬆ Import customers (CSV)", "importCustFile", ".csv,text/csv", txt=>{ const n=importCustomersCSV(txt); flash(n?("Imported "+n+" customer"+(n>1?"s":"")):"No rows imported"); render(); }));
   app.appendChild(bk);
 }
 

@@ -28,7 +28,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `report-history.js` | the Z-report is scoped to a single day (fixes counting all history) + pages back through prior days |
 | `landing.js` | the customPOS.com landing page — pitch, honest monetization, trust FAQ, feature grid, CTA links, mobile no-overflow |
 | `import.js` | bulk item import — paste CSV (name/price/category/barcode), header auto-skip, into the built catalog |
-| `backup.js` | data ownership — JSON backup download, customers CSV export, and restore-from-backup replacing the DB |
+| `backup.js` | data ownership — JSON backup, customers/catalog CSV export, customer CSV import (merge by phone), restore-from-backup |
 | `build-stamp.js` | downloads carry a build banner + CUSTOMPOS_BUILD (version/date/business); CLAUDE.md + setup screen show the version |
 | `pwa.js` | install-as-app — a branded web manifest, theme-color, apple web-app meta, and a generated home-screen icon |
 | `hub-merge.js` | hub conflict resolution (unit) — version-aware last-write-wins: newer `upd` wins, stale push rejected, union add, seq-max |

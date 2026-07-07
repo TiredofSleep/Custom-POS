@@ -39,6 +39,18 @@ const FLOW = {
   const csv = fs.readFileSync(await dlC.path(),'utf8');
   const csvOk = /name,phone,points/.test(csv) && /Dana,5551234,5/.test(csv);
 
+  // ⬇ Catalog (CSV)
+  const [dlCat] = await Promise.all([ p.waitForEvent('download'), p.getByRole('button',{name:/Catalog \(CSV\)/}).click() ]);
+  const catCsv = fs.readFileSync(await dlCat.path(),'utf8');
+  const catOk = /name,price,category,barcode/.test(catCsv) && /Widget,10,retail/.test(catCsv);
+
+  // ⬆ Import customers (CSV) — a header + a new customer merges into the book
+  const custFile = path.join(TMP, 'cust-'+Date.now()+'.csv');
+  fs.writeFileSync(custFile, 'name,phone,points\nEli,5559999,12');
+  await p.locator('#importCustFile').setInputFiles(custFile);
+  await p.waitForTimeout(150);
+  const custImported = await p.evaluate(() => { const c=(loadDB().customers||[]).find(x=>x.phone==='5559999'); return !!c && c.name==='Eli' && c.points===12; });
+
   // ⬆ Restore — upload a 2-record backup and confirm it replaces the data
   const restoreFile = path.join(TMP, 'restore-'+Date.now()+'.json');
   const now = Date.now();
@@ -55,7 +67,9 @@ const FLOW = {
   console.log('\n=== RESULTS ===');
   console.log('JSON backup downloads the whole DB:', backupOk);
   console.log('customers export as CSV:', csvOk);
+  console.log('catalog exports as CSV:', catOk);
+  console.log('customers import from CSV (merge by phone):', custImported);
   console.log('restoring a backup replaces the data (2 orders):', restoreOk);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!backupOk||!csvOk||!restoreOk?1:0);
+  process.exit(errors.length||!backupOk||!csvOk||!catOk||!custImported||!restoreOk?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });
