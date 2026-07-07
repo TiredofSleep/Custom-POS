@@ -683,4 +683,14 @@ breaks. It's honest last-write-wins *at the record level*, not silent data loss 
 the "before you put this on the internet, add HTTPS and an access key" security note, is now written down in
 `docs/HUB-SYNC.md`. Thirty-six suites, all green.
 
+### Tax two ways
+The reviewers flagged an honest gap: the engine only knew how to *add* tax on top, but plenty of the world quotes
+prices with tax already **inside** — VAT, GST, a diner that lists "$110, tax included." So tax grew a second mode.
+Flip `tax.included` and a $110 ticket at 10% stays $110 at the register — but the engine now knows $10 of that is
+tax, labels the line *Tax (incl.)*, and in the Z-report reports **net sales of $100** with **$10 tax collected**,
+because net should never include the tax you're holding for the state. Added-on-top mode is untouched and still
+the default. It's the same prorated-discount, per-line-taxable math as before, just solved for the tax portion
+instead of adding it — one config flag, both worlds correct. The builder toggles it right next to the rate.
+Thirty-seven suites, all green.
+
 *— to be continued —*
