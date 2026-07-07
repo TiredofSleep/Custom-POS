@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  browser-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      # playwright-core ships no browser; fetch a Chromium and expose its path to the tests
+      - name: Install Chromium
+        run: npx --yes playwright@1.61.1 install --with-deps chromium
+
+      - name: Run the browser test suite
+        run: |
+          export CHROMIUM_EXE="$(node -e "console.log(require('playwright-core').chromium.executablePath())")"
+          echo "Using Chromium at $CHROMIUM_EXE"
+          npm test

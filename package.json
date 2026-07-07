@@ -1,0 +1,14 @@
+{
+  "name": "custompos",
+  "version": "0.38.0",
+  "description": "Build your own point-of-sale, download it, own the code. A free, config-driven POS builder.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node run-tests.js",
+    "hub": "node hub.js",
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.1"
+  }
+}
