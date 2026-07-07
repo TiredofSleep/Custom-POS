@@ -510,6 +510,7 @@ function render(){
     const staffRows=h('div',{}, staff.map((s,i)=>h('div',{class:'row2'},[
       h('input',{class:'nm', value:s.name, oninput:e=>s.name=e.target.value}),
       h('span',{class:'muted'},['PIN']), h('input',{class:'sm', value:s.pin, oninput:e=>s.pin=e.target.value.replace(/\D/g,'').slice(0,8)}),
+      h('span',{class:'muted'},['$/hr']), h('input',{class:'sm', value:s.wage||'', placeholder:'0', oninput:e=>{ const v=e.target.value.replace(/[^\d.]/g,''); if(v) s.wage=+v; else delete s.wage; }}),
       h('button',{class:'danger', onclick:()=>removeStaff(i)},['×'])
     ])));
     const wc=cfg.welcome||{};

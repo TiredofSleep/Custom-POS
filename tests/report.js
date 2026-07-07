@@ -41,7 +41,7 @@ const FLOW = {
   // ---- open the Office end-of-day report ----
   await changeTo(/^Office/);
   const rep = await T();
-  const laborOk = /Labor — hours today/.test(rep) && /Alex\s*2\.00 h/.test(rep) && /Total hours\s*2\.00 h/.test(rep);
+  const laborOk = /Labor — paid hours today/.test(rep) && /Alex\s*2\.00 h/.test(rep) && /Total hours\s*2\.00 h/.test(rep);
   const salesOk = /Orders\s*2/.test(rep) && /Items sold\s*2/.test(rep)
     && /Net sales\s*\$20\.00/.test(rep) && /Tax collected\s*\$2\.00/.test(rep)
     && /Total collected\s*\$22\.00/.test(rep);
