@@ -712,4 +712,15 @@ phone, so a shop switching from another system brings its regulars along instead
 the builder's item import, customPOS now takes data in and hands it back at every layer that matters — catalog,
 customers, sales, and the whole database — all plain CSV/JSON, all offline. Thirty-seven suites, all green.
 
+### Just this one item back
+Refunds reversed the whole ticket, but the counter reality is usually smaller: *the shirt was fine, she's just
+returning the tie.* So returns went line-level. In the back office, each refundable order now lists its items with
+tick-boxes; check the ones coming back, hit **Return selected**, and the engine refunds exactly their **share of
+the grand total** — proration and all — to the original tender, credits a house-account tie back if that's how it
+was paid, and marks those lines *returned*. The clever part is keeping the day honest: the Z-report treats a
+partly-returned order proportionally — net sales and tax shrink to just the items still sold, the returned money
+shows up under Refunds, and collected drops to match — while a full return (every line ticked) collapses into the
+same clean REFUNDED state as before. A $30 order, return the $20 item, and the books read exactly right: $10 sold,
+$1 tax, $22 refunded, $11 in the drawer. Thirty-eight suites, all green.
+
 *— to be continued —*
