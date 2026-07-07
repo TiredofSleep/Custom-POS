@@ -34,6 +34,11 @@
   button { font:inherit; color:var(--ink); background:#222834; border:1px solid var(--line); border-radius:8px; padding:9px 14px; cursor:pointer; }
   button:hover { border-color:var(--brand); } button:disabled { opacity:.4; cursor:default; }
   button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, label:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }   /* keyboard nav */
+  .floorgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; }
+  .tabletile { border:2px solid transparent; border-radius:12px; padding:12px 10px; color:#fff; text-align:left; cursor:pointer; min-height:76px; }
+  .tabletile small { display:block; opacity:.85; font-size:11px; margin-top:3px; }
+  .tabletile.warn { animation:tablepulse 1.1s ease-in-out infinite; }
+  @keyframes tablepulse { 0%,100%{ box-shadow:0 0 0 0 rgba(208,67,58,.0); border-color:transparent; } 50%{ box-shadow:0 0 0 3px rgba(208,67,58,.55); border-color:var(--bad); } }
   button.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
   button.good { background:var(--good); border-color:var(--good); color:#fff; }
   button.danger { border-color:var(--bad); color:var(--bad); }
@@ -93,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.39";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.40";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -195,7 +200,8 @@ const MODULES = {
   office:  { label:"Commission / reports",    stationTypes:["report"] },
   clock:   { label:"Time clock",              stationTypes:["timeclock"] },
   booking: { label:"Appointments",            stationTypes:["booking"] },
-  kds:     { label:"Kitchen display (bump)",  stationTypes:["kds"] }
+  kds:     { label:"Kitchen display (bump)",  stationTypes:["kds"] },
+  floor:   { label:"Floor / table plan",      stationTypes:["floor"] }
 };
 function enabledModules(flow){ const types=new Set(flow.stations.map(s=>s.type)); return Object.keys(MODULES).filter(m=>MODULES[m].stationTypes.some(t=>types.has(t))); }
 const STATUS_LABEL = { INPROGRESS:"In progress", READY:"Ready for pickup", PAID:"Ready for pickup", CLOSED:"Picked up" };
@@ -207,7 +213,7 @@ function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FL
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[]}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{}}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -396,6 +402,7 @@ function render(){
   else if(station.type==="timeclock")   renderTimeclock(app, station);
   else if(station.type==="booking")     renderBooking(app, station);
   else if(station.type==="kds")         renderKDS(app, station);
+  else if(station.type==="floor")       renderFloor(app, station);
 }
 
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
@@ -646,6 +653,60 @@ function renderKDS(app, station){
     app.appendChild(c); });
 }
 
+/* ===================================== FLOOR / TABLE STATE MACHINE =====================================
+   A spatial primitive: tables (or salon chairs, auto bays, spa rooms) that move through states over time.
+   Config: FLOW.floor { label, sections?, warnSec?, states?[{id,label,color,next}], tables:[{id,label,seats,section}] }.
+   Table state + since-timestamp live in DB.tables; the default state list is the restaurant service flow. */
+const FLOOR_STATES = [
+  { id:"empty",    label:"Empty",    color:"#5b6675", next:"assigned" },
+  { id:"assigned", label:"Seated",   color:"#c99a12", next:"greeted"  },
+  { id:"greeted",  label:"Greeted",  color:"#2f7bd6", next:"ordered"  },
+  { id:"ordered",  label:"Ordered",  color:"#1f5fb0", next:"food"     },
+  { id:"food",     label:"Food out", color:"#2ea043", next:"check"    },
+  { id:"check",    label:"Check",    color:"#c9711f", next:"paid"     },
+  { id:"paid",     label:"Paid",     color:"#9a5314", next:"bussing"  },
+  { id:"bussing",  label:"Bussing",  color:"#6f42c1", next:"empty"    }
+];
+function floorStates(){ return (FLOW.floor && FLOW.floor.states) || FLOOR_STATES; }
+function floorStateById(id){ return floorStates().find(s=>s.id===id) || floorStates()[0]; }
+function tableRec(t){ const r=(DB.tables||{})[t.id]; return { state:(r&&r.state)||floorStates()[0].id, since:(r&&r.since)||null }; }
+function setTableState(id, state){ DB=loadDB(); DB.tables=DB.tables||{}; DB.tables[id]={ state, since:Date.now() }; saveDB(DB); render(); }
+function renderFloor(app, station){
+  const cfg=FLOW.floor||{ tables:[] };
+  app.innerHTML="<h2>"+station.label+"</h2>";
+  const tables=(cfg.tables||[]).filter(t=> !floorSection || (t.section||"")===floorSection);
+  const sections=cfg.sections || [...new Set((cfg.tables||[]).map(t=>t.section).filter(Boolean))];
+  // section filter (server sees a section; manager sees all)
+  if(sections.length){ const bar=document.createElement("div"); bar.className="opts"; bar.style.marginBottom="10px";
+    const mk=(lab,val)=>{ const b=document.createElement("button"); if(floorSection===val) b.className="sel"; b.textContent=lab; b.onclick=()=>{ floorSection=val; selTable=null; render(); }; bar.appendChild(b); };
+    mk("All", null); sections.forEach(s=>mk(s, s)); app.appendChild(bar); }
+  // at-a-glance: how many tables are occupied (not empty)
+  const occupied=tables.filter(t=>tableRec(t).state!=="empty").length;
+  const meta=document.createElement("p"); meta.className="muted"; meta.style.margin="0 0 10px"; meta.textContent=occupied+" of "+tables.length+" tables occupied · tap a table to advance it"; app.appendChild(meta);
+  // the grid — each table colored by state, minutes-in-state, pulsing if it's been sitting too long
+  const grid=document.createElement("div"); grid.className="floorgrid";
+  const warn=cfg.warnSec||600;
+  tables.forEach(t=>{ const tr=tableRec(t); const st=floorStateById(tr.state); const el=tr.since?(Date.now()-tr.since)/1000:0;
+    const b=document.createElement("button"); b.className="tabletile"+(tr.since&&el>=warn&&st.id!=="empty"?" warn":""); b.style.background=st.color; b.dataset.table=t.id;
+    b.innerHTML="<b>"+ (t.label||t.id) +"</b> <span style='float:right;font-size:12px'>"+st.label+"</span>"
+      +"<small>"+(t.seats?t.seats+" seats":"")+(t.section?" · "+t.section:"")+"</small>"
+      +"<small>"+(tr.since?fmtDur(el)+" in state":"—")+"</small>";
+    b.onclick=()=>{ selTable=(selTable===t.id?null:t.id); render(); };
+    grid.appendChild(b); });
+  app.appendChild(grid);
+  // selected table: advance to the next state, or jump to any state
+  if(selTable){ const t=(cfg.tables||[]).find(x=>x.id===selTable);
+    if(t){ const tr=tableRec(t); const st=floorStateById(tr.state); const nx=st.next?floorStateById(st.next):null;
+      const c=document.createElement("div"); c.className="card"; c.style.marginTop="12px";
+      c.innerHTML="<div class='row'><b>"+(t.label||t.id)+"</b> <span class='pill'>"+st.label+"</span><span class='spacer'></span><span class='muted'>"+(t.seats?t.seats+" seats":"")+"</span></div>";
+      if(nx){ const adv=document.createElement("button"); adv.className="primary"; adv.textContent="→ "+nx.label; adv.style.margin="4px 8px 8px 0"; adv.onclick=()=>{ setTableState(t.id, nx.id); }; c.appendChild(adv); }
+      const jump=document.createElement("div"); jump.className="opts";
+      floorStates().forEach(s=>{ const b=document.createElement("button"); if(s.id===st.id) b.className="sel"; b.textContent=s.label; b.onclick=()=>setTableState(t.id, s.id); jump.appendChild(b); });
+      c.appendChild(jump); app.appendChild(c);
+    }
+  }
+}
+
 /* STATUS BOARD — internal broadcast: every live record by status, read-only, with location + clock */
 function renderBoard(app, station){
   app.innerHTML="<h2>"+station.label+"</h2>";
@@ -706,6 +767,8 @@ let receiptOpen = {};  // which orders have their receipt open
 let pinBuf = "";       // time-clock PIN entry buffer
 let clockWelcome = null; // {name, inbound} — the welcome/goodbye screen shown right after a punch
 let reportDay = null;  // which day the Z-report shows (YYYY-MM-DD, local); null = today
+let selTable = null;   // floor plan: the table currently opened
+let floorSection = null; // floor plan: active section filter (null = all)
 function attachCustomer(phone, name){
   phone=(phone||"").trim(); if(!phone) return;
   DB=loadDB(); const found=(DB.customers||[]).find(c=>c.phone===phone);

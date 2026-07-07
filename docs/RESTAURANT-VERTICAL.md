@@ -9,8 +9,15 @@
 > checks**, **tips + per-provider commission**, a **status board** + customer/staff **order tracker**,
 > **capacity/pacing**, and item **modifiers / add-ons / flags** (a lightweight item wizard).
 >
-> **Net-new (this doc's real value):** the spatial **floor plan + table state machine**, the **section
-> auto-sorter**, **course pacing / hold-until**, **printers as first-class flow nodes** + a print-format editor,
+> **✅ Shipped since this doc arrived (v0.40):** the **floor / table state machine** — a `floor` station with a
+> config-driven table grid (`FLOW.floor.tables`), a default restaurant state flow (Empty→Seated→Greeted→Ordered→
+> Food out→Check→Paid→Bussing, each with a color + `next`, overridable via `FLOW.floor.states`), minutes-in-state
+> timers with a warn-pulse, section filter (server vs. manager view), tap-to-advance / jump-to-any-state, and a
+> "Full-service restaurant" builder template. It's the general spatial primitive (a table = a salon chair, an
+> auto bay, a spa room). Still net-new on top of it: a **drag-drop floor designer** and covers/turn analytics.
+>
+> **Net-new (this doc's real value):** the **section auto-sorter**, **course pacing / hold-until**, **printers as
+> first-class flow nodes** + a print-format editor,
 > **bidirectional push** to servers (beyond board/tracker), and **category-level menu wizards** + menu import
 > (CSV/OCR/URL/PDF). Split checks exist but only "evenly N ways" — by-seat / by-item is net-new.
 >
