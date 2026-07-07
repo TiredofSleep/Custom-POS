@@ -44,8 +44,11 @@ const FLOW = {
   await enterPin('9999');
   const stillClock = /Enter your PIN/.test(await T());
 
-  // Alex punches out -> goodbye, then On the clock empties
+  // Alex re-enters PIN -> on-shift action screen (break / clock out), then clocks out -> goodbye, then empties
   await enterPin('1234');
+  const action = await T();
+  const actionOk = /Hi Alex/i.test(action) && /Clock out/i.test(action) && /Start break/i.test(action);
+  await p.getByRole('button',{name:/^Clock out/}).click();
   const bye = await T();
   const byeOk = /Thanks, Alex/i.test(bye) && /Clocked out/i.test(bye);
   await p.getByRole('button',{name:/^Done/}).click();
@@ -58,8 +61,9 @@ const FLOW = {
   console.log('PIN clock-in shows welcome + message + specials:', welcomeOk);
   console.log('after start shift, staff shows On the clock:', onClockOk);
   console.log('wrong PIN rejected, pad still shown (no crash):', stillClock);
-  console.log('PIN again clocks out with a goodbye:', byeOk);
+  console.log('re-entering PIN shows the on-shift action screen:', actionOk);
+  console.log('clock out gives a goodbye:', byeOk);
   console.log('after clock-out, nobody on the clock:', empty);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!moduleOk||!welcomeOk||!onClockOk||!stillClock||!byeOk||!empty?1:0);
+  process.exit(errors.length||!moduleOk||!welcomeOk||!onClockOk||!stillClock||!actionOk||!byeOk||!empty?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });

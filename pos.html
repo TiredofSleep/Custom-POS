@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.43";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.44";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -460,11 +460,11 @@ function renderReport(app, station){
   cnt.appendChild(inp); cnt.appendChild(diff); dc.appendChild(cnt); app.appendChild(dc);
   // ---- labor: hours off the time clock (closes the loop with the timeclock station) ----
   if((DB.punches||[]).length){
-    const now=Date.now(); const byStaff={}; let stillOn=false;
-    DB.punches.forEach(pn=>{ if(!pn.out) stillOn=true; byStaff[pn.name]=(byStaff[pn.name]||0)+((pn.out?pn.outTs:now)-pn.inTs)/3600000; });
-    const lc=document.createElement("div"); lc.className="card"; lc.innerHTML="<div class='row'><b>Labor — hours today</b></div>";
+    const byStaff={}; let stillOn=false; let onBrk=false;
+    DB.punches.forEach(pn=>{ if(!pn.out) stillOn=true; if(onBreak(pn)) onBrk=true; byStaff[pn.name]=(byStaff[pn.name]||0)+workedMs(pn)/3600000; });   // paid time = clocked minus unpaid breaks
+    const lc=document.createElement("div"); lc.className="card"; lc.innerHTML="<div class='row'><b>Labor — paid hours today</b></div>";
     let tot=0; Object.keys(byStaff).forEach(n=>{ tot+=byStaff[n]; lc.innerHTML+=L(n, byStaff[n].toFixed(2)+" h"); });
-    lc.innerHTML+=L("Total hours", tot.toFixed(2)+" h", true) + (stillOn?"<div class='muted' style='margin-top:4px'>Some staff are still on the clock.</div>":"");
+    lc.innerHTML+=L("Total hours", tot.toFixed(2)+" h", true) + (stillOn?"<div class='muted' style='margin-top:4px'>Some staff are still on the clock"+(onBrk?" (some on break)":"")+".</div>":"");
     app.appendChild(lc);
   }
   // ---- inventory: on-hand + reorder list, with reason-coded adjustments (receive / waste / transfer / recount) ----
@@ -553,34 +553,72 @@ function renderReport(app, station){
 }
 
 /* TIME CLOCK — staff punch in/out by PIN, then a welcome screen (daily message + specials + encouragement).
-   Config: FLOW.staff [{id,name,pin}] and optional FLOW.welcome {message, specials:[...]}. Punches land in DB.punches. */
+   v0.44 adds worker-rights Phase 2: unpaid BREAKS (start/end), REAL-TIME EARNINGS while on shift, and a
+   worker-protective BREAK-RULES engine (meal/rest reminders surfaced by default; operators tune, they don't
+   silently remove). Config: FLOW.staff [{id,name,pin,wage?}], optional FLOW.welcome {message,specials:[...]},
+   optional FLOW.labor {mealAfterHrs,mealMins,restEveryHrs,restMins}. Punches land in DB.punches. */
 const CLOCK_CHEERS = ["Have a great shift!","You've got this.","Thanks for being here.","Let's make it a good one.","The team's glad you're on today."];
+// worker-protective defaults — a shop that configures nothing still reminds workers of their breaks
+const LABOR_DEFAULTS = { mealAfterHrs:5, mealMins:30, restEveryHrs:4, restMins:10 };
+function laborRules(){ return Object.assign({}, LABOR_DEFAULTS, (FLOW.labor)||{}); }
+const nowHM = () => new Date().toTimeString().slice(0,5);   // local HH:MM (matches the wall clock the worker sees)
 function openPunch(staffId){ return (DB.punches||[]).find(p=>p.staffId===staffId && !p.out); }
-function hoursToday(staffId){ const now=Date.now(); return (DB.punches||[]).filter(p=>p.staffId===staffId).reduce((s,p)=> s + ((p.out? p.outTs : now) - p.inTs), 0)/3600000; }
-function punch(staff){
-  const open=openPunch(staff.id); const hhmm=new Date().toISOString().slice(11,16);
-  if(open){ open.out=hhmm; open.outTs=Date.now(); clockWelcome={ name:staff.name, inbound:false }; }
-  else { DB.punches.push({ staffId:staff.id, name:staff.name, in:hhmm, inTs:Date.now(), out:null, outTs:null }); clockWelcome={ name:staff.name, inbound:true }; }
-  pinBuf=""; saveDB(DB); render();
+function onBreak(p){ return !!(p && (p.breaks||[]).some(b=>!b.end)); }
+function curBreak(p){ return p && (p.breaks||[]).find(b=>!b.end); }
+function breakMs(p){ const now=Date.now(); return (p.breaks||[]).reduce((s,b)=> s + ((b.end?b.endTs:now)-b.startTs), 0); }
+function workedMs(p){ const now=Date.now(); return Math.max(0, ((p.out?p.outTs:now)-p.inTs) - breakMs(p)); }  // paid time = clocked minus unpaid breaks
+function hoursToday(staffId){ return (DB.punches||[]).filter(p=>p.staffId===staffId).reduce((s,p)=> s + workedMs(p), 0)/3600000; }
+function staffWage(staffId){ const s=(FLOW.staff||[]).find(x=>x.id===staffId); return (s&&+s.wage)||0; }
+function earnedToday(staffId){ return hoursToday(staffId) * staffWage(staffId); }
+// worker-protective reminder: due a meal break once past mealAfterHrs with none taken yet
+function breakDue(p){ if(!p) return null; const r=laborRules(); if(onBreak(p)) return null;
+  const worked=workedMs(p)/3600000;
+  const tookMeal=(p.breaks||[]).some(b=> b.end && (b.endTs-b.startTs)/60000 >= r.mealMins*0.6 );
+  if(r.mealAfterHrs && worked>=r.mealAfterHrs && !tookMeal)
+    return "You've worked "+worked.toFixed(1)+" h — you're due a "+r.mealMins+"-minute meal break.";
+  return null;
 }
+function clockIn(staff){ DB.punches.push({ staffId:staff.id, name:staff.name, in:nowHM(), inTs:Date.now(), out:null, outTs:null, breaks:[], wage:+staff.wage||0 }); clockWelcome={ name:staff.name, inbound:true }; clockAction=null; pinBuf=""; saveDB(DB); render(); }
+function clockOut(staff){ const p=openPunch(staff.id); if(!p) return; const b=curBreak(p); if(b){ b.end=nowHM(); b.endTs=Date.now(); } p.out=nowHM(); p.outTs=Date.now(); clockWelcome={ name:staff.name, inbound:false, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); render(); }
+function startBreak(staff){ const p=openPunch(staff.id); if(!p||onBreak(p)) return; p.breaks.push({ start:nowHM(), startTs:Date.now(), end:null, endTs:null }); saveDB(DB); render(); }
+function endBreak(staff){ const p=openPunch(staff.id); const b=curBreak(p); if(!b) return; b.end=nowHM(); b.endTs=Date.now(); saveDB(DB); render(); }
 function renderTimeclock(app, station){
   const staff=FLOW.staff||[];
+  // keep real-time earnings ticking while anyone is on the clock (guarded to this station only)
+  if(clockTimer){ clearInterval(clockTimer); clockTimer=null; }
+  if(staff.some(s=>openPunch(s.id))) clockTimer=setInterval(()=>{ const st=boundStation(); if(st&&st.type==="timeclock") render(); }, 30000);
   // welcome / goodbye screen right after a punch
   if(clockWelcome){
     const w=clockWelcome; const wel=document.createElement("div"); wel.className="card"; wel.style.textAlign="center";
     const cheer=CLOCK_CHEERS[w.name.length % CLOCK_CHEERS.length];  // deterministic (no Math.random in the engine)
     if(w.inbound){
-      wel.innerHTML="<h2 style='margin:6px 0'>👋 Welcome, "+w.name+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked in at "+new Date().toISOString().slice(11,16)+" · "+cheer+"</div>";
+      wel.innerHTML="<h2 style='margin:6px 0'>👋 Welcome, "+w.name+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked in at "+nowHM()+" · "+cheer+"</div>";
       const wc=FLOW.welcome||{};
       if(wc.message){ const m=document.createElement("div"); m.className="line"; m.style.justifyContent="center"; m.innerHTML="<span>"+wc.message+"</span>"; wel.appendChild(m); }
       if((wc.specials||[]).length){ const s=document.createElement("div"); s.style.marginTop="8px"; s.innerHTML="<b>Today's specials</b>"; (wc.specials||[]).forEach(sp=>{ const d=document.createElement("div"); d.className="muted"; d.textContent="• "+sp; s.appendChild(d); }); wel.appendChild(s); }
     } else {
-      wel.innerHTML="<h2 style='margin:6px 0'>✅ Thanks, "+w.name+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked out · "+hoursToday(staff.find(x=>x.name===w.name)?.id ?? -1).toFixed(2)+" h today. See you next time.</div>";
+      const wg=staffWage(w.staffId); const paid = wg? " · earned $"+earnedToday(w.staffId).toFixed(2):"";
+      wel.innerHTML="<h2 style='margin:6px 0'>✅ Thanks, "+w.name+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked out · "+hoursToday(w.staffId).toFixed(2)+" h today"+paid+". See you next time.</div>";
     }
     const ok=document.createElement("button"); ok.className="primary"; ok.textContent=w.inbound?"Start shift":"Done"; ok.onclick=()=>{ clockWelcome=null; render(); }; wel.appendChild(ok);
     app.appendChild(wel); return;
   }
-  app.innerHTML="<h2>"+station.label+"</h2><p class='muted'>Enter your PIN to clock in or out.</p>";
+  // on-shift action screen — break / clock out / live earnings (shown after a clocked-in worker enters their PIN)
+  if(clockAction){
+    const s=staff.find(x=>x.id===clockAction.staffId); const p=s&&openPunch(s.id);
+    if(!s||!p){ clockAction=null; render(); return; }
+    const card=document.createElement("div"); card.className="card";
+    card.innerHTML="<h2 style='margin:2px 0'>Hi "+s.name+"</h2><div class='muted'>On since "+p.in+" · "+(workedMs(p)/3600000).toFixed(2)+" h worked"+(breakMs(p)? " · "+(breakMs(p)/60000).toFixed(0)+" min on break":"")+"</div>";
+    if(staffWage(s.id)){ const e=document.createElement("div"); e.className="line"; e.style.fontSize="18px"; e.innerHTML="<span>Earned this shift</span><span class='spacer'></span><b>$"+earnedToday(s.id).toFixed(2)+"</b>"; e.title="at $"+staffWage(s.id).toFixed(2)+"/h"; card.appendChild(e); }
+    const due=breakDue(p); if(due){ const d=document.createElement("div"); d.className="line"; d.style.cssText="background:#5a3a12;color:#ffdca8;border-radius:6px;padding:8px;margin-top:6px"; d.textContent="⏰ "+due; card.appendChild(d); }
+    const btns=document.createElement("div"); btns.style.cssText="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px";
+    if(onBreak(p)){ const b=curBreak(p); const eb=document.createElement("button"); eb.className="primary"; eb.textContent="End break (since "+b.start+")"; eb.onclick=()=>endBreak(s); btns.appendChild(eb); }
+    else { const sb=document.createElement("button"); sb.textContent="Start break"; sb.onclick=()=>startBreak(s); btns.appendChild(sb); }
+    const co=document.createElement("button"); co.textContent="Clock out"; co.style.background="var(--bad)"; co.style.color="#fff"; co.onclick=()=>clockOut(s); btns.appendChild(co);
+    const back=document.createElement("button"); back.textContent="Back"; back.onclick=()=>{ clockAction=null; render(); }; btns.appendChild(back);
+    card.appendChild(btns); app.appendChild(card); return;
+  }
+  app.innerHTML="<h2>"+station.label+"</h2><p class='muted'>Enter your PIN to clock in, take a break, or clock out.</p>";
   if(!staff.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No staff configured. Add staff (name + PIN) in the builder."; app.appendChild(e); return; }
   // PIN pad
   const pad=document.createElement("div"); pad.className="card"; pad.style.maxWidth="260px";
@@ -590,13 +628,14 @@ function renderTimeclock(app, station){
   ["1","2","3","4","5","6","7","8","9"].forEach(d=>{ const b=document.createElement("button"); b.textContent=d; b.onclick=()=>press(d); grid.appendChild(b); });
   const clr=document.createElement("button"); clr.textContent="⌫"; clr.onclick=()=>{ pinBuf=pinBuf.slice(0,-1); render(); }; grid.appendChild(clr);
   const zero=document.createElement("button"); zero.textContent="0"; zero.onclick=()=>press("0"); grid.appendChild(zero);
-  const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=()=>{ const who=staff.find(s=>String(s.pin)===pinBuf); if(who){ punch(who); } else { pinBuf=""; flash("PIN not recognized"); render(); } }; grid.appendChild(ent);
+  const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=()=>{ const who=staff.find(s=>String(s.pin)===pinBuf); if(who){ if(openPunch(who.id)){ clockAction={staffId:who.id}; pinBuf=""; render(); } else clockIn(who); } else { pinBuf=""; flash("PIN not recognized"); render(); } }; grid.appendChild(ent);
   pad.appendChild(grid); app.appendChild(pad);
-  // who's on the clock
+  // who's on the clock — with live hours, break state, and (if waged) earnings
   const on=staff.filter(s=>openPunch(s.id));
   const oc=document.createElement("div"); oc.className="card"; oc.innerHTML="<div class='row'><b>On the clock</b></div>";
   if(!on.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="Nobody clocked in."; oc.appendChild(e); }
-  on.forEach(s=>{ const p=openPunch(s.id); const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+s.name+"</span><span class='spacer'></span><span class='muted'>in "+p.in+" · "+hoursToday(s.id).toFixed(2)+" h</span>"; oc.appendChild(row); });
+  on.forEach(s=>{ const p=openPunch(s.id); const br=onBreak(p)?" · <span style='color:var(--warn,#c99a12)'>on break</span>":""; const wg=staffWage(s.id)?" · $"+earnedToday(s.id).toFixed(2):"";
+    const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+s.name+"</span><span class='spacer'></span><span class='muted'>in "+p.in+" · "+hoursToday(s.id).toFixed(2)+" h"+br+wg+"</span>"; oc.appendChild(row); });
   app.appendChild(oc);
 }
 
@@ -847,7 +886,9 @@ let draft = null;      // the order being built
 let pending = null;    // an item being configured (required mods / add-ons / flags)
 let receiptOpen = {};  // which orders have their receipt open
 let pinBuf = "";       // time-clock PIN entry buffer
-let clockWelcome = null; // {name, inbound} — the welcome/goodbye screen shown right after a punch
+let clockWelcome = null; // {name, inbound, staffId?} — the welcome/goodbye screen shown right after a punch
+let clockAction = null;  // {staffId} — the on-shift action screen (break / clock out / live earnings)
+let clockTimer = null;   // interval that re-renders the time clock so earnings tick in real time
 let reportDay = null;  // which day the Z-report shows (YYYY-MM-DD, local); null = today
 let selTable = null;   // floor plan: the table currently opened
 let floorSection = null; // floor plan: active section filter (null = all)

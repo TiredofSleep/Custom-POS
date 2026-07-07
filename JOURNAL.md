@@ -836,4 +836,19 @@ schedule the owner builds in the back office is the schedule on every device. Th
 build — worker rights as a first-class part of the POS, not an afterthought — and it starts where the worker
 does: knowing when they work, and knowing when they're owed overtime. Forty-four suites, all green.
 
+### Breaks, and money you can see
+The time clock knew when you clocked in and out; it didn't know the rest of a real shift — the break you're owed
+and the money you're earning. So the clock grew up. Enter your PIN when you're already on and you don't just
+clock out anymore — you land on **your shift**: how long you've worked, and, if the shop set your wage, **what
+you've earned so far**, ticking up in real time. From there you **start a break** (unpaid time the clock now
+subtracts from your paid hours and from the shop's labor total, so nobody's paying for lunch and nobody's getting
+shorted) and **end it** when you're back. And because a schedule that hides overtime is how workers get cheated,
+the clock watches the law *for the worker*: cross five hours with no meal break and it puts a reminder right on
+the screen — *"you're due a 30-minute meal break."* Those rules are **worker-protective by default** — a shop
+that configures nothing still reminds its people; an operator can *tune* the thresholds, but the protection
+doesn't come with an off switch you flip by accident. The builder gets a **$/hr** field next to each person's
+PIN, so a downloaded POS shows real earnings the day it opens. The reminder that you're owed a break, and the
+number that says what your time is worth — both now live in the same little clock everyone already touches.
+Forty-five suites, all green.
+
 *— to be continued —*

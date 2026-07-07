@@ -40,6 +40,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `coursing.js` | course pacing / hold-until — kitchen sees only fired courses, held courses wait, expo fires the next course |
 | `floor-designer.js` | builder floor designer — canvas of tiles, add/edit tables, drag to position (x,y) into the built flow |
 | `schedule.js` | staff scheduling — weekly staff×day grid, set shifts, weekly hours + overtime flag, publish→notify, edit un-publishes |
+| `breaks.js` | worker-rights breaks + pay — on-shift action screen, start/end unpaid break, real-time earnings ($/h), meal-break reminder surfaced after 5h (worker-protective default) |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
