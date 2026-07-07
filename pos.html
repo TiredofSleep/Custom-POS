@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.44";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.45";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -214,7 +214,7 @@ function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FL
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},shifts:[],schedule:{}}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{}}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -724,8 +724,18 @@ const FLOOR_STATES = [
 ];
 function floorStates(){ return (FLOW.floor && FLOW.floor.states) || FLOOR_STATES; }
 function floorStateById(id){ return floorStates().find(s=>s.id===id) || floorStates()[0]; }
-function tableRec(t){ const r=(DB.tables||{})[t.id]; return { state:(r&&r.state)||floorStates()[0].id, since:(r&&r.since)||null }; }
-function setTableState(id, state){ DB=loadDB(); DB.tables=DB.tables||{}; DB.tables[id]={ state, since:Date.now() }; saveDB(DB); render(); }
+function tableRec(t){ const r=(DB.tables||{})[t.id]; return { state:(r&&r.state)||floorStates()[0].id, since:(r&&r.since)||null, seatedTs:(r&&r.seatedTs)||null }; }
+// state change also drives turn-time analytics: a "turn" runs from leaving Empty until returning to Empty
+function setTableState(id, state){ DB=loadDB(); DB.tables=DB.tables||{}; DB.turns=DB.turns||[];
+  const emptyId=floorStates()[0].id; const now=Date.now(); const prev=DB.tables[id]||{}; let seatedTs=prev.seatedTs||null;
+  const wasEmpty=!prev.state || prev.state===emptyId;
+  if(wasEmpty && state!==emptyId) seatedTs=now;                               // a table just got seated — turn begins
+  if(state===emptyId){ if(seatedTs) DB.turns.push({ table:id, seatedTs, clearedTs:now, dur:now-seatedTs, day:todayStr() }); seatedTs=null; }  // cleared — turn ends, logged
+  DB.tables[id]={ state, since:now, seatedTs }; saveDB(DB); render();
+}
+function tableSeats(id){ const t=((FLOW.floor&&FLOW.floor.tables)||[]).find(x=>x.id===id); return (t&&+t.seats)||0; }
+function turnsToday(){ return (DB.turns||[]).filter(x=>x.day===todayStr()); }
+function turnStats(){ const ts=turnsToday(); const n=ts.length; return { n, avgMs:n?ts.reduce((s,x)=>s+x.dur,0)/n:0, covers:ts.reduce((s,x)=>s+tableSeats(x.table),0) }; }
 function renderFloor(app, station){
   const cfg=FLOW.floor||{ tables:[] };
   app.innerHTML="<h2>"+station.label+"</h2>";
@@ -738,6 +748,12 @@ function renderFloor(app, station){
   // at-a-glance: how many tables are occupied (not empty)
   const occupied=tables.filter(t=>tableRec(t).state!=="empty").length;
   const meta=document.createElement("p"); meta.className="muted"; meta.style.margin="0 0 10px"; meta.textContent=occupied+" of "+tables.length+" tables occupied · tap a table to advance it"; app.appendChild(meta);
+  // turn-time analytics — today's completed turns, average turn, covers served (seats × turns)
+  const ts=turnStats();
+  const an=document.createElement("div"); an.className="card"; an.style.cssText="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px";
+  const stat=(lab,val)=>"<div><div style='font-size:20px;font-weight:700'>"+val+"</div><div class='muted' style='font-size:12px'>"+lab+"</div></div>";
+  an.innerHTML=stat("turns today", ts.n)+stat("avg turn", ts.n?fmtDur(ts.avgMs/1000):"—")+stat("covers", ts.covers)+stat("open", occupied+"/"+tables.length);
+  app.appendChild(an);
   // the grid — each table colored by state, minutes-in-state, pulsing if it's been sitting too long.
   // If tables carry x,y (from the floor designer) lay them out spatially; otherwise auto-flow.
   const positioned = tables.some(t=>t.x!=null);

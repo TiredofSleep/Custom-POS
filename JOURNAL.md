@@ -851,4 +851,14 @@ PIN, so a downloaded POS shows real earnings the day it opens. The reminder that
 number that says what your time is worth — both now live in the same little clock everyone already touches.
 Forty-five suites, all green.
 
+### How fast the room turns
+A table that knows its state also, quietly, knows its *history* — when it filled and when it cleared. So the
+floor learned to count **turns**. A turn runs from the moment a table leaves Empty to the moment it's bussed back
+to Empty; the clock stamps both ends and files the span away. Now the floor wears a little scoreboard: **turns
+today**, the **average turn length**, and **covers** served (seats × turns) — the three numbers a restaurant
+actually runs on, sitting right above the room they describe. It's the same primitive as everything else here:
+the states are `FLOW.floor.states`, so a salon counts chair-turns and an auto shop counts bay-turns with not one
+line of special-case code. Nothing new to configure, nothing to switch on — seat a table and clear it and the
+math just accrues. The floor plan told you *where*; now it tells you *how fast*. Forty-six suites, all green.
+
 *— to be continued —*
