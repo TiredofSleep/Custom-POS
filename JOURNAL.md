@@ -812,4 +812,14 @@ it off and nothing changes; every non-restaurant trade is untouched. The bistro 
 (apps/salads/drinks fire now, entrées hold, dessert holds behind them), and the builder gets a *course pacing*
 toggle plus a Course dropdown on each item. Forty-two suites, all green.
 
+### Draw your room
+The floor plan was real, but the tables came out in an auto-flowed grid — fine for a demo, wrong for a shop that
+knows exactly where table 12 sits by the window. So the builder grew a **floor designer**: a canvas with a
+graph-paper grid where every table is a draggable tile. Grab one, drag it, drop it — it snaps to the grid and its
+`x,y` is saved into the config; click a table to set its label, seats, and section, or add and delete tables. The
+engine picks up those coordinates and lays the room out *spatially* instead of auto-flowing, so what the owner
+drew is what the servers see. It's plain pointer events — no drag-drop library, nothing to bloat the one-file
+build — and tables without coordinates still auto-flow, so nothing that existed before changed. Draw the room
+once; every device on the floor shows it. Forty-three suites, all green.
+
 *— to be continued —*

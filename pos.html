@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.41";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.42";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -697,11 +697,16 @@ function renderFloor(app, station){
   // at-a-glance: how many tables are occupied (not empty)
   const occupied=tables.filter(t=>tableRec(t).state!=="empty").length;
   const meta=document.createElement("p"); meta.className="muted"; meta.style.margin="0 0 10px"; meta.textContent=occupied+" of "+tables.length+" tables occupied · tap a table to advance it"; app.appendChild(meta);
-  // the grid — each table colored by state, minutes-in-state, pulsing if it's been sitting too long
-  const grid=document.createElement("div"); grid.className="floorgrid";
+  // the grid — each table colored by state, minutes-in-state, pulsing if it's been sitting too long.
+  // If tables carry x,y (from the floor designer) lay them out spatially; otherwise auto-flow.
+  const positioned = tables.some(t=>t.x!=null);
+  const grid=document.createElement("div");
+  if(positioned){ const h=Math.max(140, ...tables.map(t=>(t.y||0)+92)); grid.style.cssText="position:relative;min-height:"+h+"px"; }
+  else grid.className="floorgrid";
   const warn=cfg.warnSec||600;
   tables.forEach(t=>{ const tr=tableRec(t); const st=floorStateById(tr.state); const el=tr.since?(Date.now()-tr.since)/1000:0;
     const b=document.createElement("button"); b.className="tabletile"+(tr.since&&el>=warn&&st.id!=="empty"?" warn":""); b.style.background=st.color; b.dataset.table=t.id;
+    if(positioned){ b.style.position="absolute"; b.style.left=(t.x||0)+"px"; b.style.top=(t.y||0)+"px"; b.style.width="88px"; }
     b.innerHTML="<b>"+ (t.label||t.id) +"</b> <span style='float:right;font-size:12px'>"+st.label+"</span>"
       +"<small>"+(t.seats?t.seats+" seats":"")+(t.section?" · "+t.section:"")+"</small>"
       +"<small>"+(tr.since?fmtDur(el)+" in state":"—")+"</small>";

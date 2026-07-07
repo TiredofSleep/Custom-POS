@@ -14,7 +14,9 @@
 > Food out→Check→Paid→Bussing, each with a color + `next`, overridable via `FLOW.floor.states`), minutes-in-state
 > timers with a warn-pulse, section filter (server vs. manager view), tap-to-advance / jump-to-any-state, and a
 > "Full-service restaurant" builder template. It's the general spatial primitive (a table = a salon chair, an
-> auto bay, a spa room). Still net-new on top of it: a **drag-drop floor designer** and covers/turn analytics.
+> auto bay, a spa room). The **drag-drop floor designer** now ships too (v0.42) — a builder canvas where you add
+> tables and drag them to lay out the real room (x,y persisted; the engine renders the spatial layout). Also
+> shipped: **course pacing / hold-until** (v0.41). Still net-new: covers/turn analytics per section.
 >
 > **Net-new (this doc's real value):** the **section auto-sorter**, **course pacing / hold-until**, **printers as
 > first-class flow nodes** + a print-format editor,

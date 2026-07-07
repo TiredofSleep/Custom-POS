@@ -30,6 +30,10 @@
   button { background:#222834; border:1px solid var(--line); border-radius:8px; padding:9px 14px; cursor:pointer; color:var(--ink); font:inherit; margin:6px 8px 0 0; }
   button:hover { border-color:var(--brand); }
   button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }   /* keyboard nav */
+  .floorcanvas { position:relative; height:320px; border:1px dashed var(--line); border-radius:12px; background:var(--card); background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px); background-size:24px 24px; overflow:hidden; touch-action:none; }
+  .ftile { position:absolute; width:84px; min-height:56px; padding:8px; border-radius:10px; background:var(--brand); color:#fff; cursor:grab; user-select:none; }
+  .ftile.sel { outline:2px solid #fff; }
+  .ftile small { display:block; opacity:.85; font-size:10px; margin-top:2px; }
   button.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
   button.big { padding:13px 20px; font-size:16px; }
   button.on { border-color:var(--brand); color:#cfe0ff; background:#1b2536; }
@@ -199,7 +203,7 @@ const STATION_TYPES = [
 const PATH_TYPES = ["production","staging"];   // the station types an item can flow THROUGH
 
 /* ---- wizard state ---- */
-let step=1, tradeKey=null, cfg=null, selStation=-1, selItem=-1, showImport=false;
+let step=1, tradeKey=null, cfg=null, selStation=-1, selItem=-1, showImport=false, selFloorTable=null;
 function flashB(msg){ let t=document.getElementById('bToast'); if(!t){ t=document.createElement('div'); t.id='bToast'; t.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1f6feb;color:#fff;padding:10px 16px;border-radius:8px;z-index:99;font-weight:600'; document.body.appendChild(t); } t.textContent=msg; t.style.display='block'; }
 // bulk item import: parse "name, price, category, barcode" rows (header auto-detected) into the catalog
 function importItemsCSV(text){
@@ -267,6 +271,35 @@ function setWelcome(field,v){ cfg.welcome=cfg.welcome||{}; if(field==='specials'
 function addStation(){ cfg.stations.push({ id:uid(), type:"production", label:"New station", view:{money:false} }); selStation=cfg.stations.length-1; selItem=-1; render(); }
 function removeStation(i){ const id=cfg.stations[i].id; cfg.stations.splice(i,1); cfg.catalog.forEach(it=>{ it.path=(it.path||[]).filter(p=>p!==id); }); selStation=-1; render(); }
 function moveStation(i, dir){ const j=i+dir; if(j<0||j>=cfg.stations.length) return; const s=cfg.stations; const t=s[i]; s[i]=s[j]; s[j]=t; selStation=j; render(); }   // reorder the flow
+/* ---- floor plan designer (drag tables to lay out the room) ---- */
+function floorTables(){ cfg.floor=cfg.floor||{label:'Floor',tables:[]}; cfg.floor.tables=cfg.floor.tables||[]; return cfg.floor.tables; }
+function addTable(){ const list=floorTables(); const n=list.length; list.push({ id:uid(), label:String(n+1), seats:2, section:'', x:10+(n%6)*96, y:10+Math.floor(n/6)*80 }); selFloorTable=list[list.length-1].id; render(); }
+function removeTable(id){ cfg.floor.tables=floorTables().filter(t=>t.id!==id); selFloorTable=null; render(); }
+function floorDesigner(){
+  const list=floorTables();
+  list.forEach((t,i)=>{ if(t.x==null) t.x=10+(i%6)*96; if(t.y==null) t.y=10+Math.floor(i/6)*80; });   // auto-place any without a position
+  const canvas=h('div',{class:'floorcanvas'},[]);
+  list.forEach(t=>{
+    const tile=h('div',{class:'ftile'+(selFloorTable===t.id?' sel':''), style:`left:${t.x}px;top:${t.y}px`},[ h('b',{},[t.label||'?']), h('small',{},[(t.seats||0)+' seats'+(t.section?' · '+t.section:'')]) ]);
+    tile.onpointerdown=(e)=>{ e.preventDefault(); const sx=e.clientX, sy=e.clientY, ox=t.x, oy=t.y; let moved=false;
+      const mv=(ev)=>{ const dx=ev.clientX-sx, dy=ev.clientY-sy; if(Math.abs(dx)+Math.abs(dy)>3) moved=true; tile.style.left=Math.max(0,ox+dx)+'px'; tile.style.top=Math.max(0,oy+dy)+'px'; };
+      const up=(ev)=>{ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
+        if(moved){ const dx=ev.clientX-sx, dy=ev.clientY-sy; t.x=Math.max(0,Math.round((ox+dx)/8)*8); t.y=Math.max(0,Math.round((oy+dy)/8)*8); selFloorTable=t.id; render(); }
+        else { selFloorTable=(selFloorTable===t.id?null:t.id); render(); } };
+      document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); };
+    canvas.appendChild(tile);
+  });
+  const wrap=h('div',{},[ canvas, h('button',{onclick:addTable},['+ Add table']) ]);
+  const t=list.find(x=>x.id===selFloorTable);
+  if(t){ wrap.appendChild(h('div',{class:'ed', style:'margin-top:10px'},[
+    h('h3',{},['Table '+(t.label||'')]),
+    h('div',{class:'fld'},[ h('span',{class:'flab'},['Label']), h('input',{class:'sm',value:t.label||'', oninput:e=>{ t.label=e.target.value; }}),
+      h('span',{class:'flab'},['Seats']), h('input',{class:'sm',type:'number',value:t.seats||'', oninput:e=>t.seats=Number(e.target.value)||0}),
+      h('span',{class:'flab'},['Section']), h('input',{class:'sm',value:t.section||'', placeholder:'e.g. Patio', oninput:e=>{ if(e.target.value) t.section=e.target.value; else delete t.section; }}) ]),
+    h('button',{class:'danger', onclick:()=>removeTable(t.id)},['Delete table'])
+  ])); }
+  return wrap;
+}
 function stationEditor(i){
   const s=cfg.stations[i];
   const typeSel=h('select',{onchange:e=>{ s.type=e.target.value; if(!PATH_TYPES.includes(s.type)&&s.type!=='production') s.view=s.view||{money:false}; render(); }},
@@ -496,6 +529,8 @@ function render(){
     const sChips=h('div',{class:'chips'}, cfg.stations.map((s,i)=>h('div',{class:'chip'+(selStation===i?' sel':''), onclick:()=>selectStation(i)},[ s.label, h('span',{class:'t'},[s.type]) ])));
     app.appendChild(sChips); app.appendChild(h('button',{onclick:addStation},['+ Add workstation']));
     if(selStation>=0 && cfg.stations[selStation]) app.appendChild(stationEditor(selStation));
+    // Floor designer (only when a floor station exists) — drag tables to lay out the room
+    if(cfg.stations.some(s=>s.type==='floor')){ app.appendChild(h('h2',{},['Floor plan — drag tables to arrange the room'])); app.appendChild(floorDesigner()); }
     // Items
     app.appendChild(h('h2',{},['Items & services — click one to set what follows it']));
     const iChips=h('div',{class:'chips'}, cfg.catalog.map((it,i)=>h('div',{class:'chip'+(selItem===i?' sel':''), onclick:()=>selectItem(i)},[ it.name, h('span',{class:'t'},['$'+it.price+(it.path&&it.path.length?' · '+it.path.length+' steps':'')]) ])));

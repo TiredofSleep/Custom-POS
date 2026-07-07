@@ -38,6 +38,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `pay-server.js` | the standalone payments service — health, auth gate, charge/decline/refund/void/inquire/terminal (sim provider) |
 | `floor.js` | floor / table state machine — tables render + color by state, advance through the service flow, jump states, section filter, persistence |
 | `coursing.js` | course pacing / hold-until — kitchen sees only fired courses, held courses wait, expo fires the next course |
+| `floor-designer.js` | builder floor designer — canvas of tiles, add/edit tables, drag to position (x,y) into the built flow |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
