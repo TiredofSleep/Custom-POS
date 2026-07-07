@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.47";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.48";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -214,7 +214,7 @@ function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FL
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[]}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[],incidents:[]}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -467,6 +467,16 @@ function renderReport(app, station){
     lc.innerHTML+=L("Total hours", tot.toFixed(2)+" h", true) + (stillOn?"<div class='muted' style='margin-top:4px'>Some staff are still on the clock"+(onBrk?" (some on break)":"")+".</div>":"");
     app.appendChild(lc);
   }
+  // ---- worker safety: incident log — open reports first, with acknowledge (urgent panic alerts flagged) ----
+  const incs=(DB.incidents||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
+  if(incs.length){ const open=incs.filter(i=>!i.ack);
+    const ic=document.createElement("div"); ic.className="card"; ic.innerHTML="<div class='row'><b>Safety incidents</b>"+(open.length?" <span class='pill flag'>"+open.length+" open</span>":"")+"</div>";
+    incs.slice(0,8).forEach(i=>{ const row=document.createElement("div"); row.className="line";
+      row.innerHTML="<span>"+(i.urgent?"🆘 ":"")+"<b>"+i.type+"</b> — "+i.name+" · "+i.day+" "+i.at+(i.note?" · "+i.note:"")+(i.ack?" <span class='muted'>✓ ack</span>":"")+"</span>";
+      if(!i.ack){ const sp=document.createElement("span"); sp.className="spacer"; row.appendChild(sp); const a=document.createElement("button"); a.textContent="Acknowledge"; a.onclick=()=>ackIncident(i.id); row.appendChild(a); }
+      ic.appendChild(row); });
+    app.appendChild(ic);
+  }
   // ---- inventory: on-hand + reorder list, with reason-coded adjustments (receive / waste / transfer / recount) ----
   const tracked=FLOW.catalog.filter(tracksStock);
   if(tracked.length){
@@ -578,6 +588,18 @@ function breakDue(p){ if(!p) return null; const r=laborRules(); if(onBreak(p)) r
     return "You've worked "+worked.toFixed(1)+" h — you're due a "+r.mealMins+"-minute meal break.";
   return null;
 }
+// --- worker safety: file an incident / injury report, or a panic "get help now" alert (rides the notify seam) ---
+const INCIDENT_TYPES = ["Injury","Safety hazard","Harassment","Near miss","Other"];
+function incidentTypes(){ return (FLOW.safety && FLOW.safety.types) || INCIDENT_TYPES; }
+function openIncidents(){ return (DB.incidents||[]).filter(i=>!i.ack); }
+function ackIncident(id){ DB=loadDB(); const i=(DB.incidents||[]).find(x=>x.id===id); if(i) i.ack=true; saveDB(DB); render(); }
+function fileIncident(staff, type, note, urgent){ DB=loadDB(); DB.incidents=DB.incidents||[];
+  const rec={ id:"I"+Date.now(), staffId:staff?staff.id:null, name:staff?staff.name:"(unknown)", type, note:note||"", urgent:!!urgent, ts:Date.now(), at:nowHM(), day:todayStr(), ack:false };
+  DB.incidents.push(rec);
+  const phone=FLOW.safety && FLOW.safety.alertPhone;   // alert a manager if configured — never blocks the record
+  if(phone && FLOW.endpoints && FLOW.endpoints.notify){ try{ notifyAdapter().send(phone, (urgent?"🆘 HELP NOW — ":"⚠️ Incident — ")+rec.name+": "+type+(note?" — "+note:"")+" @ "+rec.at); }catch(e){} }
+  incidentSent = urgent?"help":"filed"; saveDB(DB); render();
+}
 function clockIn(staff){ DB.punches.push({ staffId:staff.id, name:staff.name, in:nowHM(), inTs:Date.now(), out:null, outTs:null, breaks:[], wage:+staff.wage||0 }); clockWelcome={ name:staff.name, inbound:true }; clockAction=null; pinBuf=""; saveDB(DB); render(); }
 function clockOut(staff){ const p=openPunch(staff.id); if(!p) return; const b=curBreak(p); if(b){ b.end=nowHM(); b.endTs=Date.now(); } p.out=nowHM(); p.outTs=Date.now(); clockWelcome={ name:staff.name, inbound:false, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); render(); }
 function startBreak(staff){ const p=openPunch(staff.id); if(!p||onBreak(p)) return; p.breaks.push({ start:nowHM(), startTs:Date.now(), end:null, endTs:null }); saveDB(DB); render(); }
@@ -616,7 +638,21 @@ function renderTimeclock(app, station){
     else { const sb=document.createElement("button"); sb.textContent="Start break"; sb.onclick=()=>startBreak(s); btns.appendChild(sb); }
     const co=document.createElement("button"); co.textContent="Clock out"; co.style.background="var(--bad)"; co.style.color="#fff"; co.onclick=()=>clockOut(s); btns.appendChild(co);
     const back=document.createElement("button"); back.textContent="Back"; back.onclick=()=>{ clockAction=null; render(); }; btns.appendChild(back);
-    card.appendChild(btns); app.appendChild(card); return;
+    card.appendChild(btns);
+    // worker safety — file an incident, or a panic "get help now" alert (identified worker)
+    const safe=document.createElement("div"); safe.style.cssText="margin-top:12px;border-top:1px solid var(--line);padding-top:10px";
+    if(incidentSent){ safe.innerHTML = incidentSent==="help"
+        ? "<div style='color:#ffb3b3'><b>🆘 Help is on the way.</b> Your alert was sent"+((FLOW.safety&&FLOW.safety.alertPhone)?" to a manager":"")+" and logged.</div>"
+        : "<div class='muted'>✓ Incident filed and logged. Thank you for reporting.</div>";
+      const okb=document.createElement("button"); okb.textContent="OK"; okb.style.marginTop="6px"; okb.onclick=()=>{ incidentSent=null; render(); }; safe.appendChild(okb);
+    } else {
+      const lab=document.createElement("div"); lab.className="muted"; lab.style.marginBottom="4px"; lab.textContent="Safety"; safe.appendChild(lab);
+      const sel=document.createElement("select"); sel.id="incType"; incidentTypes().forEach(t=>{ const o=document.createElement("option"); o.value=t; o.textContent=t; sel.appendChild(o); }); sel.style.marginRight="8px"; safe.appendChild(sel);
+      const note=document.createElement("input"); note.id="incNote"; note.placeholder="what happened (optional)"; note.style.cssText="max-width:200px;margin-right:8px"; safe.appendChild(note);
+      const file=document.createElement("button"); file.textContent="File report"; file.onclick=()=>fileIncident(s, sel.value, note.value, false); safe.appendChild(file);
+      const panic=document.createElement("button"); panic.textContent="🆘 Get help now"; panic.style.cssText="background:var(--bad);color:#fff;margin-left:8px"; panic.onclick=()=>fileIncident(s, "Help — urgent", note.value, true); safe.appendChild(panic);
+    }
+    card.appendChild(safe); app.appendChild(card); return;
   }
   app.innerHTML="<h2>"+station.label+"</h2><p class='muted'>Enter your PIN to clock in, take a break, or clock out.</p>";
   if(!staff.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No staff configured. Add staff (name + PIN) in the builder."; app.appendChild(e); return; }
@@ -974,6 +1010,7 @@ let pinBuf = "";       // time-clock PIN entry buffer
 let clockWelcome = null; // {name, inbound, staffId?} — the welcome/goodbye screen shown right after a punch
 let clockAction = null;  // {staffId} — the on-shift action screen (break / clock out / live earnings)
 let clockTimer = null;   // interval that re-renders the time clock so earnings tick in real time
+let incidentSent = null; // "filed" | "help" — confirmation shown after a worker files an incident / panic alert
 let reportDay = null;  // which day the Z-report shows (YYYY-MM-DD, local); null = today
 let selTable = null;   // floor plan: the table currently opened
 let floorSection = null; // floor plan: active section filter (null = all)
