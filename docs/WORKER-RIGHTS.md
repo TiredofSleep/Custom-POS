@@ -1,17 +1,20 @@
 # Worker Rights and Scheduling
 
-> **Status (reconciled against the current build, engine v0.39).** Design intent handed over from a ClaudeChat
-> session — *not* implementation-ready. A little exists; most is roadmap.
+> **Status (reconciled against the current build, engine v0.43).** Design intent handed over from a ClaudeChat
+> session — *not* implementation-ready. A growing foundation exists; much is still roadmap.
 >
 > **Already shipped (foundations to build on):** PIN **time-clock** (punches in `DB.punches`), **labor hours**
 > in the Z-report, the **clock-in welcome/briefing**, **tips + commission**, the **data-ownership / export**
-> principle (JSON backup + CSV — extend to per-worker), and the processor-agnostic **notify seam** (SMS via a
-> hub adapter) that the scheduling/break/reminder texts can ride on.
+> principle (JSON backup + CSV — extend to per-worker), the processor-agnostic **notify seam** (SMS via a
+> hub adapter) that the scheduling/break/reminder texts can ride on, and — as of **v0.43** — ✅ the
+> **scheduling grid** itself: a weekly staff×day grid, per-worker weekly-hours total with an **overtime (>40h)
+> flag surfaced by default**, and a **publish → text every scheduled worker their shifts** workflow (editing a
+> published week silently un-publishes so nobody works off a stale copy). Builder ships a `schedule` station
+> type; the salon template ships one wired.
 >
-> **Net-new (this doc's real value):** the **scheduling grid** + publish→notify workflow, the **break-rules
-> engine** + reminders, **real-time earnings** display, the **coverage marketplace**, **PTO / time-off**,
-> **incident / injury reporting** + **panic button**, **state labor-law modules**, the separate **worker
-> portal**, and payroll / government export.
+> **Net-new (this doc's remaining value):** the **break-rules engine** + reminders, **real-time earnings**
+> display, the **coverage marketplace**, **PTO / time-off**, **incident / injury reporting** + **panic
+> button**, **state labor-law modules**, the separate **worker portal**, and payroll / government export.
 >
 > **Honor the design principle:** worker-protective **defaults**, **core-with-configuration** — an operator can
 > tune parameters but removing protections takes deliberate code editing, not a toggle.

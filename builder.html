@@ -117,7 +117,7 @@ const TEMPLATES = {
     staff:[{id:"e1",name:"Alex",pin:"1111"},{id:"e2",name:"Sam",pin:"2222"},{id:"e3",name:"Jordan",pin:"3333"}],
     welcome:{ message:"Make someone's day today ✂️", specials:["Ask about the color special"] },
     catalog:[ {id:"s1",name:"Haircut",price:35,category:"service",path:["chair"],performer:true}, {id:"s2",name:"Color",price:85,category:"service",path:["chair"],performer:true}, {id:"s3",name:"Product",price:22,category:"retail",path:[]} ],
-    stations:[ {id:"desk",type:"central",label:"Front Desk",view:{money:true}}, {id:"chair",type:"production",label:"Chair",view:{money:false}}, {id:"book",type:"booking",label:"Appointments",view:{}}, {id:"clock",type:"timeclock",label:"Time Clock",view:{}}, {id:"office",type:"report",label:"Back Office",view:{money:true}} ] },
+    stations:[ {id:"desk",type:"central",label:"Front Desk",view:{money:true}}, {id:"chair",type:"production",label:"Chair",view:{money:false}}, {id:"book",type:"booking",label:"Appointments",view:{}}, {id:"clock",type:"timeclock",label:"Time Clock",view:{}}, {id:"sched",type:"schedule",label:"Schedule",view:{}}, {id:"office",type:"report",label:"Back Office",view:{money:true}} ] },
   // A REAL restaurant template — the Hamburger Barn menu (Arkadelphia, AR). Public menu; prices are
   // sensible estimates the owner edits. One order fans out to the grill, the fry station, and the shake bar.
   burgerbarn: { flowId:"burgerbarn", label:"Hamburger Barn (burger joint)", topology:"hub-and-spoke", blurb:"A real burger-joint menu — grill · fry · shakes",
@@ -198,7 +198,8 @@ const STATION_TYPES = [
   ["staging","Staging / rack — hold until ready"], ["fulfillment","Checkout — finishes orders"],
   ["board","Status board (view only)"], ["tracker","Customer tracker (sanitized)"], ["report","Reports / Z-report / refunds"],
   ["timeclock","Time clock (staff PIN in/out)"], ["booking","Appointments (book & check in)"],
-  ["kds","Kitchen display (bump tickets)"], ["floor","Floor / table plan (dine-in)"]
+  ["kds","Kitchen display (bump tickets)"], ["floor","Floor / table plan (dine-in)"],
+  ["schedule","Staff scheduling (weekly grid)"]
 ];
 const PATH_TYPES = ["production","staging"];   // the station types an item can flow THROUGH
 

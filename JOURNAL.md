@@ -822,4 +822,18 @@ drew is what the servers see. It's plain pointer events — no drag-drop library
 build — and tables without coordinates still auto-flow, so nothing that existed before changed. Draw the room
 once; every device on the floor shows it. Forty-three suites, all green.
 
+### Who works when
+A restaurant — any shop with staff — lives and dies by the schedule, and the software that owns the floor should
+own the roster too. So the engine grew a **staff schedule**: a weekly grid, one row per person, one column per
+day (Mon–Sun). Tap a cell, set a start and end time, save — the shift lands on the grid and the person's **weekly
+hours** total ticks up. Cross forty in a week and the row flags **OT**, because a schedule that hides overtime is
+how workers get cheated and owners get surprised; here it's on the surface before the week is even published.
+When the roster's ready, **Publish** stamps it and *texts every scheduled person their shifts* through the same
+notify seam that texts customers "your order's ready" — the worker finds out from the schedule itself, not by
+squinting at a photo of a whiteboard. Edit any cell after publishing and it quietly **un-publishes**, so nobody
+works off a stale copy — you publish again, everyone gets the new version. It rides the same synced DB, so the
+schedule the owner builds in the back office is the schedule on every device. This is the first stone of a bigger
+build — worker rights as a first-class part of the POS, not an afterthought — and it starts where the worker
+does: knowing when they work, and knowing when they're owed overtime. Forty-four suites, all green.
+
 *— to be continued —*
