@@ -884,4 +884,17 @@ The real worker-to-worker marketplace (claim it yourself from your phone) waits 
 thing that actually matters — a shift can change hands without anyone getting hurt by it — works today. Forty-eight
 suites, all green.
 
+### If something goes wrong
+Most POS software treats the worker as a cost center — a pair of hands that rings up sales. But the person behind
+the counter can get hurt, or scared, or wronged, and the software they're already standing at should have their
+back. So the time clock grew a **Safety** section. On your shift you can **file an incident** — injury, safety
+hazard, harassment, a near miss — with a note, and it's **logged, timestamped, and yours on the record**. And
+there's a **🆘 Get help now** button that fires an **immediate alert to a manager** over the same texting seam
+that tells customers their order's ready — because when you need help, you shouldn't have to go find a phone. The
+report itself is never blocked on the alert going through; the record always lands. On the manager's end, the
+Office report carries a **safety-incident log** — open reports first, the urgent ones flagged with the 🆘, each
+one **acknowledged** so nothing filed just quietly disappears. A shop that wants it sets one alert number; a shop
+that doesn't still gets the logged, acknowledged paper trail. It's a small thing to build and a large thing to
+mean: the tool is on the worker's side when it counts. Forty-nine suites, all green.
+
 *— to be continued —*

@@ -44,6 +44,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `turns.js` | table turn-time analytics — a turn runs from seated→cleared, floor shows turns today / average turn / covers served, cleared table returns to empty |
 | `timeoff.js` | time-off requests — worker requests a day off, manager queue + approve/deny, approved day shows OFF and blocks scheduling (worker-protective), cancel restores it |
 | `coverage.js` | shift coverage — offer a shift for coverage (↔ marker), reassign it to an eligible co-worker (skips anyone off/already-scheduled, flags OT), the shift moves |
+| `incident.js` | worker safety — on-shift incident report + a panic "get help now" alert (notify seam), manager incident log in the Z-report with open count + acknowledge |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

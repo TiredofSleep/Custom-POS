@@ -1,6 +1,6 @@
 # Worker Rights and Scheduling
 
-> **Status (reconciled against the current build, engine v0.47).** Design intent handed over from a ClaudeChat
+> **Status (reconciled against the current build, engine v0.48).** Design intent handed over from a ClaudeChat
 > session — *not* implementation-ready. A growing foundation exists; much is still roadmap.
 >
 > **Already shipped (foundations to build on):** PIN **time-clock** (punches in `DB.punches`), **paid labor
@@ -24,11 +24,15 @@
 > - **v0.47** — ✅ **shift coverage.** A worker **offers** a shift (↔ marker); the manager **reassigns** it to
 >   a co-worker. Coverage refuses anyone **approved off** or **already scheduled** that day and **flags OT**, so
 >   getting a shift covered can't quietly turn into exploitation. Reassignment un-publishes the week.
+> - **v0.48** — ✅ **incident reporting + panic button.** On-shift, a worker can **file an incident** (injury /
+>   safety hazard / harassment / near miss, with a note) — logged, timestamped, on the record — or hit **🆘 Get
+>   help now** to fire an **immediate manager alert** over the notify seam. The record always lands even if the
+>   alert can't send. The Z-report carries a **safety-incident log**: open reports first, urgent ones flagged,
+>   each **acknowledged** so nothing filed disappears. Config: `FLOW.safety {alertPhone, types?}`.
 >
 > **Net-new (this doc's remaining value):** rest-break reminders + enforceable rest-rules, worker-to-worker
-> **self-serve pickup** (the marketplace half — needs the portal), calendar-dated PTO **balances**, **incident /
-> injury reporting** + **panic button**, **state labor-law modules**, the separate **worker portal**, and
-> payroll / government export.
+> **self-serve pickup** (the marketplace half — needs the portal), calendar-dated PTO **balances**, **state
+> labor-law modules**, the separate **worker portal**, and payroll / government export.
 >
 > **Honor the design principle:** worker-protective **defaults**, **core-with-configuration** — an operator can
 > tune parameters but removing protections takes deliberate code editing, not a toggle.
