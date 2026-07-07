@@ -69,6 +69,7 @@
    THE FLOWS — businesses as config on ONE engine. Items carry `path` (workstations),
    `modifiers` (required choices), `addons` (suggested upsells), and `par` (86 count).
    ==========================================================================*/
+const CUSTOMPOS_VERSION = "0.32";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -588,6 +589,10 @@ function renderPicker(app){
     let role=s.type==="central"?"starts and finishes orders":s.type==="intake"?"starts orders":s.type==="fulfillment"?"finishes orders":"a workstation on the path";
     b.innerHTML="<b>"+s.label+"</b><small>"+s.type+" · "+role+"</small>"; b.onclick=()=>bindStation(s.id); wrap.appendChild(b); });
   app.appendChild(wrap);
+  const bd = (typeof window!=="undefined" && window.CUSTOMPOS_BUILD) || null;
+  const foot=document.createElement("p"); foot.className="muted"; foot.style.cssText="margin-top:18px;font-size:12px";
+  foot.textContent = "customPOS engine v"+CUSTOMPOS_VERSION + (bd&&bd.builtAt?" · your build "+bd.builtAt:"") + " · your software, your data.";
+  app.appendChild(foot);
 }
 
 /* ---- intake with the rules evaluator (modifiers + 86) ---- */

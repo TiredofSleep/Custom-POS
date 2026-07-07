@@ -29,6 +29,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `landing.js` | the customPOS.com landing page — pitch, honest monetization, trust FAQ, feature grid, CTA links, mobile no-overflow |
 | `import.js` | bulk item import — paste CSV (name/price/category/barcode), header auto-skip, into the built catalog |
 | `backup.js` | data ownership — JSON backup download, customers CSV export, and restore-from-backup replacing the DB |
+| `build-stamp.js` | downloads carry a build banner + CUSTOMPOS_BUILD (version/date/business); CLAUDE.md + setup screen show the version |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
