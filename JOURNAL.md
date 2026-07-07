@@ -785,4 +785,19 @@ break engine) are the natural next big builds, and both generalize far past thei
 machine is a salon chair, an auto bay, a spa room. Captured, cross-referenced from the Ideas inbox, nothing lost.
 Forty suites, still green.
 
+### The room, on a screen
+*"Build it out."* So the first big piece of the restaurant roadmap landed — and, true to the whole project, it
+landed as a **general primitive**, not a restaurant feature. A **floor / table state machine**: bind a device as
+a **Floor** station and it shows a grid of tables, each a colored tile that moves through a service flow —
+*Empty → Seated → Greeted → Ordered → Food out → Check → Paid → Bussing* — every state carrying its own color and
+`next`, and every table stamping the moment it changed so the tile can show *minutes in state* and pulse red once
+it's been sitting too long. Tap a table to advance it one step or jump it to any state; filter by **section**
+(Main / Patio / Bar) so a server sees their room and a manager sees the whole floor; the states are all
+`FLOW.floor.states`, so the exact same code is a salon's chairs, an auto shop's bays, or a spa's rooms — you just
+rename the states. A new **Full-service restaurant** template ships with a ten-table dining room, a kitchen line,
+cold station, bar, and a KDS, so an owner picks it and has a working floor in one click. The state lives in the
+same synced DB as everything else, so it'll ride the hub to every device on the floor. Net-new still ahead — a
+drag-drop floor *designer* and turn-time analytics — but the beating heart of the vertical, the table that knows
+what's happening to it, is real and tested. Forty-one suites, all green.
+
 *— to be continued —*

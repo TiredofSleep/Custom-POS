@@ -72,13 +72,15 @@ staff, commission, and a booking calendar). More business types to come.
   - **Back office:** **end-of-day Z-report** (by tender / category), **cash-drawer count**, **labor hours**,
     **sales history** day by day, reorder + A/R statements.
   - **Operations:** **inventory** (stock, low/out, receive), **barcode scan + search**, **appointments** (book →
-    check-in), **kitchen display** with bump + prep timers, **quotes/estimates**, **checklists**, capacity/pacing,
+    check-in), **kitchen display** with bump + prep timers, **floor / table plan** (a spatial state machine —
+    tables, salon chairs, auto bays, spa rooms), **quotes/estimates**, **checklists**, capacity/pacing,
     per-item routing & fan-out, timers/SLAs, flags, modifiers, 86 counts.
   - **People & customers:** **staff time-clock + PIN + clock-in welcome**, roles/tips/commission, customer
     profiles + "the usual", **loyalty + gift cards**, **text-when-ready**, status board + customer tracker.
 - ✅ **The builder** — [`builder.html`](builder.html): pick a trade, deep-configure clickable workstations & items,
-  **download your POS** plus a generated **`CLAUDE.md`**. Six templates (retail, café, dry cleaner, repair, salon,
-  and the real **Hamburger Barn**) each ship with their trade's features already on. Live preview.
+  **download your POS** plus a generated **`CLAUDE.md`**. Seven templates (retail, café, dry cleaner, repair,
+  salon, the real **Hamburger Barn**, and a **full-service restaurant** with a floor plan) each ship with their
+  trade's features already on. Live preview.
 - ✅ **Payments** — a processor-agnostic interface with a simulator that works out of the box; the certified
   CardConnect/CardPointe adapter ([docs/PAYMENTS-MODULE.md](docs/PAYMENTS-MODULE.md)) swaps in on your own server.
   Onboarding a new merchant is one command: [`tools/validate-cardconnect.js`](tools/validate-cardconnect.js) runs

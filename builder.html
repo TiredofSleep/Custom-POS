@@ -158,6 +158,34 @@ const TEMPLATES = {
       {id:"shakes",type:"production",label:"Shake Bar",view:{money:false}},
       {id:"kds",type:"kds",label:"Kitchen Display",view:{money:false}},
       {id:"office",type:"report",label:"Office",view:{money:true}}
+    ] },
+  bistro: { flowId:"bistro", label:"Full-service restaurant", topology:"hub-and-spoke", blurb:"Dine-in — tables, floor plan, kitchen & bar",
+    branding:{ name:"My Bistro", brandColor:"#7a1f2b" },
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[18,20,22]}, split:true} },
+    timer:{ mode:"aging", warnSec:600, badSec:1200, label:"ticket" }, kds:{warnSec:420,badSec:900},
+    floor:{ label:"Dining Room", warnSec:900, sections:["Main","Patio","Bar"], tables:[
+      {id:"t1",label:"1",seats:2,section:"Main"}, {id:"t2",label:"2",seats:2,section:"Main"}, {id:"t3",label:"3",seats:4,section:"Main"},
+      {id:"t4",label:"4",seats:4,section:"Main"}, {id:"t5",label:"5",seats:6,section:"Main"},
+      {id:"p1",label:"P1",seats:4,section:"Patio"}, {id:"p2",label:"P2",seats:4,section:"Patio"},
+      {id:"b1",label:"B1",seats:1,section:"Bar"}, {id:"b2",label:"B2",seats:1,section:"Bar"}, {id:"b3",label:"B3",seats:1,section:"Bar"} ] },
+    catalog:[
+      {id:"cala",name:"Calamari",price:12,category:"app",path:["line"]},
+      {id:"wedge",name:"Wedge Salad",price:9,category:"salad",path:["cold"]},
+      {id:"steak",name:"Ribeye",price:34,category:"entree",path:["line"],modifiers:[{group:"Temp",required:true,options:[{name:"Rare",price:0},{name:"Med rare",price:0},{name:"Medium",price:0},{name:"Well",price:0}]}]},
+      {id:"salmon",name:"Salmon",price:26,category:"entree",path:["line"]},
+      {id:"burger",name:"Bistro Burger",price:16,category:"entree",path:["line"]},
+      {id:"wine",name:"House Wine",price:11,category:"drink",path:["bar"]},
+      {id:"beer",name:"Draft Beer",price:7,category:"drink",path:["bar"]},
+      {id:"cake",name:"Chocolate Cake",price:10,category:"dessert",path:["cold"]}
+    ],
+    stations:[
+      {id:"floor",type:"floor",label:"Floor",view:{}},
+      {id:"server",type:"central",label:"Server Station",view:{money:true}},
+      {id:"line",type:"production",label:"Kitchen Line",view:{money:false}},
+      {id:"cold",type:"production",label:"Cold Station",view:{money:false}},
+      {id:"bar",type:"production",label:"Bar",view:{money:false}},
+      {id:"kds",type:"kds",label:"Kitchen Display",view:{money:false}},
+      {id:"office",type:"report",label:"Office",view:{money:true}}
     ] }
 };
 const STATION_TYPES = [
@@ -165,7 +193,7 @@ const STATION_TYPES = [
   ["staging","Staging / rack — hold until ready"], ["fulfillment","Checkout — finishes orders"],
   ["board","Status board (view only)"], ["tracker","Customer tracker (sanitized)"], ["report","Reports / Z-report / refunds"],
   ["timeclock","Time clock (staff PIN in/out)"], ["booking","Appointments (book & check in)"],
-  ["kds","Kitchen display (bump tickets)"]
+  ["kds","Kitchen display (bump tickets)"], ["floor","Floor / table plan (dine-in)"]
 ];
 const PATH_TYPES = ["production","staging"];   // the station types an item can flow THROUGH
 
