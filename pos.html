@@ -284,6 +284,17 @@ function dayOf(ts){ return new Date(ts||Date.now()).toLocaleDateString("en-CA");
 function todayStr(){ return new Date().toLocaleDateString("en-CA"); }
 function shiftDay(dstr, delta){ const d=new Date(dstr+"T12:00:00"); d.setDate(d.getDate()+delta); return d.toLocaleDateString("en-CA"); }
 function flash(msg){ let t=document.getElementById("toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.style.cssText="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--bad);color:#fff;padding:10px 16px;border-radius:8px;z-index:99;font-weight:600"; document.body.appendChild(t); } t.textContent=msg; t.style.display="block"; }
+// data ownership: your data is yours to take out. Everything below builds plain files from the local DB.
+function downloadFile(name, text, type){ const blob=new Blob([text],{type:type||"text/plain"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
+function csvCell(v){ v=(v==null?"":String(v)); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+function csvRows(rows){ return rows.map(r=>r.map(csvCell).join(",")).join("\n"); }
+function backupJSON(){ return JSON.stringify({ app:"customPOS", flowId:flowId(), exportedAt:new Date().toISOString(), data:loadDB() }, null, 2); }
+function customersCSV(){ const cs=(loadDB().customers||[]); return csvRows([["name","phone","points","gift","balance"], ...cs.map(c=>[c.name||"",c.phone||"",c.points||0,c.gift||0,c.balance||0])]); }
+function salesCSV(day){ const d=loadDB(); const done=d.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED") && dayOf(r.ts)===day);
+  return csvRows([["order","time","status","items","subtotal","discount","tax","tip","total","tenders"],
+    ...done.map(r=>[r.number, r.createdAt||"", r.status, r.lines.map(l=>l.qty+"x "+l.name).join("; "), lineSubtotal(r).toFixed(2), recordDiscount(r).toFixed(2), recordTax(r).toFixed(2), (r.tip||0).toFixed(2), recordTotal(r).toFixed(2), (r.tenders||[]).map(t=>t.type+":"+t.amount).join("; ")])]); }
+function slug(){ return (FLOW.branding.name||"custompos").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
+function restoreBackup(text){ const obj=JSON.parse(text); const db=obj&&obj.data?obj.data:obj; if(!db||!Array.isArray(db.records)) throw new Error("not a customPOS backup"); localStorage.setItem(dkey(), JSON.stringify(db)); }
 function render(){
   DB = loadDB();
   document.getElementById("brandDot").style.background = FLOW.branding.brandColor;
@@ -405,6 +416,18 @@ function renderReport(app, station){
         +"<div class='line'><b>Take-home</b><span class='spacer'></span><b>"+money(comm+d.tips)+"</b></div>";
       app.appendChild(c); });
   }
+  // ---- data & backup: your data is yours — take it out any time, restore it any time ----
+  const bk=document.createElement("div"); bk.className="card"; bk.innerHTML="<div class='row'><b>Data &amp; backup</b></div>"
+    +"<div class='muted' style='margin:2px 0 10px'>Your data lives only in this file (plus your optional hub). Back it up regularly — it's plain, portable, and yours.</div>";
+  const mkBtn=(label,fn,cls)=>{ const b=document.createElement("button"); if(cls) b.className=cls; b.textContent=label; b.style.margin="0 8px 8px 0"; b.onclick=fn; return b; };
+  bk.appendChild(mkBtn("⬇ Backup (JSON)", ()=>downloadFile(slug()+"-backup-"+todayStr()+".json", backupJSON(), "application/json"), "primary"));
+  bk.appendChild(mkBtn("⬇ Customers (CSV)", ()=>downloadFile(slug()+"-customers.csv", customersCSV(), "text/csv")));
+  bk.appendChild(mkBtn("⬇ Sales "+day+" (CSV)", ()=>downloadFile(slug()+"-sales-"+day+".csv", salesCSV(day), "text/csv")));
+  const rl=document.createElement("label"); rl.textContent="⬆ Restore backup"; rl.className="btn"; rl.style.cssText="display:inline-block;padding:9px 15px;border:1px solid var(--line);border-radius:8px;cursor:pointer";
+  const ri=document.createElement("input"); ri.type="file"; ri.accept=".json,application/json"; ri.id="restoreFile"; ri.style.display="none";
+  ri.onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ if(!confirm("Restore this backup? It replaces the current data on this device.")) return; restoreBackup(rd.result); flash("Backup restored"); render(); }catch(err){ flash("Not a valid backup file"); } }; rd.readAsText(f); };
+  rl.appendChild(ri); bk.appendChild(rl);
+  app.appendChild(bk);
 }
 
 /* TIME CLOCK — staff punch in/out by PIN, then a welcome screen (daily message + specials + encouragement).
