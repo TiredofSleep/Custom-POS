@@ -910,4 +910,16 @@ same synced data the manager sees — no separate system, no new database — ju
 whose work it actually is. The pieces we'd been building for the boss's bench now have a home on the worker's.
 Fifty suites, all green.
 
+### Split the tips straight
+Tips are the part of the paycheck that goes wrong most quietly. In a lot of shops the jar gets divided by feel, or
+by whoever's counting, and the person who worked the double shift somehow comes out the same as the person who
+left at noon. So customPOS learned to **pool tips and split them by the hours actually worked** — the fairest,
+plainest rule there is. Turn it on and the Z-report grows a **tip-pool card**: everyone who clocked in, their
+hours, and their exact share of the day's tips, adding up to the penny. Work three of the four hours and you get
+three-quarters of the pool — no debate, no favorites, just arithmetic anyone can check. And the worker doesn't
+have to trust the math from a distance: their **portal shows their own tip share for the day**, right next to
+their hours and pay. It rides the hours the time clock already tracks (minus unpaid breaks), so it's honest by
+construction. The builder gets a one-tap **"pool tips by hours"** toggle. Shops that tip-out by seat or provider
+keep doing that; shops that want it fair by the clock now can, in one click. Fifty-one suites, all green.
+
 *— to be continued —*
