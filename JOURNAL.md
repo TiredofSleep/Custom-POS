@@ -990,4 +990,14 @@ to spend it. Same day's sales, bucketed by the clock on each sale — no new dat
 the timestamps. For a shop trying to squeeze payroll without wrecking service, seeing the shape of the day is the
 difference between cutting fat and cutting muscle. Fifty-seven suites, all green.
 
+### The breather, too
+The break-rules engine already watched for the meal break a long shift owes you. But there's a smaller kindness
+it was missing: the plain rest break — the four-hours-on-your-feet-without-sitting-down kind that no one clocks
+but everyone needs. So now, if you've been on a stretch past the rest interval and haven't taken a break at all,
+the on-shift screen nudges you: *you've been on 5 hours without a break — take a ten-minute breather.* It's the
+same worker-protective default as the rest of the engine — on by sensible defaults, tunable but not silently
+removable — and it steps aside the moment you actually take a break. Meal breaks keep the law; rest breaks keep
+the person. A small line of code, but it says the thing the whole track has been saying: the tool notices when
+you're running yourself down, and it speaks up for you. Fifty-eight suites, all green.
+
 *— to be continued —*

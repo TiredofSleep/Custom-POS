@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.56";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.57";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -658,6 +658,9 @@ function breakDue(p){ if(!p) return null; const r=laborRules(); if(onBreak(p)) r
   const tookMeal=(p.breaks||[]).some(b=> b.end && (b.endTs-b.startTs)/60000 >= r.mealMins*0.6 );
   if(r.mealAfterHrs && worked>=r.mealAfterHrs && !tookMeal)
     return "You've worked "+worked.toFixed(1)+" h — you're due a "+r.mealMins+"-minute meal break.";
+  const anyBreak=(p.breaks||[]).length>0;   // a rest break after a stretch with none at all
+  if(r.restEveryHrs && worked>=r.restEveryHrs && !anyBreak)
+    return "You've been on "+worked.toFixed(1)+" h without a break — take a "+r.restMins+"-minute breather.";
   return null;
 }
 // --- worker safety: file an incident / injury report, or a panic "get help now" alert (rides the notify seam) ---

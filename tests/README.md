@@ -53,6 +53,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `paystub.js` | worker pay estimate — the portal splits clocked hours into regular + overtime (1.5× premium visible), adds tips, and shows an estimated gross |
 | `top-items.js` | top items — the report ranks sold items by revenue with per-item margin (when costs are known), so owners can see winners vs losers |
 | `busy-hours.js` | sales by hour — the report buckets net sales into hour bars and flags the busiest hour, so staffing can match demand |
+| `rest-break.js` | rest-break reminder — after a stretch with no break at all (restEveryHrs), the on-shift screen nudges a short breather; taking a break clears it |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
