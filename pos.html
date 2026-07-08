@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.58";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.59";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -216,7 +216,7 @@ let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
 function wkey(){ return "custompos_worker_"+flowId(); }   // worker portal: who's signed in on THIS device (personal-device stay-signed-in)
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[],incidents:[]}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; d.kudos=d.kudos||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[],incidents:[],kudos:[]}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -676,7 +676,7 @@ function fileIncident(staff, type, note, urgent){ DB=loadDB(); DB.incidents=DB.i
   if(phone && FLOW.endpoints && FLOW.endpoints.notify){ try{ notifyAdapter().send(phone, (urgent?"🆘 HELP NOW — ":"⚠️ Incident — ")+rec.name+": "+type+(note?" — "+note:"")+" @ "+rec.at); }catch(e){} }
   incidentSent = urgent?"help":"filed"; saveDB(DB); render();
 }
-function clockIn(staff){ DB.punches.push({ staffId:staff.id, name:staff.name, in:nowHM(), inTs:Date.now(), out:null, outTs:null, breaks:[], wage:+staff.wage||0 }); clockWelcome={ name:staff.name, inbound:true }; clockAction=null; pinBuf=""; saveDB(DB); render(); }
+function clockIn(staff){ DB.punches.push({ staffId:staff.id, name:staff.name, in:nowHM(), inTs:Date.now(), out:null, outTs:null, breaks:[], wage:+staff.wage||0 }); clockWelcome={ name:staff.name, inbound:true, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); render(); }
 function clockOut(staff){ const p=openPunch(staff.id); if(!p) return; const b=curBreak(p); if(b){ b.end=nowHM(); b.endTs=Date.now(); } p.out=nowHM(); p.outTs=Date.now(); clockWelcome={ name:staff.name, inbound:false, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); render(); }
 function startBreak(staff){ const p=openPunch(staff.id); if(!p||onBreak(p)) return; p.breaks.push({ start:nowHM(), startTs:Date.now(), end:null, endTs:null }); saveDB(DB); render(); }
 function endBreak(staff){ const p=openPunch(staff.id); const b=curBreak(p); if(!b) return; b.end=nowHM(); b.endTs=Date.now(); saveDB(DB); render(); }
@@ -694,6 +694,7 @@ function renderTimeclock(app, station){
       const wc=FLOW.welcome||{};
       if(wc.message){ const m=document.createElement("div"); m.className="line"; m.style.justifyContent="center"; m.innerHTML="<span>"+wc.message+"</span>"; wel.appendChild(m); }
       if((wc.specials||[]).length){ const s=document.createElement("div"); s.style.marginTop="8px"; s.innerHTML="<b>Today's specials</b>"; (wc.specials||[]).forEach(sp=>{ const d=document.createElement("div"); d.className="muted"; d.textContent="• "+sp; s.appendChild(d); }); wel.appendChild(s); }
+      const kus=w.staffId?kudosFor(w.staffId):[]; if(kus.length){ const k=kus[0]; const kd=document.createElement("div"); kd.style.cssText="margin-top:10px;background:#123a1e;color:#b6f0c6;border-radius:8px;padding:8px 10px"; kd.innerHTML="⭐ <b>"+k.from+"</b> says: "+k.note; wel.appendChild(kd); }
     } else {
       const wg=staffWage(w.staffId); const paid = wg? " · earned $"+earnedToday(w.staffId).toFixed(2):"";
       wel.innerHTML="<h2 style='margin:6px 0'>✅ Thanks, "+w.name+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked out · "+hoursToday(w.staffId).toFixed(2)+" h today"+paid+". See you next time.</div>";
@@ -1025,6 +1026,12 @@ function renderSchedule(app, station){
   app.appendChild(pub);
 }
 
+/* SHOUT-OUTS (kudos) — recognition is free and it matters most when money's tight. Anyone can hand a teammate a
+   kudos; it shows on their portal and greets them at clock-in. Lives in DB.kudos. */
+function kudosFor(id){ return (DB.kudos||[]).filter(k=>k.to===id).sort((a,b)=>(b.ts||0)-(a.ts||0)); }
+function giveKudos(fromName, toId, toName, note){ if(!toId||!note) return; DB=loadDB(); DB.kudos=DB.kudos||[];
+  DB.kudos.push({ id:"K"+Date.now(), from:fromName||"A teammate", to:toId, toName, note, ts:Date.now(), day:todayStr() }); saveDB(DB); render(); }
+
 /* WORKER PORTAL — the worker's own view: log in by PIN, see your week, hours, and pay, claim open shifts
    yourself (self-serve coverage), and request time off. Everything rides the same synced DB the manager uses. */
 function renderWorker(app, station){
@@ -1093,6 +1100,20 @@ function renderWorker(app, station){
   SCHED_DAYS.forEach((d,di)=>{ const to=timeoffReq(me.id,di); const b=document.createElement("button"); b.textContent=d+(to?(to.status==="approved"?" ✓":" …"):""); if(to){ b.disabled=true; b.title=to.status==="approved"?"approved off":"requested"; } b.onclick=()=>{ requestTimeoff(me.id, me.name, di, ""); }; drow.appendChild(b); });
   rt.appendChild(drow); const hint=document.createElement("div"); hint.className="muted"; hint.style.marginTop="6px"; hint.textContent="Tap a day to request it off — your manager approves."; rt.appendChild(hint);
   app.appendChild(rt);
+  // shout-outs: kudos you've received, and a way to hand one to a teammate
+  const mine=kudosFor(me.id).slice(0,5);
+  const ko=document.createElement("div"); ko.className="card"; ko.innerHTML="<div class='row'><b>Shout-outs</b>"+(mine.length?" <span class='pill'>"+kudosFor(me.id).length+"</span>":"")+"</div>";
+  if(!mine.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="No shout-outs yet — be the first to give one below."; ko.appendChild(e); }
+  mine.forEach(k=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>⭐ <b>"+k.from+"</b>: "+k.note+" <small class='muted'>· "+k.day+"</small></span>"; ko.appendChild(row); });
+  // give a shout-out to a coworker
+  const others=staff.filter(s=>s.id!==me.id);
+  if(others.length){ const give=document.createElement("div"); give.style.cssText="margin-top:10px;border-top:1px solid var(--line);padding-top:8px";
+    const sel=document.createElement("select"); sel.id="kudosTo"; others.forEach(o=>{ const op=document.createElement("option"); op.value=o.id; op.textContent=o.name; sel.appendChild(op); }); sel.style.marginRight="8px";
+    const note=document.createElement("input"); note.id="kudosNote"; note.placeholder="say something kind…"; note.style.cssText="max-width:220px;margin-right:8px";
+    const b=document.createElement("button"); b.className="primary"; b.textContent="Send ⭐"; b.onclick=()=>{ const o=others.find(x=>x.id===sel.value); if(note.value.trim()){ giveKudos(me.name, sel.value, o?o.name:"", note.value.trim()); } };
+    give.appendChild(sel); give.appendChild(note); give.appendChild(b); ko.appendChild(give);
+  }
+  app.appendChild(ko);
 }
 
 /* STATUS BOARD — internal broadcast: every live record by status, read-only, with location + clock */

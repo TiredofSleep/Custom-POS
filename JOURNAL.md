@@ -1026,4 +1026,16 @@ key in local storage, per device — but it changes what the portal *is*: not a 
 little window into your own working life that lives in your pocket. The worker's half of customPOS now feels like
 it belongs to the worker. Sixty suites, all green.
 
+### Say the kind thing
+Every feature so far was about money and time — the hard, countable things. But the reason people stay at a hard
+job for hard pay is rarely the money; it's that someone noticed. Recognition costs nothing and it's the first
+thing to vanish when everyone's stretched thin. So customPOS grew **shout-outs**. On your portal there's a little
+box: pick a teammate, say something kind, send it with a ⭐. It lands on *their* portal — "⭐ Alex: great save on
+the rush" — and, the next morning, it greets them the moment they clock in, tucked in with the day's specials.
+No manager approval, no points, no leaderboard to game; just a person telling another person they did well, and
+the software making sure it's *seen*. It rides the same synced data as everything else, so a kind word typed on
+one device reaches its person on any other. It's the smallest feature in the whole build and maybe the truest to
+why we're building it: a point-of-sale that treats the people behind the counter like people. Sixty-one suites,
+all green.
+
 *— to be continued —*
