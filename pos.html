@@ -216,6 +216,7 @@ const MODULES = {
   portal:  { label:"Customer tracker",        stationTypes:["tracker"] },
   office:  { label:"Commission / reports",    stationTypes:["report"] },
   detail:  { label:"Detail / itemize",        stationTypes:["detail"] },
+  route:   { label:"Delivery route",          stationTypes:["route"] },
   clock:   { label:"Time clock",              stationTypes:["timeclock"] },
   booking: { label:"Appointments",            stationTypes:["booking"] },
   kds:     { label:"Kitchen display (bump)",  stationTypes:["kds"] },
@@ -467,6 +468,7 @@ function render(){
   else if(station.type==="tracker")     renderTracker(app, station);
   else if(station.type==="report")      renderReport(app, station);
   else if(station.type==="detail")      renderDetail(app, station);
+  else if(station.type==="route")       renderRoute(app, station);
   else if(station.type==="timeclock")   renderTimeclock(app, station);
   else if(station.type==="booking")     renderBooking(app, station);
   else if(station.type==="kds")         renderKDS(app, station);
@@ -901,6 +903,58 @@ function kdsChip(r){
 }
 // bump only fires the released (current-course) lines; held courses wait until fired
 function bumpRecord(r){ r.lines.forEach(l=>{ if(courseReleased(r,l)) l.stage=(l.path||[]).length; }); r.bumpedAt=new Date().toISOString().slice(11,16); afterChange(r); render(); }
+/* ===================================== DELIVERY ROUTE (optional) =====================================
+   A `route` station is a driver's manifest. Schedule stops (a customer, a day, pickup and/or delivery), then
+   work them: "Picked up" opens an undetailed drop order for that customer (reusing quick-drop — detailed later
+   at the plant); "Delivered" closes that customer's ready orders. Stops live in DB.stops (a top-level
+   collection, like bookings). General — any business that runs a pickup/delivery route. Enabled by a route
+   station; FLOW.route.days seeds the day chips. Inert without a route station. */
+function renderRoute(app, station){
+  DB=loadDB(); DB.stops=DB.stops||[];
+  app.innerHTML="<h2>"+station.label+"</h2>";
+  const days=(FLOW.route&&FLOW.route.days)||[];
+  // schedule a stop
+  const f=document.createElement("div"); f.className="card"; f.innerHTML="<div class='row'><b>Schedule a stop</b></div>";
+  const ph=document.createElement("input"); ph.placeholder="phone"; ph.value=stopForm.phone; ph.oninput=e=>stopForm.phone=e.target.value;
+  const nm=document.createElement("input"); nm.placeholder="name"; nm.value=stopForm.name; nm.oninput=e=>stopForm.name=e.target.value;
+  const ad=document.createElement("input"); ad.placeholder="address"; ad.value=stopForm.address; ad.oninput=e=>stopForm.address=e.target.value;
+  f.appendChild(ph); f.appendChild(nm); f.appendChild(ad);
+  if(days.length){ const ds=document.createElement("select"); ds.innerHTML="<option value=''>— day —</option>"+days.map(d=>"<option"+(stopForm.day===d?" selected":"")+">"+d+"</option>").join(""); ds.onchange=e=>stopForm.day=e.target.value; f.appendChild(ds); }
+  else { const di=document.createElement("input"); di.placeholder="day"; di.value=stopForm.day; di.oninput=e=>stopForm.day=e.target.value; f.appendChild(di); }
+  const ks=document.createElement("select"); ["both","pickup","delivery"].forEach(k=>{ const o=document.createElement("option"); o.value=k; o.textContent=k; if(stopForm.kind===k)o.selected=true; ks.appendChild(o); }); ks.onchange=e=>stopForm.kind=e.target.value; f.appendChild(ks);
+  const add=document.createElement("button"); add.className="primary"; add.textContent="Add stop"; add.style.marginLeft="8px";
+  add.onclick=()=>{ if(!stopForm.phone&&!stopForm.name){ flash("Add a customer"); return; } DB=loadDB(); DB.stops=DB.stops||[]; DB.stops.push({ id:"S"+Date.now(), phone:(stopForm.phone||"").trim(), name:((stopForm.name||"").trim()||(stopForm.phone||"").trim()), address:(stopForm.address||"").trim(), day:stopForm.day, kind:stopForm.kind, status:"OPEN" }); stopForm={ phone:"",name:"",address:"",day:stopForm.day,kind:"both" }; saveDB(DB); render(); };
+  f.appendChild(add); app.appendChild(f);
+  // day filter
+  if(days.length){ const bar=document.createElement("div"); bar.className="flowsel";
+    const all=document.createElement("button"); if(!routeDay)all.className="sel"; all.textContent="All"; all.onclick=()=>{ routeDay=null; render(); }; bar.appendChild(all);
+    days.forEach(d=>{ const bd=document.createElement("button"); if(routeDay===d)bd.className="sel"; bd.textContent=d; bd.onclick=()=>{ routeDay=d; render(); }; bar.appendChild(bd); }); app.appendChild(bar); }
+  // manifest
+  const stops=(DB.stops||[]).filter(s=> !routeDay || s.day===routeDay);
+  if(!stops.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No stops scheduled."; app.appendChild(e); }
+  stops.forEach(s=>{ const c=document.createElement("div"); c.className="card";
+    const ready=DB.records.filter(r=>(r.status==="READY"||r.status==="PAID") && r.customer && (s.phone? r.customer.phone===s.phone : r.customer.name===s.name));
+    c.innerHTML="<div class='row'><b>"+s.name+"</b> <span class='pill'>"+s.kind+"</span>"+(s.day?" <span class='pill route'>"+s.day+"</span>":"")+"<span class='spacer'></span><span class='muted'>"+(s.address||"")+"</span></div>";
+    const info=document.createElement("div"); info.className="muted"; info.style.margin="4px 0"; info.textContent= ready.length? (ready.length+" order(s) ready to deliver") : "no orders ready"; c.appendChild(info);
+    if(s.kind!=="delivery" && !s.pickedUp){ const pu=document.createElement("button"); pu.className="good"; pu.textContent="✓ Picked up"; pu.onclick=()=>routePickup(s); c.appendChild(pu); }
+    if(s.pickedUp){ const b=document.createElement("span"); b.className="pill clock good"; b.style.marginRight="8px"; b.textContent="picked up → #"+s.pickupOrder; c.appendChild(b); }
+    if(s.kind!=="pickup"){ const dv=document.createElement("button"); dv.className="primary"; dv.style.marginLeft="8px"; dv.textContent=s.delivered?"delivered ✓":("Delivered ("+ready.length+")"); dv.disabled=s.delivered||!ready.length; dv.onclick=()=>routeDeliver(s, ready.map(r=>r.id)); c.appendChild(dv); }
+    const rm=document.createElement("button"); rm.textContent="✕"; rm.title="Remove stop"; rm.style.cssText="margin-left:8px;padding:4px 10px"; rm.onclick=()=>{ DB=loadDB(); DB.stops=(DB.stops||[]).filter(x=>x.id!==s.id); saveDB(DB); render(); }; c.appendChild(rm);
+    app.appendChild(c); });
+}
+function routePickup(s){
+  DB=loadDB(); DB.seq++;
+  const rec={ id:"R"+DB.seq, number:DB.seq, lines:[], tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now(), undetailed:true, dropCount:0, fromRoute:s.id, status:"INPROGRESS", customer:{ name:s.name, phone:s.phone } };
+  if(storesOn()) rec.storeId = storeForOrder(rec.customer);
+  let c=DB.customers.find(x=>x.phone===s.phone); if(!c && s.phone){ c={ phone:s.phone, name:s.name }; DB.customers.push(c); } if(c && storesOn() && !c.storeId) c.storeId=rec.storeId;
+  DB.records.push(rec);
+  const st=(DB.stops||[]).find(x=>x.id===s.id); if(st){ st.pickedUp=true; st.pickupOrder=rec.number; }
+  saveDB(DB); render();
+}
+function routeDeliver(s, ids){
+  DB=loadDB(); (ids||[]).forEach(id=>{ const r=DB.records.find(x=>x.id===id); if(r){ r.status="CLOSED"; r.deliveredAt=new Date().toISOString().slice(11,16); } });
+  const st=(DB.stops||[]).find(x=>x.id===s.id); if(st){ st.delivered=true; } saveDB(DB); render();
+}
 function renderKDS(app, station){
   app.innerHTML="<h2>"+station.label+"</h2><p class='muted'>Oldest first. Bump a ticket when it's up.</p>";
   const live=DB.records.filter(r=>r.status==="INPROGRESS").sort((a,b)=>(a.ts||0)-(b.ts||0));
@@ -1279,6 +1333,8 @@ function renderPicker(app){
 /* ---- intake with the rules evaluator (modifiers + 86) ---- */
 let draft = null;      // the order being built
 let editingId = null;  // detail station: id of the order currently being itemized (null = normal intake-draft mode)
+let routeDay = null;   // delivery route: selected day filter (null = all days)
+let stopForm = { phone:"", name:"", address:"", day:"", kind:"both" };   // delivery route: the "schedule a stop" form
 let pending = null;    // an item being configured (required mods / add-ons / flags)
 let receiptOpen = {};  // which orders have their receipt open
 let pinBuf = "";       // time-clock PIN entry buffer
