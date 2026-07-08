@@ -50,6 +50,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `labor-cost.js` | owner survival metric — labor cost (hours × wage) and labor as a % of sales in the Z-report, with a high-share flag when payroll outruns the target |
 | `winback.js` | win-back list — regulars not seen in N+ days surfaced in the report (excludes recent visitors), one-tap invite over the notify seam marks them invited |
 | `margin.js` | cost of goods + gross margin — item cost drives a Z-report margin card (net − COGS = gross profit, margin %); only shows when items carry a cost |
+| `paystub.js` | worker pay estimate — the portal splits clocked hours into regular + overtime (1.5× premium visible), adds tips, and shows an estimated gross |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

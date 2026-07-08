@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.53";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.54";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -1026,6 +1026,19 @@ function renderWorker(app, station){
   const cell=(lab,val)=>"<div><div style='font-size:20px;font-weight:700'>"+val+"</div><div class='muted' style='font-size:12px'>"+lab+"</div></div>";
   stat.innerHTML=cell("today", hoursToday(me.id).toFixed(2)+" h")+(staffWage(me.id)?cell("earned today","$"+earnedToday(me.id).toFixed(2)):"")+(tipPoolOn()?cell("tip share today","$"+tipShareFor(me.name, todayStr()).toFixed(2)):"")+cell("this week", weeklyHours(me.id).toFixed(1)+" h"+(weeklyHours(me.id)>OT_THRESHOLD?" · OT":""))+cell("status", open?(onBreak(open)?"on break":"on the clock"):"off");
   app.appendChild(stat);
+  // my pay estimate — makes the overtime premium visible so it can't quietly be skipped
+  if(staffWage(me.id)>0){ const worked=hoursToday(me.id), wage=staffWage(me.id);
+    const reg=Math.min(OT_THRESHOLD, worked), ot=Math.max(0, worked-OT_THRESHOLD);
+    const regPay=reg*wage, otPay=ot*wage*1.5; const tipShare=tipPoolOn()?tipShareFor(me.name, todayStr()):0;
+    const pay=document.createElement("div"); pay.className="card"; pay.innerHTML="<div class='row'><b>My pay — estimate</b></div>";
+    const line=(l,v)=>"<div class='line'><span>"+l+"</span><span class='spacer'></span><span>"+v+"</span></div>";
+    pay.innerHTML+=line("Regular · "+reg.toFixed(2)+" h × $"+wage.toFixed(2), "$"+regPay.toFixed(2));
+    if(ot>0) pay.innerHTML+=line("Overtime · "+ot.toFixed(2)+" h × $"+(wage*1.5).toFixed(2)+" <span class='pill flag'>1.5×</span>", "$"+otPay.toFixed(2));
+    if(tipShare>0) pay.innerHTML+=line("Tips (today's pool)", "$"+tipShare.toFixed(2));
+    pay.innerHTML+="<div class='line'><b>Estimated gross</b><span class='spacer'></span><b>$"+(regPay+otPay+tipShare).toFixed(2)+"</b></div>";
+    pay.innerHTML+="<div class='muted' style='margin-top:2px'>An estimate from your clocked hours — your official paystub is the final word.</div>";
+    app.appendChild(pay);
+  }
   // my week
   const wk=document.createElement("div"); wk.className="card"; wk.innerHTML="<div class='row'><b>My week</b>"+((DB.schedule&&DB.schedule.published)?" <span class='pill'>posted</span>":" <span class='muted'>draft — not final</span>")+"</div>";
   SCHED_DAYS.forEach((d,di)=>{ const sh=cellShift(me.id,di); const to=timeoffReq(me.id,di); const row=document.createElement("div"); row.className="line";

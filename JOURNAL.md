@@ -959,4 +959,15 @@ carry costs, so nobody sees an empty card; opt in by filling one number per item
 profit shows up on the same report you already read at close. Revenue tells you if people came; margin tells you
 if you'll make it. Fifty-four suites, all green.
 
+### Show your work
+The oldest trick against hourly workers is the murky paycheck — hours you can't verify, overtime that somehow
+never shows up. The clock already knew every honest hour; now the worker's portal *does the pay math out loud.*
+It splits your clocked time into **regular** and **overtime**, and it prints the overtime line at **time-and-a-half
+with a 1.5× badge**, so the premium you're owed is impossible to quietly skip. Add your tip share, and it totals an
+**estimated gross** — right there on your own screen, from your own hours. It says plainly that it's an estimate
+and your official paystub is the final word, because we're not pretending to be payroll; we're making sure you
+walk in already knowing roughly what you earned, instead of hoping the number at the end matches. Same hours the
+owner's labor-cost line uses — one truth, shown to both sides. When money's tight, being able to see your own pay,
+overtime and all, isn't a nicety. It's leverage. Fifty-five suites, all green.
+
 *— to be continued —*
