@@ -89,9 +89,13 @@ open/close **recurring checklists** with photo/count/signature capture; per-cust
       assembly gets "🖨 Ticket / Tags / Bag labels", the detail bench gets "🖨 Print tags"; the on-screen
       receipt Print is always there. Verified in-browser (0 errors) + `tests/print.js`.
       (pos.html: `printDoc`/`printHook`/`docTicket`/`docTag`/`docBagLabel`.)
-- [ ] **Stage 5 — Delivery route module** (Gap 8)
-  - [ ] route/stop/driver as config + sub-records; driver view, manifest, per-stop pickup/no-pickup,
-        scan-to-rack, per-day scheduling; a "picked up a bag" → uncounted intake.
+- [x] **Stage 5 — Delivery route module** (Gap 8) — SHIPPED. A `route` station is a driver's manifest: schedule
+      stops (customer + day + pickup/delivery), then work them — "Picked up" opens an undetailed drop order for
+      that customer (reusing quick-drop → the "picked up a bag → uncounted intake" flow, detailed at the plant);
+      "Delivered" closes that customer's ready orders. Stops live in `DB.stops`; `FLOW.route.days` gives day
+      chips + a day filter. General (any pickup/delivery route). Verified in-browser (0 errors) + `tests/route.js`.
+      (pos.html: `renderRoute`/`routePickup`/`routeDeliver`.)
+      ↳ (scan-to-rack folds into Stage 4's scan/print seam; a driver field can extend the stop record.)
 - [x] **Stage 6 — Roles + money-gating** (Gap 9) — SHIPPED. Opt-in via `FLOW.endpoints.approvals = {refund:true}`
       + `FLOW.staff` roles (`owner`/`manager` may approve). A gated action (refund / line-return) prompts for a
       manager/owner PIN at the moment of the action; a wrong or staff-only PIN is denied, an approver's PIN runs
