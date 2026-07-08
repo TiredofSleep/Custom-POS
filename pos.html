@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.50";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.51";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -469,11 +469,17 @@ function renderReport(app, station){
   cnt.appendChild(inp); cnt.appendChild(diff); dc.appendChild(cnt); app.appendChild(dc);
   // ---- labor: hours off the time clock (closes the loop with the timeclock station) ----
   if((DB.punches||[]).length){
-    const byStaff={}; let stillOn=false; let onBrk=false;
-    DB.punches.forEach(pn=>{ if(!pn.out) stillOn=true; if(onBreak(pn)) onBrk=true; byStaff[pn.name]=(byStaff[pn.name]||0)+workedMs(pn)/3600000; });   // paid time = clocked minus unpaid breaks
+    const byStaff={}; let stillOn=false; let onBrk=false; let laborCost=0;
+    DB.punches.forEach(pn=>{ if(!pn.out) stillOn=true; if(onBreak(pn)) onBrk=true; const h=workedMs(pn)/3600000; byStaff[pn.name]=(byStaff[pn.name]||0)+h; laborCost += h*((pn.wage!=null?pn.wage:staffWage(pn.staffId))||0); });   // paid time = clocked minus unpaid breaks
     const lc=document.createElement("div"); lc.className="card"; lc.innerHTML="<div class='row'><b>Labor — paid hours today</b></div>";
     let tot=0; Object.keys(byStaff).forEach(n=>{ tot+=byStaff[n]; lc.innerHTML+=L(n, byStaff[n].toFixed(2)+" h"); });
     lc.innerHTML+=L("Total hours", tot.toFixed(2)+" h", true) + (stillOn?"<div class='muted' style='margin-top:4px'>Some staff are still on the clock"+(onBrk?" (some on break)":"")+".</div>":"");
+    // labor cost + labor as a share of sales — the number that tells an owner if payroll is sustainable
+    if(laborCost>0){ lc.innerHTML+=L("Labor cost", money(laborCost), true);
+      if(net>0){ const pct=laborCost/net*100; const target=(FLOW.labor&&FLOW.labor.targetLaborPct)||30; const hot=pct>target+10;
+        lc.innerHTML+="<div class='line'><span>Labor as % of sales</span><span class='spacer'></span><span"+(hot?" style='color:var(--bad);font-weight:600'":"")+">"+pct.toFixed(0)+"%"+(hot?" ⚠ high":"")+"</span></div>";
+        lc.innerHTML+="<div class='muted' style='margin-top:2px'>"+(hot?"Payroll is eating a big share of sales today — a slow day or heavy staffing.":"A common healthy target is around "+target+"%.")+"</div>"; }
+    }
     app.appendChild(lc);
   }
   // ---- tip pool: share the day's tips across everyone who worked, by hours (fair + transparent) ----
