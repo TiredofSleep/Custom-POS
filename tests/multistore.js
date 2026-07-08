@@ -30,6 +30,7 @@ const FLOW = {
   await p.getByRole('button',{name:/Hot Springs/}).first().click();     // store chooser (multi-store picker)
   await p.getByRole('button',{name:/Front Counter/}).first().click();   // station
   await p.getByText('Shirt',{exact:false}).first().click();             // no mods -> adds directly
+  await p.evaluate(()=>attachCustomer('5551234','Pat'));                // attach a customer -> tests home-store stickiness
   await p.getByRole('button',{name:/Send order/}).click();
 
   // Inspect the stamped order + the pure store helpers (config-driven, no trade code)
