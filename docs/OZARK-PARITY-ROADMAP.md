@@ -48,8 +48,13 @@ open/close **recurring checklists** with photo/count/signature capture; per-cust
         tracker. `stageOf(r,pub)` derives the order's stage from its least-advanced incomplete line and is
         used on the status board + sanitized tracker. Falls back to station labels when no config. Verified
         across all states, 0 console errors. (`pos.html`: `stageOf`, `renderBoard`, `renderTracker`; `cleaners` demo has a `lifecycle`.)
-  - [ ] 1b. **`storeId` / location** on every record; a store list in config; per-station store scope
-        (a station can be pinned to a store); order belongs to the customer's store.
+  - [x] 1b. **Multi-store** — SHIPPED. A flow with a `stores:[{id,name,plant?}]` list becomes multi-location
+        (entirely inert without it). Each device is scoped to a store on the picker; every order is stamped
+        with a `storeId` — the customer's home store if known, else the device's store, else the plant.
+        Drop-store orders read "assembled at <plant>" on the board + the customer tracker; a store chip shows
+        on the board / pipeline / checkout. Customers remember their home store (sticky). Print routing
+        (Stage 4) will key off the order's `storeId`, never the workstation. Verified in-browser (0 console
+        errors) + `tests/multistore.js`. (pos.html: `storesOn`/`homeStore`/`storeForOrder`/`storeChip`/`assembledAt`.)
   - [ ] 1c. Extensible **sub-records** on a record (child objects: pieces, route-stop) — the substrate Stages
         3/8 hang on.
 - [x] **Stage 2 — Unique / serialized inventory + tag** (Gap 3) — SHIPPED (engine). Owner's reframe: HSL is just
