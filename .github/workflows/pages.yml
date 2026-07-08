@@ -34,6 +34,8 @@ jobs:
           node build.js                       # produces dist/custompos.html (engine inlined)
           cp index.html builder.html pos.html _site/
           cp dist/custompos.html _site/app.html
+          # SEO assets: crawler rules, sitemap, and the social-share image
+          cp robots.txt sitemap.xml og.png _site/
           # land on the marketing page by default
           cp index.html _site/index.html
           # custom domain (apex): serve the site at custompos.org
