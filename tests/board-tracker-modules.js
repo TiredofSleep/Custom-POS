@@ -32,7 +32,7 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   // Customer tracker: sanitized -> item name + friendly status, NO prices, NO "Heavy"/internal
   await changeTo('Customer Tracker');
   const tr = await T();
-  const trackerSanitized = /#1/.test(tr) && /In progress/.test(tr) && /Shirt/.test(tr) && !/\$\d/.test(tr) && !/Heavy/.test(tr) && !/assembly/.test(tr);
+  const trackerSanitized = /#1/.test(tr) && /Received/.test(tr) && /Shirt/.test(tr) && !/\$\d/.test(tr) && !/Heavy/.test(tr) && !/assembly/.test(tr);   // friendly config-driven stage ("Received — in line"); still no $, no modifier text, no raw station id
 
   await b.close();
   console.log('setup module line:', setupTxt.split('\n').find(l=>/Modules enabled/.test(l)));
