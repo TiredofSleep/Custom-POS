@@ -947,4 +947,16 @@ list or a marketing suite; it's the shop's own memory, turned into a reason to r
 likely to come back. In lean times, that list is money sitting in the receipts, waiting to be asked. Fifty-three
 suites, all green.
 
+### What's actually left over
+Revenue is a vanity number. A shop can ring up a great day and still lose money if the stuff it sold cost too
+much to make. The number that matters is what's *left* — and most small operators are flying blind on it, because
+their POS only ever told them what came in, never what it cost. So customPOS let each item carry a **cost** — what
+it costs *you* — right next to its price in the builder. Then the Z-report does the subtraction nobody was doing:
+**cost of goods** for everything sold today, **gross profit** (sales minus that cost), and the **margin percent**,
+with a plain line — *what's left to cover rent, labor, and everything else.* Sell below cost and the number goes
+red and says so, because a busy day at a loss is the most dangerous kind. It only appears when items actually
+carry costs, so nobody sees an empty card; opt in by filling one number per item and the truth about the day's
+profit shows up on the same report you already read at close. Revenue tells you if people came; margin tells you
+if you'll make it. Fifty-four suites, all green.
+
 *— to be continued —*

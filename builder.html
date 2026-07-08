@@ -367,7 +367,7 @@ function itemEditor(i){
   return h('div',{class:'ed'},[
     h('h3',{},['Item']),
     h('div',{class:'fld'},[h('span',{class:'flab'},['Name']), h('input',{id:'itemName', class:'nm',value:it.name, oninput:e=>{ it.name=e.target.value; }})]),
-    h('div',{class:'fld'},[h('span',{class:'flab'},['Price $']), h('input',{id:'itemPrice', class:'sm',type:'number',value:it.price, oninput:e=>it.price=Number(e.target.value)||0}), h('span',{class:'flab'},['Category']), h('input',{class:'nm',value:it.category, oninput:e=>it.category=e.target.value})]),
+    h('div',{class:'fld'},[h('span',{class:'flab'},['Price $']), h('input',{id:'itemPrice', class:'sm',type:'number',value:it.price, oninput:e=>it.price=Number(e.target.value)||0}), h('span',{class:'flab'},['Cost $']), h('input',{class:'sm',type:'number',value:it.cost||'', placeholder:'0', title:'what it costs you (for margin)', oninput:e=>{ const v=Number(e.target.value)||0; if(v) it.cost=v; else delete it.cost; }}), h('span',{class:'flab'},['Category']), h('input',{class:'nm',value:it.category, oninput:e=>it.category=e.target.value})]),
     h('div',{class:'fld'},[h('span',{class:'flab'},['Flows through']), h('span',{class:'hint'},['the workstations this item visits, in order — modules follow the item'])]),
     pathRow,
     h('div',{class:'fld'},[h('span',{class:'flab'},['Required choice']), h('span',{class:'hint'},['must be picked before it can be sent'])]), modBlock,
