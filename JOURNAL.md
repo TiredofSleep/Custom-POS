@@ -1076,4 +1076,43 @@ And one small thing that matters more than its size: not every business fits a t
 
 The doors are open, the sign is lit, and the map now points here from a dozen directions.
 
+## 2026-07-08 — Proving the promise: a whole plant, built from generalized parts
+
+The claim underneath customPOS is a bold one: that a single small business's real software, broken into general
+parts, can rebuild *itself* for anyone — no per-trade code, just configuration. It was time to prove it on the
+hardest case we had — the origin app itself: a two-store wet cleaner with per-garment tracking, a plant that
+assembles the other store's orders, a pickup-and-delivery route, and an owner-approval gate on refunds. Could
+the generalized engine be configured back into *that*, from a blank slate?
+
+A two-sided audit said yes — but only with new engine **primitives**, not more template data. So we built them,
+one verified increment at a time, and the discipline that kept them honest was a single rule: **every capability
+is a setting, not a code path for one trade.** If a feature only made sense for a cleaner, it was the wrong
+feature.
+
+The reframe that unlocked the hardest one came from the owner. Garment tracking — the "HSL" tag that follows a
+shirt through cleaning — *sounds* trade-specific. He said: *"HSL tracking is just unique inventory with stops
+before it sells."* That's it exactly. A tracked garment is a **serialized unit**: one item, its own durable tag,
+moving through stops before it's fulfilled. Mark any catalog item `serialized` and it becomes that — a jeweler's
+serial, a repair shop's IMEI, a rental's asset tag. The cleaner's magic turned out to be everyone's.
+
+The rest followed the same shape. **Multi-store**: a `stores` list turns any shop into a plant-and-drop network,
+orders stamped with the store that owns them, drop-store orders reading "assembled at the plant." **Smart
+assembly**: bag-splitting that keeps comforters alone and spreads the thick pieces, plus an in/out
+reconciliation gate that won't release an order until every piece is counted back out. **Drop now, detail
+later**: count the bags at the counter, itemize them at the bench — a cleaner's rush-hour trick that's also a
+repair shop taking in a device before it quotes. **Printing** that routes each tag and label by the *order's*
+store, never the workstation. A **delivery route** whose "picked up" opens an uncounted order and whose
+"delivered" closes the ready ones. And a **money-gate**: refunds that need a manager's PIN and land in an audit
+log — the owner's own anti-theft rule, generalized to "some actions need approval."
+
+None of it is a cleaner feature. All of it is a switch. To prove that isn't just a nice story, the last thing
+built was a template that flips every switch at once — "Full-plant cleaner + route" — and a test that walks one
+order all the way through it from that config alone: two serialized shirts into a drop store, bagged and
+reconciled and tagged at assembly with the tags routed to the right store, racked, marked ready behind a
+customer tracker that says "assembled at Main Plant" and nothing it shouldn't, then delivered on the route. One
+order, every primitive, zero console errors. A whole plant, standing up from a config file.
+
+The point was never the cleaner. The point was that the cleaner was never special — and now there's a test that
+proves it.
+
 *— to be continued —*
