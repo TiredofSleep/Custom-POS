@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.52";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.53";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -444,13 +444,14 @@ function renderReport(app, station){
   const done=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED") && dayOf(r.ts)===day);
   const L=(lab,val,bold)=>"<div class='line'>"+(bold?"<b>":"<span>")+lab+(bold?"</b>":"</span>")+"<span class='spacer'></span>"+(bold?"<b>":"<span>")+val+(bold?"</b>":"</span>")+"</div>";
   // ---- daily sales summary (refund-aware: a refunded order's sale nets out, its reversed tender nets its tenders) ----
-  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0; const byTender={}, byCat={};
+  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0, cogs=0; const byTender={}, byCat={};
+  const itemCost=(l)=>{ const it=FLOW.catalog.find(i=>i.id===l.catId); return (it&&+it.cost)||0; };
   done.forEach(r=>{ const rf=r.status==="REFUNDED";
     if(rf){ refunds += recordTotal(r); }
     else { orders++;
       const allSub=lineSubtotal(r), frac = allSub>0 ? (allSub-returnedSubtotal(r))/allSub : 1;   // proportion still sold (line-level returns)
       net += recordNet(r)*frac; tax += recordTax(r)*frac; tips += r.tip||0; disc += recordDiscount(r)*frac;
-      r.lines.filter(l=>!l.returned).forEach(l=>{ items += l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty; });
+      r.lines.filter(l=>!l.returned).forEach(l=>{ items += l.qty; cogs += itemCost(l)*l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty; });
       const ret = -((r.tenders||[]).filter(t=>t.refund).reduce((s,t)=>s+t.amount,0)); if(ret>0.0001) refunds += ret;   // partial line returns
     }
     (r.tenders||[]).forEach(t=>{ byTender[t.type]=(byTender[t.type]||0)+t.amount; });   // refund pushes offsetting negative tenders, so this nets
@@ -463,6 +464,14 @@ function renderReport(app, station){
     + L("Net sales", money(net)) + (disc?L("Discounts","−"+money(disc)):"") + L("Tax collected", money(tax)) + (tips?L("Tips", money(tips)):"") + (refunds?L("Refunds","−"+money(refunds)):"")
     + L("Total collected", money(collected), true) + (onAccount?L("On account (A/R)", money(onAccount)):"");
   app.appendChild(sum);
+  // ---- gross margin: what's left after the cost of what you sold (only when items carry a cost) ----
+  if(FLOW.catalog.some(i=>+i.cost>0) && net>0){ const gross=net-cogs; const margin=gross/net*100;
+    const pc=document.createElement("div"); pc.className="card";
+    pc.innerHTML="<div class='row'><b>Gross margin</b></div>"+L("Net sales", money(net))+L("Cost of goods","−"+money(cogs))+L("Gross profit", money(gross), true)
+      +"<div class='line'><span>Margin</span><span class='spacer'></span><span"+(margin<0?" style='color:var(--bad);font-weight:600'":"")+">"+margin.toFixed(0)+"%</span></div>"
+      +"<div class='muted' style='margin-top:2px'>"+(margin<0?"You're selling below cost today — check pricing or waste.":"What's left to cover rent, labor, and everything else.")+"</div>";
+    app.appendChild(pc);
+  }
   if(Object.keys(byTender).length){ const tc=document.createElement("div"); tc.className="card"; tc.innerHTML="<div class='row'><b>By tender</b></div>"+Object.keys(byTender).map(k=>L(k[0].toUpperCase()+k.slice(1), money(byTender[k]))).join(""); app.appendChild(tc); }
   if(Object.keys(byCat).length){ const cc=document.createElement("div"); cc.className="card"; cc.innerHTML="<div class='row'><b>By category</b></div>"+Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]).map(k=>L(k, money(byCat[k]))).join(""); app.appendChild(cc); }
   // ---- cash drawer count ----
