@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.59";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.60";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -461,6 +461,20 @@ function renderReport(app, station){
   });
   const onAccount=byTender.account||0;   // charged to house accounts today — money owed, not money collected
   const collected=Object.keys(byTender).filter(k=>k!=="account").reduce((s,k)=>s+byTender[k],0);
+  // ---- "how today went": one plain-language verdict fusing sales, margin, and labor — the first thing an owner sees ----
+  if(isToday && (orders||refunds)){
+    let laborCost=0; (DB.punches||[]).forEach(pn=>{ laborCost += (workedMs(pn)/3600000)*((pn.wage!=null?pn.wage:staffWage(pn.staffId))||0); });
+    const haveCost=FLOW.catalog.some(i=>+i.cost>0); const marginPct = (haveCost&&net>0)? (net-cogs)/net*100 : null;
+    const laborPct = (laborCost>0&&net>0)? laborCost/net*100 : null;
+    const target=(FLOW.labor&&FLOW.labor.targetLaborPct)||30;
+    const concerns=[]; if(laborPct!=null && laborPct>target+10) concerns.push("labor is running high"); if(marginPct!=null && marginPct<20) concerns.push("margins are thin"); if(refunds>collected*0.15 && refunds>0) concerns.push("lots of refunds");
+    const good = !concerns.length && net>0;
+    const verdict = net<=0 ? "Quiet so far today." : good ? "Solid day." : "Worth a look — "+concerns.join(", ")+".";
+    const bits=[money(collected)+" in"]; if(marginPct!=null) bits.push(marginPct.toFixed(0)+"% margin"); if(laborPct!=null) bits.push("labor "+laborPct.toFixed(0)+"% of sales");
+    const hd=document.createElement("div"); hd.className="card"; hd.style.cssText="border-left:4px solid "+(net<=0?"var(--line)":good?"var(--good,#2ea043)":"var(--warn,#c99a12)")+";padding-left:14px";
+    hd.innerHTML="<div style='font-size:18px;font-weight:700'>"+verdict+"</div><div class='muted' style='margin-top:2px'>"+bits.join(" · ")+"</div>";
+    app.appendChild(hd);
+  }
   const sum=document.createElement("div"); sum.className="card";
   sum.innerHTML="<div class='row'><b>Sales summary</b></div>"
     + L("Orders", String(orders)) + L("Items sold", String(items))
