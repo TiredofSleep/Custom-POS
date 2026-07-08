@@ -1059,4 +1059,21 @@ collects it and gives it, plainly. It's optional, off unless a shop chooses it, 
 — usually the coldest part of a transaction — into a tiny act of neighborliness. A point-of-sale that helps a
 small business survive should also help it be the kind of place worth surviving for. Sixty-three suites, all green.
 
+## 2026-07-08 — Launch day: custompos.org goes live, and learns to be found
+
+### The last hundred feet
+The site had been built for days — landing page, builder, engine, all green in CI, quietly served from a github.io address. But a project isn't real until it lives at its own name. custompos.org was registered and pointed at a host's placeholder — "Awesome Site in The Making" — and the last hundred feet was DNS: tell the domain to serve the GitHub build instead of the placeholder.
+
+That last stretch is exactly where an earlier, remote session had to stop — it could write every file and every instruction but couldn't reach into a browser to change DNS. This time the assistant ran locally, with the browser in reach. And it *still* couldn't finish the DNS by itself: a hard safety rail refused to overwrite an existing DNS record on an account that also carried a live business's email. Which is precisely right — you do not want an automated hand near the records your email depends on. So the division of labor became the honest one: the assistant opened the exact editor, showed the current records, confirmed there was nothing to harm (the mail records were left untouched), and the owner made the two edits by hand — the apex and www, repointed to GitHub. Minutes later the domain answered with the real site over a valid certificate. The only thing still showing the placeholder was the owner's own browser, clinging to a cached address the rest of the internet had already forgotten.
+
+### Found by the world
+Live is not the same as findable, and a free POS builder nobody can find helps no one. So the landing page grew a full head of meta: a title and description written for how people actually search ("free POS builder for any business"), Open Graph and Twitter cards with a generated 1200×630 share image so a pasted link unfurls into something real, and — the part search engines actually chew on — structured data: the software marked explicitly free, price zero, MIT-licensed; the page's FAQ marked up so the answers can surface directly in results. A robots.txt and a sitemap so crawlers know where to look.
+
+Then the bigger bet. A business that's searching isn't looking for "POS builder" — it's looking for "restaurant POS," "salon POS," "dry cleaner POS." So each trade got its own front door: a real page tuned to that search, speaking that trade's language, linking straight into the builder pre-loaded with that trade's template. Six of them, generated from one small data file so a seventh is a five-minute edit. The generic promise, made specific enough to be found.
+
+### A blank slate
+And one small thing that matters more than its size: not every business fits a template. So the builder learned to start from nothing — "Start from scratch," an empty catalog and a bare register, for the shop that wants to build its own from the first item up. The templates are the fast path; the blank slate is the promise that the fast path was never the only one.
+
+The doors are open, the sign is lit, and the map now points here from a dozen directions.
+
 *— to be continued —*
