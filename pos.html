@@ -1463,17 +1463,44 @@ function sendDraft(){
   DB.records.push(rec); saveDB(DB); draft=null; render();
 }
 
+/* --- ASSEMBLY: smart bag splitting + in/out reconciliation — both opt-in via station config (inert otherwise).
+   station.bag = { max:N, solo:[cats], spread:[cats] } — group this order's pieces into numbered bags: `solo`
+   categories bag alone (e.g. comforters), `spread` categories go at most one per bag (spread thick items
+   across bags), the rest fill bags up to `max`. Pure + general — any trade that bags/boxes/totes an order.
+   station.reconcile = true — every piece must be counted out before the order can leave the station:
+   count-in (pieces that arrived) must equal count-out. A loss-prevention gate, keyed per station. */
+function bagLines(units, cfg){
+  const max=Math.max(1, (cfg&&cfg.max)||4), solo=new Set((cfg&&cfg.solo)||[]), spread=new Set((cfg&&cfg.spread)||[]);
+  const bags=[]; const openBag=(isSolo)=>{ const b={items:[], spread:new Set(), solo:!!isSolo}; bags.push(b); return b; };
+  units.filter(u=>solo.has(u.category)).forEach(u=>{ openBag(true).items.push(u); });                 // e.g. comforters bag alone
+  units.filter(u=>!solo.has(u.category)).forEach(u=>{
+    let bag=bags.find(b=>!b.solo && b.items.length<max && !(spread.has(u.category)&&b.spread.has(u.category)));
+    if(!bag) bag=openBag(false);
+    bag.items.push(u); if(spread.has(u.category)) bag.spread.add(u.category);
+  });
+  bags.forEach((b,i)=> b.items.forEach(u=> u.bag=i+1));
+  return bags.length;
+}
+function bagOrder(r, station){ const n=bagLines(linesAtStation(r, station.id), station.bag||{}); r.bagsAt=r.bagsAt||{}; r.bagsAt[station.id]=n; saveDB(DB); render(); }
+function bagChip(l){ return l.bag ? " <span class='pill' title='Bag'>🧺 bag "+l.bag+"</span>" : ""; }
+function reconChecked(r, station, l){ return !!(r.recon && r.recon[station.id] && r.recon[station.id][l.id]); }
+function reconToggle(r, station, l){ r.recon=r.recon||{}; r.recon[station.id]=r.recon[station.id]||{}; r.recon[station.id][l.id]=!r.recon[station.id][l.id]; saveDB(DB); render(); }
+function pieceCount(lines){ return lines.reduce((s,l)=>s+(l.qty||1),0); }
+
 function renderPipeline(app, station){
   app.innerHTML="<h2>"+station.label+"</h2>";
   const recs=DB.records.filter(r=> r.status==="INPROGRESS" && linesAtStation(r, station.id).length);
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nothing waiting."; app.appendChild(e); }
   recs.forEach(r=>{ const mine=linesAtStation(r, station.id); const c=document.createElement("div"); c.className="card";
     c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
-    let hasFlags=false;
+    let hasFlags=false, reconOk=true;
     mine.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const next=l.path[l.stage+1];
       const flagHtml=(l.flags||[]).map(f=>{ hasFlags=true; return " <span class='pill flag'>⚠ "+f+"</span>"; }).join("");
       const perfHtml=l.performer?" <span class='pill'>"+l.performer+"</span>":"";
-      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+perfHtml+flagHtml+tagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"; c.appendChild(row); });
+      if(station.reconcile){ const ck=reconChecked(r,station,l); if(!ck) reconOk=false; const cb=document.createElement("button"); cb.textContent=ck?"✓":"○"; cb.title="Count this piece out"; cb.style.cssText="padding:2px 9px;margin-right:4px"; if(ck) cb.className="sel"; cb.onclick=()=>reconToggle(r,station,l); row.appendChild(cb); }
+      row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+perfHtml+flagHtml+tagChip(l)+bagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"); c.appendChild(row); });
+    if(station.bag){ const bagged=mine.some(l=>l.bag); const bw=document.createElement("div"); bw.className="mgroup"; bw.innerHTML="<div class='lbl'>Assembly bags</div>";
+      const bb=document.createElement("button"); bb.textContent=bagged?("🧺 Re-bag ("+((r.bagsAt&&r.bagsAt[station.id])||0)+" bag(s))"):("🧺 Bag these "+pieceCount(mine)+" piece(s)"); bb.onclick=()=>bagOrder(r,station); bw.appendChild(bb); c.appendChild(bw); }
     // checklist-as-gate: steps at this station must all be done before the record can advance
     let checksOk=true;
     if(station.checklist && station.checklist.length){
@@ -1483,9 +1510,10 @@ function renderPipeline(app, station){
       station.checklist.forEach((step,i)=>{ const on=!!done[i]; if(!on) checksOk=false; const bb=document.createElement("button"); if(on) bb.className="sel"; bb.textContent=(on?"✓ ":"○ ")+step; bb.onclick=()=>{ r.checks=r.checks||{}; r.checks[station.id]=r.checks[station.id]||{}; r.checks[station.id][i]=!on; saveDB(DB); render(); }; opts.appendChild(bb); });
       wrap.appendChild(opts); c.appendChild(wrap);
     }
+    if(station.reconcile){ const inN=pieceCount(mine), outN=pieceCount(mine.filter(l=>reconChecked(r,station,l))); const rc=document.createElement("div"); rc.className="muted"; rc.style.cssText="margin:6px 0"+(reconOk?"":";color:var(--bad)"); rc.textContent=outN+" of "+inN+" pieces counted out"+(reconOk?" ✓":" — count every piece to continue"); c.appendChild(rc); }
     const needAck = hasFlags && !r.acked;   // acknowledged once per record; persists + broadcasts
     if(needAck){ const a=document.createElement("button"); a.className="primary"; a.textContent="⚠ Acknowledge & continue"; a.style.marginTop="10px"; a.onclick=()=>{ r.acked=true; saveDB(DB); render(); }; c.appendChild(a); }
-    else { const b=document.createElement("button"); b.className="good"; b.textContent="Mark done here"; b.style.marginTop="10px"; b.disabled=!checksOk; b.onclick=()=>{ mine.forEach(l=>l.stage++); afterChange(r); render(); }; c.appendChild(b); }
+    else { const b=document.createElement("button"); b.className="good"; b.textContent="Mark done here"; b.style.marginTop="10px"; b.disabled=!checksOk || (station.reconcile && !reconOk); b.onclick=()=>{ mine.forEach(l=>l.stage++); afterChange(r); render(); }; c.appendChild(b); }
     app.appendChild(c); });
 }
 
