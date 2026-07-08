@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.57";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.58";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -215,6 +215,7 @@ function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FL
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
+function wkey(){ return "custompos_worker_"+flowId(); }   // worker portal: who's signed in on THIS device (personal-device stay-signed-in)
 function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[],incidents:[]}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
@@ -1030,6 +1031,8 @@ function renderWorker(app, station){
   const staff=FLOW.staff||[];
   app.innerHTML="<h2>"+station.label+"</h2>";
   if(!staff.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No staff configured. Add staff (name + PIN) in the builder."; app.appendChild(e); return; }
+  // stay signed in on a personal device: restore a remembered worker (per device)
+  if(!workerId){ try{ const saved=localStorage.getItem(wkey()); if(saved && staff.some(s=>s.id===saved)) workerId=saved; }catch(e){} }
   const me = workerId && staff.find(s=>s.id===workerId);
   // --- PIN gate: identify the worker on this device ---
   if(!me){ const sub=document.createElement("p"); sub.className="muted"; sub.textContent="Enter your PIN to see your schedule, hours, and pay."; app.appendChild(sub);
@@ -1040,12 +1043,16 @@ function renderWorker(app, station){
     ["1","2","3","4","5","6","7","8","9"].forEach(d=>{ const b=document.createElement("button"); b.textContent=d; b.onclick=()=>press(d); grid.appendChild(b); });
     const clr=document.createElement("button"); clr.textContent="⌫"; clr.onclick=()=>{ pinBuf=pinBuf.slice(0,-1); render(); }; grid.appendChild(clr);
     const zero=document.createElement("button"); zero.textContent="0"; zero.onclick=()=>press("0"); grid.appendChild(zero);
-    const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=()=>{ const who=staff.find(s=>String(s.pin)===pinBuf); if(who){ workerId=who.id; pinBuf=""; render(); } else { pinBuf=""; flash("PIN not recognized"); render(); } }; grid.appendChild(ent);
-    pad.appendChild(grid); app.appendChild(pad); return;
+    const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=()=>{ const who=staff.find(s=>String(s.pin)===pinBuf); if(who){ workerId=who.id; const rm=document.getElementById("wkRemember"); if(!rm||rm.checked){ try{ localStorage.setItem(wkey(), who.id); }catch(e){} } pinBuf=""; render(); } else { pinBuf=""; flash("PIN not recognized"); render(); } }; grid.appendChild(ent);
+    pad.appendChild(grid); app.appendChild(pad);
+    // stay-signed-in choice (on by default — the portal is meant for a worker's own phone; uncheck on a shared device)
+    const rmw=document.createElement("label"); rmw.className="muted"; rmw.style.cssText="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px";
+    const cb=document.createElement("input"); cb.type="checkbox"; cb.id="wkRemember"; cb.checked=true; rmw.appendChild(cb); rmw.appendChild(document.createTextNode("Keep me signed in on this device"));
+    app.appendChild(rmw); return;
   }
   // --- my dashboard ---
   const head=document.createElement("div"); head.className="row"; head.innerHTML="<h3 style='margin:0'>Hi "+me.name+"</h3>"; const sp=document.createElement("span"); sp.className="spacer"; head.appendChild(sp);
-  const out=document.createElement("button"); out.textContent="Log out"; out.onclick=()=>{ workerId=null; render(); }; head.appendChild(out); app.appendChild(head);
+  const out=document.createElement("button"); out.textContent="Log out"; out.onclick=()=>{ workerId=null; try{ localStorage.removeItem(wkey()); }catch(e){} render(); }; head.appendChild(out); app.appendChild(head);
   // today: hours + earnings
   const open=openPunch(me.id); const stat=document.createElement("div"); stat.className="card"; stat.style.cssText="display:flex;gap:20px;flex-wrap:wrap";
   const cell=(lab,val)=>"<div><div style='font-size:20px;font-weight:700'>"+val+"</div><div class='muted' style='font-size:12px'>"+lab+"</div></div>";

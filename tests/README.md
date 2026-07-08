@@ -54,7 +54,8 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `top-items.js` | top items — the report ranks sold items by revenue with per-item margin (when costs are known), so owners can see winners vs losers |
 | `busy-hours.js` | sales by hour — the report buckets net sales into hour bars and flags the busiest hour, so staffing can match demand |
 | `rest-break.js` | rest-break reminder — after a stretch with no break at all (restEveryHrs), the on-shift screen nudges a short breather; taking a break clears it |
-| `guided.js` | the guided setup interview — Shape → Name → People → Pay → Run, "I have a team" bakes in the worker suite (time-clock + scheduling + portal) and pooled tips, then builds a downloadable POS with the flow inlined |
+| `guided.js` | the guided setup interview — Shape → Name → People → Pay → Run, "I have a team" bakes in the worker suite (time-clock + scheduling + portal) and pooled tips, then builds a downloadable POS with the flow inlined; the `?guided` deep-link opens it directly |
+| `worker-signin.js` | worker portal stay-signed-in — PIN login persists per device (survives reload), log out clears it, and unchecking "keep me signed in" makes it session-only |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

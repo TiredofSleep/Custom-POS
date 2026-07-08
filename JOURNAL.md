@@ -1015,4 +1015,15 @@ panel — and it hands a nervous first-timer a working point-of-sale with their 
 whole thesis in one screen: the tools that help you survive shouldn't require an expert to switch on. Fifty-nine
 suites, all green.
 
+### Your own app, on your own phone
+The worker portal was real, but it forgot you the moment you closed the tab — fine for a shared back-office
+tablet, wrong for the thing it's actually meant to be: an app a worker keeps on *their own phone.* So the portal
+learned to remember. Sign in with your PIN and, unless you say otherwise, it **stays signed in on that device** —
+reload, come back tomorrow, it's still your schedule, your hours, your pay, no PIN dance every time. There's a
+plain **"keep me signed in on this device"** checkbox, on by default because the portal is personal, and easy to
+uncheck on a register everyone shares. Log out and it forgets you cleanly. It's a small persistence trick — one
+key in local storage, per device — but it changes what the portal *is*: not a screen at work you borrow, but a
+little window into your own working life that lives in your pocket. The worker's half of customPOS now feels like
+it belongs to the worker. Sixty suites, all green.
+
 *— to be continued —*
