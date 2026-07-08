@@ -142,6 +142,9 @@ let FLOWS = {
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}},
       notify:{ template:"Hi {name}, your order #{number} at {biz} is ready for pickup." } },
     timer:{ mode:"due", promiseSec:172800, warnSec:86400, label:"promise" },   // back-scheduled ready-by date
+    lifecycle:{ received:"Received — in line", ready:"Ready for pickup", done:"Picked up",
+      byStation:{ assembly:"In cleaning & pressing", rack:"Being racked" },
+      public:{ byStation:{ assembly:"Cleaning your order", rack:"Almost ready" } } },
     catalog:[
       {id:"g1", name:"Shirt", price:6.50, category:"press", path:["assembly","rack"],
         modifiers:[{group:"Starch", required:true, options:[{name:"None",price:0},{name:"Light",price:0},{name:"Heavy",price:0.50}]}],
@@ -221,6 +224,23 @@ const MODULES = {
 };
 function enabledModules(flow){ const types=new Set(flow.stations.map(s=>s.type)); return Object.keys(MODULES).filter(m=>MODULES[m].stationTypes.some(t=>types.has(t))); }
 const STATUS_LABEL = { INPROGRESS:"In progress", READY:"Ready for pickup", PAID:"Ready for pickup", CLOSED:"Picked up" };
+/* Config-driven NAMED LIFECYCLE STAGE for an order (e.g. Received → Detailing → Assembly → Racked → Ready → Picked up).
+   Derives from the least-advanced incomplete line's current station, so the order reads as "where the slowest piece is."
+   FLOW.lifecycle overrides the labels; FLOW.lifecycle.public overrides the customer-tracker phrasing. No trade code — pure config.
+   Falls back to sensible defaults (station labels) when no lifecycle config is present, so every trade benefits. */
+function stageOf(r, pub){
+  const base = (FLOW.lifecycle) || {}; const L = (pub && base.public) ? Object.assign({}, base, base.public) : base;
+  if(r.status === "CLOSED") return L.done || "Picked up";
+  if(r.status === "READY" || r.status === "PAID") return L.ready || "Ready for pickup";
+  const inc = (r.lines||[]).filter(l => !lineComplete(l));
+  if(!inc.length) return L.ready || "Ready for pickup";
+  const started = (r.lines||[]).some(l => (l.stage||0) > 0 || lineComplete(l));
+  if(!started) return L.received || "Received";
+  let least = inc[0]; inc.forEach(l => { if((l.stage||0) < (least.stage||0)) least = l; });
+  const stId = least.path[least.stage||0];
+  const station = (FLOW.stations||[]).find(s => s.id === stId);
+  return (L.byStation && L.byStation[stId]) || (station && (station.stageLabel || station.label)) || "In progress";
+}
 
 /* ============================================================================ ENGINE */
 // A downloaded/built POS injects its single flow before this script runs — then there is no demo picker.
@@ -1158,7 +1178,7 @@ function renderBoard(app, station){
     const h=document.createElement("h2"); h.textContent=lbl+" ("+recs.length+")"; h.style.fontSize="13px"; app.appendChild(h);
     if(!recs.length){ const e=document.createElement("div"); e.className="muted"; e.style.margin="0 0 8px"; e.textContent="—"; app.appendChild(e); }
     recs.forEach(r=>{ const c=document.createElement("div"); c.className="card";
-      c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+      c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+stageOf(r)+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
       r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const loc=lineComplete(l)?"ready":"at "+l.path[l.stage];
         row.innerHTML="<span>"+l.qty+"× "+l.name+"</span><span class='spacer'></span><span class='muted'>"+loc+"</span>"; c.appendChild(row); });
       app.appendChild(c); });
@@ -1172,7 +1192,7 @@ function renderTracker(app, station){
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No active orders."; app.appendChild(e); }
   recs.forEach(r=>{ const c=document.createElement("div"); c.className="card";
     const ready=(r.status==="READY"||r.status==="PAID");
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b><span class='spacer'></span><span class='pill "+(ready?"clock good":"")+"'>"+(STATUS_LABEL[r.status]||r.status)+"</span></div>"
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b><span class='spacer'></span><span class='pill "+(ready?"clock good":"")+"'>"+stageOf(r,true)+"</span></div>"
       + "<div class='muted' style='margin-top:6px'>"+r.lines.map(l=>l.qty+"× "+l.name).join(", ")+"</div>";   // items only — no prices
     app.appendChild(c); });
 }
