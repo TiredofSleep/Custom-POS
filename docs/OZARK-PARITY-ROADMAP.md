@@ -81,9 +81,14 @@ open/close **recurring checklists** with photo/count/signature capture; per-cust
         done" until reconciled. Verified in-browser (fill-to-max, comforters-solo, spread-thick, 0 errors) +
         `tests/assembly.js`. (pos.html: `bagLines`/`bagOrder`/`reconChecked` wired into `renderPipeline`.)
         ↳ (bulk scan — one scan reconciles a whole order — folds into Stage 4's scan/print seam.)
-- [ ] **Stage 4 — Print seam** (Gap 7)
-  - [ ] a `print()` seam with templates (garment tag, bag/rack label, ticket, receipt) + **route by the
-        order's `storeId`** (kernel invariant) + a local print-agent hook (falls back to browser print).
+- [x] **Stage 4 — Print seam** (Gap 7) — SHIPPED. `printDoc(kind,text,meta)` funnels all printing through one
+      seam: it renders a named text template (ticket / tag / bagLabel) and hands the job to a local print-agent
+      hook (`window.CUSTOMPOS_PRINT`) if installed, else prints via the browser. Every job carries the ORDER's
+      `storeId` (→ store name) so a multi-store shop routes each doc to that store's printer / colored paper —
+      routing follows the ORDER, never the workstation (kernel invariant). Opt-in via `FLOW.endpoints.print`:
+      assembly gets "🖨 Ticket / Tags / Bag labels", the detail bench gets "🖨 Print tags"; the on-screen
+      receipt Print is always there. Verified in-browser (0 errors) + `tests/print.js`.
+      (pos.html: `printDoc`/`printHook`/`docTicket`/`docTag`/`docBagLabel`.)
 - [ ] **Stage 5 — Delivery route module** (Gap 8)
   - [ ] route/stop/driver as config + sub-records; driver view, manifest, per-stop pickup/no-pickup,
         scan-to-rack, per-day scheduling; a "picked up a bag" → uncounted intake.

@@ -1522,6 +1522,11 @@ function renderPipeline(app, station){
       row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+perfHtml+flagHtml+tagChip(l)+bagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"); c.appendChild(row); });
     if(station.bag){ const bagged=mine.some(l=>l.bag); const bw=document.createElement("div"); bw.className="mgroup"; bw.innerHTML="<div class='lbl'>Assembly bags</div>";
       const bb=document.createElement("button"); bb.textContent=bagged?("🧺 Re-bag ("+((r.bagsAt&&r.bagsAt[station.id])||0)+" bag(s))"):("🧺 Bag these "+pieceCount(mine)+" piece(s)"); bb.onclick=()=>bagOrder(r,station); bw.appendChild(bb); c.appendChild(bw); }
+    if(printOn()){ const pw=document.createElement("div"); pw.className="mgroup"; pw.innerHTML="<div class='lbl'>Print</div>";
+      const pt=document.createElement("button"); pt.textContent="🖨 Ticket"; pt.onclick=()=>printDoc("ticket",docTicket(r),{storeId:r.storeId,number:r.number}); pw.appendChild(pt);
+      const serial=mine.filter(l=>l.serialized); if(serial.length){ const pg=document.createElement("button"); pg.textContent="🖨 Tags ("+serial.length+")"; pg.style.marginLeft="6px"; pg.onclick=()=>serial.forEach(l=>printDoc("tag",docTag(r,l),{storeId:r.storeId,number:r.number,tag:l.tag})); pw.appendChild(pg); }
+      const inbags=mine.filter(l=>l.bag); if(inbags.length){ const cnts={}; inbags.forEach(l=>cnts[l.bag]=(cnts[l.bag]||0)+1); const pb=document.createElement("button"); pb.textContent="🖨 Bag labels"; pb.style.marginLeft="6px"; pb.onclick=()=>Object.keys(cnts).forEach(n=>printDoc("bagLabel",docBagLabel(r,+n,cnts[n]),{storeId:r.storeId,number:r.number,bag:+n})); pw.appendChild(pb); }
+      c.appendChild(pw); }
     // checklist-as-gate: steps at this station must all be done before the record can advance
     let checksOk=true;
     if(station.checklist && station.checklist.length){
@@ -1568,10 +1573,51 @@ function renderDetail(app, station){
     const rm=document.createElement("button"); rm.textContent="✕"; rm.title="Remove"; rm.style.cssText="padding:2px 8px;margin-left:6px"; rm.onclick=()=>{ rec.lines=rec.lines.filter(x=>x.id!==l.id); saveDB(DB); render(); }; row.appendChild(rm);
     c.appendChild(row); });
   app.appendChild(c);
+  if(printOn() && rec.lines.some(l=>l.serialized)){ const pg=document.createElement("button"); pg.textContent="🖨 Print tags"; pg.style.marginRight="8px"; pg.onclick=()=>rec.lines.filter(l=>l.serialized).forEach(l=>printDoc("tag",docTag(rec,l),{storeId:rec.storeId,number:rec.number,tag:l.tag})); app.appendChild(pg); }
   const done=document.createElement("button"); done.className="good"; done.textContent="Done detailing"; done.disabled=!rec.lines.length||!!pending;
   done.onclick=()=>{ delete rec.undetailed; delete rec.dropCount; rec.detailedAt=new Date().toISOString().slice(11,16); rec.status=allComplete(rec)?"READY":"INPROGRESS"; editingId=null; pending=null; saveDB(DB); render(); };
   app.appendChild(done);
   const back=document.createElement("button"); back.textContent="← Back"; back.style.marginLeft="8px"; back.onclick=()=>{ editingId=null; pending=null; render(); }; app.appendChild(back);
+}
+/* ===================================== PRINT SEAM =====================================
+   One place all printing goes through. Renders a named text template (thermal-friendly) and hands it to the
+   local print-agent hook (window.CUSTOMPOS_PRINT) if one is installed, else prints via the browser. Every job
+   carries the ORDER's storeId so a multi-store shop routes each doc to that store's printer / colored paper —
+   routing follows the ORDER, never the workstation (kernel invariant). Templates: ticket, tag (per serialized
+   unit), bagLabel. Templated-print buttons are opt-in via FLOW.endpoints.print; the on-screen receipt Print is
+   always available. Inert (no buttons) unless a flow turns it on. */
+function printOn(){ return !!(FLOW.endpoints && FLOW.endpoints.print); }
+function printHook(){ return (typeof window!=="undefined" && typeof window.CUSTOMPOS_PRINT==="function") ? window.CUSTOMPOS_PRINT : null; }
+function printDoc(kind, text, meta){
+  const job = Object.assign({ kind, text, biz:(FLOW.branding&&FLOW.branding.name)||"", storeName:(meta&&meta.storeId)?storeName(meta.storeId):"" }, meta||{});
+  const hook = printHook();
+  if(hook){ try{ hook(job); }catch(e){} return job; }                          // a print agent handles routing to the store's printer
+  try{ const w=window.open("","_blank","width=360,height=640");
+    if(w){ w.document.write("<pre style=\"font:12px/1.35 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;padding:10px\">"+String(text).replace(/&/g,"&amp;").replace(/</g,"&lt;")+"</pre>"); w.document.close(); w.focus(); w.print(); setTimeout(()=>{ try{ w.close(); }catch(_){}} ,150); }
+    else { window.print(); }
+  }catch(e){ try{ window.print(); }catch(_){} }
+  return job;
+}
+function dueDateText(r){ const t=FLOW.timer; if(!t||t.mode!=="due"||!r.ts) return ""; return new Date(r.ts + t.promiseSec*1000).toISOString().slice(0,16).replace("T"," "); }
+function docLineText(l){ return "  "+(l.qty||1)+"x "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.serialized&&l.tag?"  ["+(l.tagLabel||"Tag")+" "+l.tag+"]":"")+(l.bag?"  bag "+l.bag:""); }
+function docTicket(r){
+  const L=[]; L.push(((FLOW.branding&&FLOW.branding.name)||"Order").toUpperCase());
+  if(storesOn()&&r.storeId){ L.push(storeName(r.storeId)); const aa=assembledAt(r); if(aa) L.push(aa); }
+  L.push("Order #"+r.number+"   "+(r.createdAt||"")); if(r.customer) L.push((r.customer.name||"")+"   "+(r.customer.phone||""));
+  L.push("------------------------------"); (r.lines||[]).forEach(l=>L.push(docLineText(l)));
+  L.push("------------------------------"); const dd=dueDateText(r); if(dd) L.push("Promised: "+dd);
+  return L.join("\n");
+}
+function docTag(r, l){
+  const L=[]; if(storesOn()&&r.storeId) L.push(storeName(r.storeId));
+  L.push("#"+r.number+(r.customer?"  "+r.customer.name:"")); L.push(l.name+(l.modLabel?" ("+l.modLabel+")":""));
+  if(l.serialized&&l.tag) L.push((l.tagLabel||"Tag")+": "+l.tag); if(l.bag) L.push("Bag "+l.bag); const dd=dueDateText(r); if(dd) L.push("Due "+dd);
+  return L.join("\n");
+}
+function docBagLabel(r, bagNo, count){
+  const L=[]; if(storesOn()&&r.storeId){ L.push(storeName(r.storeId)); const aa=assembledAt(r); if(aa) L.push(aa.toUpperCase()); }
+  L.push("#"+r.number+(r.customer?"  "+r.customer.name:"")); L.push("BAG "+bagNo+"   ("+count+" piece"+(count===1?"":"s")+")");
+  return L.join("\n");
 }
 function receiptPanel(r){
   const sub=lineSubtotal(r), disc=recordDiscount(r), tax=recordTax(r), tip=r.tip||0, tot=recordTotal(r);
