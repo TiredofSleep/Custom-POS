@@ -205,7 +205,12 @@ const TEMPLATES = {
       {id:"bar",type:"production",label:"Bar",view:{money:false}},
       {id:"kds",type:"kds",label:"Kitchen Display",view:{money:false}},
       {id:"office",type:"report",label:"Office",view:{money:true}}
-    ] }
+    ] },
+  blank: { flowId:"blank", label:"Start from scratch", topology:"linear", blurb:"A blank slate — add your own items, stations & rules",
+    branding:{ name:"My Business", brandColor:"#1f6feb" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", split:true }, tax:{rate:0}, discounts:true },
+    catalog:[],
+    stations:[ {id:"reg",type:"central",label:"Register",view:{money:true}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] }
 };
 const STATION_TYPES = [
   ["intake","Intake — starts orders"], ["central","Counter — starts & finishes"], ["production","Work station — items pass through"],
@@ -689,5 +694,8 @@ function render(){
   }
 }
 // deep-link: builder.html?guided (or ?start=guided) drops a first-timer straight into the interview
-if(/[?&](guided|start=guided)(=|&|$)/.test(location.search)) startGuide(); else render();
+var __tm=(location.search.match(/[?&]trade=([a-z0-9]+)/i)||[])[1];
+if(__tm && TEMPLATES[__tm]) chooseTrade(__tm);
+else if(/[?&](guided|start=guided)(=|&|$)/.test(location.search)) startGuide();
+else render();
 </script>

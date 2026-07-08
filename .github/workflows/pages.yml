@@ -32,8 +32,10 @@ jobs:
         run: |
           mkdir -p _site
           node build.js                       # produces dist/custompos.html (engine inlined)
+          node tools/gen-landing.js                       # (re)generate per-trade SEO landing pages
           cp index.html builder.html pos.html _site/
           cp dist/custompos.html _site/app.html
+          cp restaurant.html retail.html salon.html repair-shop.html dry-cleaner.html jewelry.html _site/
           # SEO assets: crawler rules, sitemap, and the social-share image
           cp robots.txt sitemap.xml og.png _site/
           # land on the marketing page by default
