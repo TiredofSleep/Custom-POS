@@ -43,9 +43,11 @@ open/close **recurring checklists** with photo/count/signature capture; per-cust
 ## Build stages (each: engine primitive → builder toggle → verify from blank → commit)
 
 - [ ] **Stage 1 — Foundation**
-  - [ ] 1a. Config-driven **named lifecycle stages**: `FLOW.stages` (ordered, with internal + public-tracker
-        labels); derive an order's stage from its least-advanced incomplete line; show it on the board, the
-        sanitized tracker, and receipts. Generalizes the origin app's `trackStatusLabel`.
+  - [x] 1a. Config-driven **named lifecycle stages** — SHIPPED. `FLOW.lifecycle` gives per-flow stage labels
+        (`received`/`ready`/`done` + per-station `byStation`), with a `.public` override for the customer
+        tracker. `stageOf(r,pub)` derives the order's stage from its least-advanced incomplete line and is
+        used on the status board + sanitized tracker. Falls back to station labels when no config. Verified
+        across all states, 0 console errors. (`pos.html`: `stageOf`, `renderBoard`, `renderTracker`; `cleaners` demo has a `lifecycle`.)
   - [ ] 1b. **`storeId` / location** on every record; a store list in config; per-station store scope
         (a station can be pinned to a store); order belongs to the customer's store.
   - [ ] 1c. Extensible **sub-records** on a record (child objects: pieces, route-stop) — the substrate Stages
