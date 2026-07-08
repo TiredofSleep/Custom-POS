@@ -275,6 +275,26 @@ function boundStation(){ const id=localStorage.getItem(skey()); return FLOW.stat
 function bindStation(id){ localStorage.setItem(skey(), id); render(); }
 function unbind(){ localStorage.removeItem(skey()); render(); }
 
+/* ===================================== MULTI-STORE (optional) =====================================
+   A flow with a `stores` list becomes multi-location. Each device is scoped to a store; every order belongs
+   to a store — the customer's home store if known, else this device's store, else the plant. Orders whose
+   store is a DROP store are produced at the PLANT and read "assembled at <plant>". Print routing (Stage 4)
+   keys off the ORDER's storeId, never the workstation. Fully inert when a flow has no `stores` — a
+   single-store business never sees any of it. Pure data-as-config, no per-trade code. */
+function storesOn(){ return Array.isArray(FLOW.stores) && FLOW.stores.length>0; }
+function storeList(){ return storesOn() ? FLOW.stores : []; }
+function storeById(id){ return storeList().find(s=>s.id===id) || null; }
+function storeName(id){ const s=storeById(id); return s ? s.name : ""; }
+function isPlantStore(id){ const s=storeById(id); return !!(s && s.plant); }
+function plantStore(){ return storeList().find(s=>s.plant) || storeList()[0] || null; }
+function defaultStoreId(){ const p=plantStore(); return p ? p.id : null; }
+function stkey(){ return "custompos_store_"+flowId(); }               // which store THIS device is at
+function homeStore(){ if(!storesOn()) return null; const id=localStorage.getItem(stkey()); return storeById(id) ? id : null; }
+function setStore(id){ if(id) localStorage.setItem(stkey(), id); else localStorage.removeItem(stkey()); render(); }
+function storeForOrder(cust){ return (cust && cust.storeId) || homeStore() || defaultStoreId(); }   // an order's home store
+function storeChip(r){ if(!storesOn() || !r.storeId) return ""; const nm=storeName(r.storeId); return nm ? " <span class='pill' title='Store'>🏬 "+nm+"</span>" : ""; }
+function assembledAt(r){ if(!storesOn() || !r.storeId) return ""; const p=plantStore(); return (p && r.storeId!==p.id) ? "assembled at "+p.name : ""; }   // a drop-store order is done at the plant
+
 /* ===================================== MONEY MATH ===================================== */
 function lineSubtotal(r){ return r.lines.reduce((s,l)=> s + l.price*l.qty, 0); }
 function recordDiscount(r){ return Math.min(r.discount||0, lineSubtotal(r)); }
@@ -815,6 +835,7 @@ function checkInBooking(bk){
   const line={ id:"L"+DB.seq, catId:item.id, name:item.name, modLabel:"", flags:[], performer:bk.staff||null, price:item.price, qty:1, category:item.category, path:(item.path||[]).slice(), stage:0 };
   const rec={ id:"R"+DB.seq, number:DB.seq, lines:[line], tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now(), fromBooking:bk.id };
   if(bk.name){ rec.customer={ name:bk.name, phone:bk.phone||"" }; }
+  if(storesOn()) rec.storeId = homeStore() || defaultStoreId();
   rec.status = allComplete(rec) ? "READY" : "INPROGRESS";
   DB.records.push(rec);
   const b=(DB.bookings||[]).find(x=>x.id===bk.id); if(b){ b.status="CHECKEDIN"; b.orderNo=rec.number; }
@@ -1178,7 +1199,8 @@ function renderBoard(app, station){
     const h=document.createElement("h2"); h.textContent=lbl+" ("+recs.length+")"; h.style.fontSize="13px"; app.appendChild(h);
     if(!recs.length){ const e=document.createElement("div"); e.className="muted"; e.style.margin="0 0 8px"; e.textContent="—"; app.appendChild(e); }
     recs.forEach(r=>{ const c=document.createElement("div"); c.className="card";
-      c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+stageOf(r)+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+      c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+stageOf(r)+"</span>"+clockChip(r)+storeChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+      { const _aa=assembledAt(r); if(_aa){ const n=document.createElement("div"); n.className="muted"; n.style.fontSize="12px"; n.textContent=_aa; c.appendChild(n); } }
       r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const loc=lineComplete(l)?"ready":"at "+l.path[l.stage];
         row.innerHTML="<span>"+l.qty+"× "+l.name+tagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+loc+"</span>"; c.appendChild(row); });
       app.appendChild(c); });
@@ -1192,8 +1214,10 @@ function renderTracker(app, station){
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No active orders."; app.appendChild(e); }
   recs.forEach(r=>{ const c=document.createElement("div"); c.className="card";
     const ready=(r.status==="READY"||r.status==="PAID");
+    const _aa=assembledAt(r);
     c.innerHTML="<div class='row'><b>#"+r.number+"</b><span class='spacer'></span><span class='pill "+(ready?"clock good":"")+"'>"+stageOf(r,true)+"</span></div>"
-      + "<div class='muted' style='margin-top:6px'>"+r.lines.map(l=>l.qty+"× "+l.name).join(", ")+"</div>";   // items only — no prices
+      + "<div class='muted' style='margin-top:6px'>"+r.lines.map(l=>l.qty+"× "+l.name).join(", ")+"</div>"   // items only — no prices
+      + (_aa?"<div class='muted' style='margin-top:4px;font-size:12px'>"+_aa+"</div>":"");
     app.appendChild(c); });
 }
 
@@ -1210,6 +1234,13 @@ function renderPicker(app){
   mods.innerHTML="Modules enabled by your stations: <b>"+enabledModules(FLOW).map(m=>MODULES[m].label).join(" · ")+"</b>";
   fs.appendChild(mods);
   app.appendChild(fs);
+  if(storesOn()){   // multi-store: this device also picks which store it's at
+    const sc=document.createElement("div"); sc.innerHTML="<h2>Which store is this device at?</h2>";
+    const bar=document.createElement("div"); bar.className="flowsel";
+    storeList().forEach(s=>{ const b=document.createElement("button"); if(homeStore()===s.id) b.className="sel";
+      b.innerHTML=s.name+(s.plant?" <small class='muted'>(plant)</small>":""); b.onclick=()=>setStore(s.id); bar.appendChild(b); });
+    sc.appendChild(bar); app.appendChild(sc);
+  }
   const wrap=document.createElement("div"); wrap.className="picker";
   wrap.innerHTML="<h2>Set up this device</h2><p class='muted'>Which workstation is this? Open in another tab/device and pick a different station to watch an order flow between them.</p>";
   FLOW.stations.forEach(s=>{ const b=document.createElement("button");
@@ -1417,6 +1448,7 @@ function addLine(item, choices, addons, flags, performer){
 function sendDraft(){
   DB=loadDB(); DB.seq++;
   const rec={ id:"R"+DB.seq, number:DB.seq, lines:draft.lines.map(l=>({...l, stage:0})), tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now() };
+  if(storesOn()) rec.storeId = storeForOrder(draft.customer);   // order belongs to a store (customer's, else this device's, else plant)
   rec.status = allComplete(rec) ? "READY" : "INPROGRESS";
   const dep = FLOW.endpoints.payment.deposit;
   if(draft.takeDeposit && dep){ rec.tenders.push({ type:"deposit", amount:+(recordTotal(rec)*dep.pct/100).toFixed(2) }); }
@@ -1425,6 +1457,7 @@ function sendDraft(){
     let c=DB.customers.find(x=>x.phone===draft.customer.phone);
     if(!c){ c={ phone:draft.customer.phone, name:draft.customer.name }; DB.customers.push(c); }
     c.name = draft.customer.name || c.name;
+    if(storesOn() && !c.storeId) c.storeId = rec.storeId;   // remember the customer's home store
     c.lastItems = rec.lines.map(l=>({ catId:l.catId, name:l.name, price:l.price, qty:l.qty, category:l.category, path:(l.path||[]).slice(), performer:l.performer||null, modLabel:l.modLabel||"", flags:(l.flags||[]).slice() }));
   }
   DB.records.push(rec); saveDB(DB); draft=null; render();
@@ -1435,7 +1468,7 @@ function renderPipeline(app, station){
   const recs=DB.records.filter(r=> r.status==="INPROGRESS" && linesAtStation(r, station.id).length);
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nothing waiting."; app.appendChild(e); }
   recs.forEach(r=>{ const mine=linesAtStation(r, station.id); const c=document.createElement("div"); c.className="card";
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     let hasFlags=false;
     mine.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const next=l.path[l.stage+1];
       const flagHtml=(l.flags||[]).map(f=>{ hasFlags=true; return " <span class='pill flag'>⚠ "+f+"</span>"; }).join("");
@@ -1474,7 +1507,7 @@ function renderCheckout(app, station){
   const recs=DB.records.filter(r=> r.status==="READY"||r.status==="PAID");
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No orders ready to check out."; app.appendChild(e); }
   recs.forEach(r=>{ const c=document.createElement("div"); c.className="card"; const bal=recordBalance(r);
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
     // tip UI (money-math): presets on the service subtotal, attributed to the provider
     const tipCfg=FLOW.endpoints.payment.tip;
