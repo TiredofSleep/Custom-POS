@@ -51,6 +51,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `winback.js` | win-back list — regulars not seen in N+ days surfaced in the report (excludes recent visitors), one-tap invite over the notify seam marks them invited |
 | `margin.js` | cost of goods + gross margin — item cost drives a Z-report margin card (net − COGS = gross profit, margin %); only shows when items carry a cost |
 | `paystub.js` | worker pay estimate — the portal splits clocked hours into regular + overtime (1.5× premium visible), adds tips, and shows an estimated gross |
+| `top-items.js` | top items — the report ranks sold items by revenue with per-item margin (when costs are known), so owners can see winners vs losers |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

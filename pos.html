@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.54";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.55";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -444,14 +444,15 @@ function renderReport(app, station){
   const done=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED") && dayOf(r.ts)===day);
   const L=(lab,val,bold)=>"<div class='line'>"+(bold?"<b>":"<span>")+lab+(bold?"</b>":"</span>")+"<span class='spacer'></span>"+(bold?"<b>":"<span>")+val+(bold?"</b>":"</span>")+"</div>";
   // ---- daily sales summary (refund-aware: a refunded order's sale nets out, its reversed tender nets its tenders) ----
-  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0, cogs=0; const byTender={}, byCat={};
+  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0, cogs=0; const byTender={}, byCat={}, byItem={};
   const itemCost=(l)=>{ const it=FLOW.catalog.find(i=>i.id===l.catId); return (it&&+it.cost)||0; };
   done.forEach(r=>{ const rf=r.status==="REFUNDED";
     if(rf){ refunds += recordTotal(r); }
     else { orders++;
       const allSub=lineSubtotal(r), frac = allSub>0 ? (allSub-returnedSubtotal(r))/allSub : 1;   // proportion still sold (line-level returns)
       net += recordNet(r)*frac; tax += recordTax(r)*frac; tips += r.tip||0; disc += recordDiscount(r)*frac;
-      r.lines.filter(l=>!l.returned).forEach(l=>{ items += l.qty; cogs += itemCost(l)*l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty; });
+      r.lines.filter(l=>!l.returned).forEach(l=>{ items += l.qty; cogs += itemCost(l)*l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty;
+        const bi=byItem[l.name]=byItem[l.name]||{qty:0,rev:0,cost:0}; bi.qty+=l.qty; bi.rev+=l.price*l.qty; bi.cost+=itemCost(l)*l.qty; });
       const ret = -((r.tenders||[]).filter(t=>t.refund).reduce((s,t)=>s+t.amount,0)); if(ret>0.0001) refunds += ret;   // partial line returns
     }
     (r.tenders||[]).forEach(t=>{ byTender[t.type]=(byTender[t.type]||0)+t.amount; });   // refund pushes offsetting negative tenders, so this nets
@@ -474,6 +475,15 @@ function renderReport(app, station){
   }
   if(Object.keys(byTender).length){ const tc=document.createElement("div"); tc.className="card"; tc.innerHTML="<div class='row'><b>By tender</b></div>"+Object.keys(byTender).map(k=>L(k[0].toUpperCase()+k.slice(1), money(byTender[k]))).join(""); app.appendChild(tc); }
   if(Object.keys(byCat).length){ const cc=document.createElement("div"); cc.className="card"; cc.innerHTML="<div class='row'><b>By category</b></div>"+Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]).map(k=>L(k, money(byCat[k]))).join(""); app.appendChild(cc); }
+  // ---- top items: your best sellers by revenue, with per-item margin when costs are known (push winners, cut losers) ----
+  const itemNames=Object.keys(byItem);
+  if(itemNames.length){ const haveCost=FLOW.catalog.some(i=>+i.cost>0);
+    const top=itemNames.sort((a,b)=>byItem[b].rev-byItem[a].rev).slice(0,8);
+    const ti=document.createElement("div"); ti.className="card"; ti.innerHTML="<div class='row'><b>Top items</b><span class='spacer'></span><span class='muted'>by sales"+(haveCost?" · margin":"")+"</span></div>";
+    top.forEach(n=>{ const bi=byItem[n]; const m=(haveCost && bi.rev>0)?Math.round((bi.rev-bi.cost)/bi.rev*100):null;
+      ti.innerHTML+="<div class='line'><span>"+n+" <small class='muted'>×"+bi.qty+"</small></span><span class='spacer'></span><span>"+money(bi.rev)+(m!=null?" <small class='muted'>· "+m+"%</small>":"")+"</span></div>"; });
+    app.appendChild(ti);
+  }
   // ---- cash drawer count ----
   const dc=document.createElement("div"); dc.className="card";
   dc.innerHTML="<div class='row'><b>Cash drawer</b></div>"+L("Expected cash", money(byTender.cash||0));
