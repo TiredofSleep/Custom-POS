@@ -117,6 +117,43 @@ const TEMPLATES = {
       {id:"tracker",type:"tracker",label:"Customer Tracker",view:{money:false,external:true}},
       {id:"office",type:"report",label:"Office",view:{money:true}}
     ] },
+  // OZARK-GRADE cleaner — the full plant build: everything the generalized engine can do for a cleaner turned
+  // on at once (multi-store plant + drop, per-piece HSL tags, quick-drop→detail, smart bag split + in/out
+  // reconciliation, printing routed by store, a pickup/delivery route, and manager-approved refunds). Proof
+  // that a plant-grade dry cleaner is buildable from generalized config alone. Names/PINs are generic samples.
+  ozark: { flowId:"ozark", label:"Full-plant cleaner + route (advanced)", topology:"hub-and-spoke",
+    blurb:"Everything on — 2-store plant, HSL piece tags, smart assembly, pickup/delivery route, approvals",
+    branding:{ name:"My Cleaners", brandColor:"#2ea043" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0", deposit:{pct:50}},
+      loyalty:{earnPerDollar:1,redeemPoints:100,redeemValue:5}, notify:{template:"Hi {name}, your order #{number} at {biz} is ready for pickup."},
+      quotes:true, print:true, approvals:{refund:true} },
+    timer:{ mode:"due", promiseSec:172800, warnSec:86400, label:"promise" },
+    lifecycle:{ received:"Received — in line", ready:"Ready for pickup", done:"Picked up", dropped:"Received — being itemized",
+      byStation:{ detail:"Being tagged", assembly:"In cleaning & pressing", rack:"Being racked" },
+      public:{ byStation:{ detail:"Checking in your order", assembly:"Cleaning your order", rack:"Almost ready" } } },
+    stores:[ {id:"plant",name:"Main Plant",plant:true}, {id:"drop",name:"Drop Store"} ],
+    route:{ days:["Mon","Wed","Fri"] },
+    staff:[ {id:"own",name:"Owner",pin:"1234",role:"owner"}, {id:"mgr",name:"Manager",pin:"2345",role:"manager"}, {id:"prs",name:"Presser",pin:"3456",role:"staff"} ],
+    catalog:[
+      {id:"shirt",name:"Laundered Shirt",price:2.99,category:"laundry",path:["assembly","rack"],serialized:true,tagLabel:"HSL",
+        modifiers:[{group:"Starch",required:true,options:[{name:"None",price:0},{name:"Light",price:0},{name:"Medium",price:0},{name:"Heavy",price:0.5}]}],flags:["Pre-existing damage","Stain noted"]},
+      {id:"pants",name:"Pants / Slacks",price:7.5,category:"drycleaning",path:["assembly","rack"],serialized:true,tagLabel:"HSL"},
+      {id:"suit",name:"2-pc Suit",price:14,category:"drycleaning",path:["assembly","rack"],serialized:true,tagLabel:"HSL"},
+      {id:"dress",name:"Dress",price:12,category:"drycleaning",path:["assembly","rack"],serialized:true,tagLabel:"HSL",flags:["Beads / sequins"]},
+      {id:"coat",name:"Coat / Jacket",price:11,category:"drycleaning",path:["assembly","rack"],serialized:true,tagLabel:"HSL"},
+      {id:"comforter",name:"Comforter",price:25,category:"household",path:["assembly","rack"],serialized:true,tagLabel:"HSL"},
+      {id:"wf",name:"Wash & Fold (per lb)",price:1.75,category:"wf",path:["rack"]}
+    ],
+    stations:[
+      {id:"counter",type:"central",label:"Front Counter",view:{money:true}},
+      {id:"detail",type:"detail",label:"Detail / Tag",view:{money:true}},
+      {id:"assembly",type:"production",label:"Assembly",view:{money:false},bag:{max:4,solo:["household"],spread:["drycleaning"]},reconcile:true},
+      {id:"rack",type:"staging",label:"Rack",view:{money:false}},
+      {id:"route",type:"route",label:"Delivery Route",view:{money:true}},
+      {id:"board",type:"board",label:"Status Board",view:{money:false}},
+      {id:"tracker",type:"tracker",label:"Customer Tracker",view:{money:false,external:true}},
+      {id:"office",type:"report",label:"Office",view:{money:true}}
+    ] },
   repair: { flowId:"repair", label:"Repair shop", topology:"hub-and-spoke", blurb:"Intake, estimate, fix, return",
     branding:{ name:"My Repair Shop", brandColor:"#e3893c" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}}, quotes:true, notify:{template:"Hi {name}, your repair #{number} at {biz} is ready."} },
