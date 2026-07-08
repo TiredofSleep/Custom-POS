@@ -36,6 +36,8 @@ jobs:
           cp dist/custompos.html _site/app.html
           # land on the marketing page by default
           cp index.html _site/index.html
+          # custom domain (apex): serve the site at custompos.org
+          echo 'custompos.org' > _site/CNAME
 
       - uses: actions/upload-pages-artifact@v3
         with:
