@@ -897,4 +897,17 @@ one **acknowledged** so nothing filed just quietly disappears. A shop that wants
 that doesn't still gets the logged, acknowledged paper trail. It's a small thing to build and a large thing to
 mean: the tool is on the worker's side when it counts. Forty-nine suites, all green.
 
+### A place of your own
+For weeks the worker's whole life inside the POS lived on the *manager's* screens — the schedule grid, the labor
+report, the coverage queue. Useful, but it's the boss's window into the worker, not the worker's window into their
+own work. So we built the **worker portal**: a station a staffer opens, taps in their PIN, and sees **their** side
+of everything. Your hours today and this week, your **pay so far**, whether you're on the clock or on break. Your
+**week** laid out day by day — posted or still a draft — with your days off marked. The **open shifts** anyone's
+put up for coverage, and a **Claim** button that finally makes the pickup *worker-to-worker*: you take the shift
+yourself, and the software still does the fair-play checks so you can't accidentally double-book or blow past
+overtime. And a one-tap **request a day off** that drops straight into the manager's approval queue. It's all the
+same synced data the manager sees — no separate system, no new database — just turned around to face the person
+whose work it actually is. The pieces we'd been building for the boss's bench now have a home on the worker's.
+Fifty suites, all green.
+
 *— to be continued —*

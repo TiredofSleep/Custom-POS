@@ -1,7 +1,7 @@
 # Worker Rights and Scheduling
 
-> **Status (reconciled against the current build, engine v0.48).** Design intent handed over from a ClaudeChat
-> session — *not* implementation-ready. A growing foundation exists; much is still roadmap.
+> **Status (reconciled against the current build, engine v0.49).** Design intent handed over from a ClaudeChat
+> session — *not* implementation-ready. A substantial foundation now exists; some roadmap remains.
 >
 > **Already shipped (foundations to build on):** PIN **time-clock** (punches in `DB.punches`), **paid labor
 > hours** in the Z-report (now net of unpaid breaks), the **clock-in welcome/briefing**, **tips + commission**,
@@ -29,10 +29,15 @@
 >   help now** to fire an **immediate manager alert** over the notify seam. The record always lands even if the
 >   alert can't send. The Z-report carries a **safety-incident log**: open reports first, urgent ones flagged,
 >   each **acknowledged** so nothing filed disappears. Config: `FLOW.safety {alertPhone, types?}`.
+> - **v0.49** — ✅ the **worker portal** (`worker` station). A staffer logs in by PIN to **their own** view:
+>   hours today / this week, **pay so far**, on-clock/break status, their **week** (posted vs draft, days off
+>   marked), the **open shifts** up for coverage with a **self-serve Claim** (the marketplace half — same
+>   fair-play checks: no double-book, no silent OT), and one-tap **request a day off** into the manager queue.
+>   Same synced DB, turned to face the worker. Builder ships a `worker` station type.
 >
-> **Net-new (this doc's remaining value):** rest-break reminders + enforceable rest-rules, worker-to-worker
-> **self-serve pickup** (the marketplace half — needs the portal), calendar-dated PTO **balances**, **state
-> labor-law modules**, the separate **worker portal**, and payroll / government export.
+> **Net-new (this doc's remaining value):** rest-break reminders + enforceable rest-rules, calendar-dated PTO
+> **balances**, **state labor-law modules**, portal auth beyond a shared-device PIN, and payroll / government
+> export.
 >
 > **Honor the design principle:** worker-protective **defaults**, **core-with-configuration** — an operator can
 > tune parameters but removing protections takes deliberate code editing, not a toggle.
