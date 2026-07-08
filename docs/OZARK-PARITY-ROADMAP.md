@@ -42,7 +42,7 @@ open/close **recurring checklists** with photo/count/signature capture; per-cust
 
 ## Build stages (each: engine primitive → builder toggle → verify from blank → commit)
 
-- [ ] **Stage 1 — Foundation**
+- [x] **Stage 1 — Foundation** — SHIPPED (1a lifecycle, 1b multi-store; 1c resolved as unnecessary)
   - [x] 1a. Config-driven **named lifecycle stages** — SHIPPED. `FLOW.lifecycle` gives per-flow stage labels
         (`received`/`ready`/`done` + per-station `byStation`), with a `.public` override for the customer
         tracker. `stageOf(r,pub)` derives the order's stage from its least-advanced incomplete line and is
@@ -55,8 +55,10 @@ open/close **recurring checklists** with photo/count/signature capture; per-cust
         on the board / pipeline / checkout. Customers remember their home store (sticky). Print routing
         (Stage 4) will key off the order's `storeId`, never the workstation. Verified in-browser (0 console
         errors) + `tests/multistore.js`. (pos.html: `storesOn`/`homeStore`/`storeForOrder`/`storeChip`/`assembledAt`.)
-  - [ ] 1c. Extensible **sub-records** on a record (child objects: pieces, route-stop) — the substrate Stages
-        3/8 hang on.
+  - [x] 1c. Extensible **sub-records** — RESOLVED as unnecessary. The owner's Stage-2 reframe (a piece is just a
+        serialized line) collapsed "pieces" into qty-1 lines; bags are a `bag` field on those lines; route stops
+        will be a top-level DB collection (like `bookings`), not record-children. So no generic sub-record
+        substrate is needed — the concrete needs are met by lines + line fields + DB collections. Simpler, still general.
 - [x] **Stage 2 — Unique / serialized inventory + tag** (Gap 3) — SHIPPED (engine). Owner's reframe: HSL is just
       *unique inventory with stops before it sells.* An item marked `serialized` (+ `tagLabel`) becomes an
       individually-tracked UNIT — each is its own qty-1 line with a durable tag (HSL / serial / IMEI) that rides
