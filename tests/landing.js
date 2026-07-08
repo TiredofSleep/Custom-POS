@@ -15,6 +15,7 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   const money = /\$0/.test(txt) && /card processing/i.test(txt) && /No subscription/i.test(txt);
   const faq = /Where is my data stored/i.test(txt) && /What if customPOS disappears/i.test(txt) && /work if the internet goes down/i.test(txt);
   const features = /End-of-day Z-report/i.test(txt) && /Kitchen display/i.test(txt) && /House accounts/i.test(txt);
+  const pillars = /Built for the people behind the counter/i.test(txt) && /Know if you'll make it/i.test(txt) && /worker portal/i.test(txt) && /Labor as % of sales/i.test(txt);
 
   // primary CTA links to the builder; demo link to the engine
   const buildHref = await p.getByRole('link',{name:/Build my POS/}).first().getAttribute('href');
@@ -36,11 +37,12 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   console.log('monetization is explained honestly ($0 + card processing):', money);
   console.log('trust FAQ present (data / offline / disappears):', faq);
   console.log('feature grid lists deep features:', features);
+  console.log('worker-rights + business-health pillars present:', pillars);
   console.log('primary CTA -> guided builder:', buildHref==='builder.html?guided');
   console.log('demo link -> pos.html:', demoHref==='pos.html');
   console.log('FAQ details toggles open:', before===false && after===true);
   console.log('no horizontal scroll on mobile:', noHScroll);
   console.log('console errors:', errors.length?errors:'NONE');
-  const ok = hero && money && faq && features && buildHref==='builder.html?guided' && demoHref==='pos.html' && before===false && after===true && noHScroll && !errors.length;
+  const ok = hero && money && faq && features && pillars && buildHref==='builder.html?guided' && demoHref==='pos.html' && before===false && after===true && noHScroll && !errors.length;
   process.exit(ok?0:1);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });
