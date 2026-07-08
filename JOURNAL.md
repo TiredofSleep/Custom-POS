@@ -1049,4 +1049,14 @@ detail underneath if you want it. A stressed owner glancing at their phone after
 actually need to know — *are we okay?* — in a sentence, and only digs deeper on the days the sentence says to.
 Everything we measured now rolls up into the question all of it was for. Sixty-two suites, all green.
 
+### A little good, at the register
+Small shops survive on being part of a place — the regulars, the little league sponsorship, the jar by the till.
+So customPOS got a **round up for charity** option. Turn it on for a cause — "the food bank" — and at checkout the
+customer's $4.25 total comes with a gentle offer: *round up to $5.00, +$0.75 for the food bank?* One tap and the
+seventy-five cents joins the order; the end-of-day report tallies it in a **Community ♥** line — *rounded up $18
+for the food bank today — set it aside to donate.* No middleman skims it, no platform takes a cut; the shop
+collects it and gives it, plainly. It's optional, off unless a shop chooses it, and it turns the moment of paying
+— usually the coldest part of a transaction — into a tiny act of neighborliness. A point-of-sale that helps a
+small business survive should also help it be the kind of place worth surviving for. Sixty-three suites, all green.
+
 *— to be continued —*

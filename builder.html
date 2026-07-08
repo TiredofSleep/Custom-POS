@@ -269,6 +269,7 @@ function hasTender(t){ return (pay().tenders||[]).includes(t); }
 function toggleTender(t){ const a=pay().tenders||(pay().tenders=[]); const i=a.indexOf(t); if(i<0)a.push(t); else a.splice(i,1); render(); }
 function toggleTip(){ if(pay().tip) delete pay().tip; else pay().tip={presets:[15,18,20]}; render(); }
 function toggleTipPool(){ if(pay().tipPool) delete pay().tipPool; else pay().tipPool=true; render(); }
+function toggleRoundUp(){ if(pay().roundUp) delete pay().roundUp; else pay().roundUp={cause:"a local cause"}; render(); }
 function toggleLoyalty(){ if(cfg.endpoints.loyalty) delete cfg.endpoints.loyalty; else cfg.endpoints.loyalty={earnPerDollar:1,redeemPoints:100,redeemValue:5}; render(); }
 function setDeposit(v){ v=Number(v)||0; if(v>0){ pay().deposit={pct:v}; if(!(pay().points||[]).includes("deposit-balance")) pay().points=["deposit-balance"]; } else { delete pay().deposit; } }
 function setTimer(mode){ if(mode==="off"){ delete cfg.timer; } else if(mode==="aging"){ cfg.timer={mode:"aging",warnSec:300,badSec:600,label:"prep"}; } else { cfg.timer={mode:"due",promiseSec:172800,warnSec:86400,label:"promise"}; } render(); }
@@ -566,6 +567,7 @@ function render(){
         h('button',{class:hasTender('account')?'on':'', onclick:()=>toggleTender('account')},['house accounts']),
         h('button',{class:pay().tip?'on':'', onclick:()=>toggleTip()},['tips']),
         h('button',{class:pay().tipPool?'on':'', onclick:()=>toggleTipPool()},['pool tips by hours']),
+        h('button',{class:pay().roundUp?'on':'', onclick:()=>toggleRoundUp()},['round up for charity']),
         h('button',{class:cfg.endpoints.loyalty?'on':'', onclick:()=>toggleLoyalty()},['loyalty']),
         h('button',{class:cfg.endpoints.discounts?'on':'', onclick:()=>toggleDiscounts()},['discounts']),
         h('button',{class:cfg.endpoints.notify?'on':'', onclick:()=>toggleNotify()},['text when ready']),
