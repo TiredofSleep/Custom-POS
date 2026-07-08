@@ -1,0 +1,6 @@
+# customPOS — the free, open-source POS builder for any business
+# https://custompos.org/
+User-agent: *
+Allow: /
+
+Sitemap: https://custompos.org/sitemap.xml
