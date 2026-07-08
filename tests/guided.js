@@ -72,9 +72,15 @@ function serve() {
   const claudeMd = await p.evaluate(() => window.__build.claudeMd);
   const mdGuidance = /How you'll run it/.test(claudeMd) && /Several computers/.test(claudeMd);
 
+  // deep link: builder.html?guided drops straight into the interview (the landing page uses this)
+  await p.goto(`http://127.0.0.1:${port}/builder.html?guided`);
+  const deep = await p.locator('#app').innerText();
+  const deepLinkOk = /guided setup/i.test(deep) && /what kind of business/i.test(deep);
+
   await b.close(); server.close();
   console.log('\n=== RESULTS ===');
   console.log('guided setup starts the interview:', startedOk);
+  console.log('?guided deep-link opens the interview directly:', deepLinkOk);
   console.log('"team" turns on the worker suite panel:', teamOk);
   console.log('finished build keeps the entered name:', nameOk);
   console.log('worker suite baked in (timeclock+schedule+worker):', workerSuite);
@@ -84,5 +90,5 @@ function serve() {
   console.log('deployment answer produces run-it guidance on screen:', runGuidance);
   console.log('CLAUDE.md carries the run-it guidance:', mdGuidance);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!startedOk||!teamOk||!nameOk||!workerSuite||!(built.tipPool&&built.card)||!injectOk||!ready||!runGuidance||!mdGuidance?1:0);
+  process.exit(errors.length||!startedOk||!deepLinkOk||!teamOk||!nameOk||!workerSuite||!(built.tipPool&&built.card)||!injectOk||!ready||!runGuidance||!mdGuidance?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });
