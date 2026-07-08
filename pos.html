@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.51";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.52";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -424,6 +424,12 @@ function poolHours(){ const by={}; let tot=0; (DB.punches||[]).forEach(pn=>{ con
 function tipsForDay(day){ return DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED") && dayOf(r.ts)===day).reduce((s,r)=>s+(r.tip||0),0); }
 function tipShareFor(name, day){ const t=tipsForDay(day); const {by,tot}=poolHours(); return (!tot||!t)?0:t*(by[name]||0)/tot; }
 
+/* WIN-BACK — regulars we haven't seen in a while. Bringing a lapsed customer back is cheaper than finding a new
+   one; this surfaces them so the owner can invite them in one tap (over the notify seam). */
+function winbackDays(){ return (FLOW.endpoints && FLOW.endpoints.winback && +FLOW.endpoints.winback.days) || 30; }
+function customerLastVisit(phone){ let mx=0; DB.records.forEach(r=>{ if(r.customer && r.customer.phone===phone && (r.ts||0)>mx) mx=r.ts; }); return mx; }
+function lapsedCustomers(){ const cut=Date.now()-winbackDays()*86400000; return (DB.customers||[]).map(c=>({c, last:customerLastVisit(c.phone)})).filter(x=>x.last>0 && x.last<cut).sort((a,b)=>a.last-b.last); }
+
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
 function renderReport(app, station){
   const day = reportDay || todayStr(); const isToday = day===todayStr();
@@ -531,6 +537,19 @@ function renderReport(app, station){
       pb.onclick=()=>{ const n=Number(amt.value)||c.balance; const pay=Math.min(n, c.balance); c.balance=+((c.balance||0)-pay).toFixed(2); if(c.balance<=0.0001) c.balance=0; saveDB(DB); render(); };
       row.appendChild(amt); row.appendChild(pb); hc.appendChild(row); });
     app.appendChild(hc);
+  }
+  // ---- win-back: regulars we haven't seen in a while — invite them back in one tap ----
+  if(FLOW.endpoints.notify && (FLOW.endpoints.customer && FLOW.endpoints.customer.persist)){
+    const lapsed=lapsedCustomers();
+    if(lapsed.length){ const wb=document.createElement("div"); wb.className="card"; wb.innerHTML="<div class='row'><b>Win-back</b> <span class='pill'>"+lapsed.length+"</span><span class='spacer'></span><span class='muted'>not seen in "+winbackDays()+"+ days</span></div>";
+      const tmpl=(FLOW.endpoints.winback && FLOW.endpoints.winback.message) || "We miss you at {biz}! Come see us soon.";
+      lapsed.slice(0,12).forEach(({c,last})=>{ const days=Math.floor((Date.now()-last)/86400000); const row=document.createElement("div"); row.className="line";
+        row.innerHTML="<span>"+(c.name||c.phone)+" <small class='muted'>"+c.phone+" · "+days+" days</small></span>"; const sp=document.createElement("span"); sp.className="spacer"; row.appendChild(sp);
+        if(c.winbackSent){ const s=document.createElement("span"); s.className="muted"; s.textContent="✓ invited"; row.appendChild(s); }
+        else { const ib=document.createElement("button"); ib.textContent="📱 Invite back"; ib.onclick=()=>{ const body=tmpl.replace(/\{name\}/g,c.name||"there").replace(/\{biz\}/g,FLOW.branding.name); const res=notifyAdapter().send(c.phone, body); if(res && res.status==="sent"){ c.winbackSent=Date.now(); saveDB(DB); render(); } else flash("Text failed"); }; row.appendChild(ib); }
+        wb.appendChild(row); });
+      app.appendChild(wb);
+    }
   }
   // ---- refunds (back-office: reverse a paid order to its original tender) ----
   const refundable=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED") && recordPaid(r)>0.0001);
