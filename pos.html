@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.48";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.49";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -202,7 +202,8 @@ const MODULES = {
   booking: { label:"Appointments",            stationTypes:["booking"] },
   kds:     { label:"Kitchen display (bump)",  stationTypes:["kds"] },
   floor:   { label:"Floor / table plan",      stationTypes:["floor"] },
-  schedule:{ label:"Staff scheduling",        stationTypes:["schedule"] }
+  schedule:{ label:"Staff scheduling",        stationTypes:["schedule"] },
+  worker:  { label:"Worker portal",           stationTypes:["worker"] }
 };
 function enabledModules(flow){ const types=new Set(flow.stations.map(s=>s.type)); return Object.keys(MODULES).filter(m=>MODULES[m].stationTypes.some(t=>types.has(t))); }
 const STATUS_LABEL = { INPROGRESS:"In progress", READY:"Ready for pickup", PAID:"Ready for pickup", CLOSED:"Picked up" };
@@ -413,6 +414,7 @@ function render(){
   else if(station.type==="kds")         renderKDS(app, station);
   else if(station.type==="floor")       renderFloor(app, station);
   else if(station.type==="schedule")    renderSchedule(app, station);
+  else if(station.type==="worker")      renderWorker(app, station);
 }
 
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
@@ -949,6 +951,57 @@ function renderSchedule(app, station){
   app.appendChild(pub);
 }
 
+/* WORKER PORTAL — the worker's own view: log in by PIN, see your week, hours, and pay, claim open shifts
+   yourself (self-serve coverage), and request time off. Everything rides the same synced DB the manager uses. */
+function renderWorker(app, station){
+  const staff=FLOW.staff||[];
+  app.innerHTML="<h2>"+station.label+"</h2>";
+  if(!staff.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No staff configured. Add staff (name + PIN) in the builder."; app.appendChild(e); return; }
+  const me = workerId && staff.find(s=>s.id===workerId);
+  // --- PIN gate: identify the worker on this device ---
+  if(!me){ const sub=document.createElement("p"); sub.className="muted"; sub.textContent="Enter your PIN to see your schedule, hours, and pay."; app.appendChild(sub);
+    const pad=document.createElement("div"); pad.className="card"; pad.style.maxWidth="260px";
+    const disp=document.createElement("div"); disp.style.cssText="font-size:28px;letter-spacing:8px;text-align:center;min-height:36px;margin-bottom:8px"; disp.textContent=pinBuf.replace(/./g,"•")||"—"; pad.appendChild(disp);
+    const grid=document.createElement("div"); grid.style.cssText="display:grid;grid-template-columns:repeat(3,1fr);gap:6px";
+    const press=d=>{ pinBuf=(pinBuf+d).slice(0,8); render(); };
+    ["1","2","3","4","5","6","7","8","9"].forEach(d=>{ const b=document.createElement("button"); b.textContent=d; b.onclick=()=>press(d); grid.appendChild(b); });
+    const clr=document.createElement("button"); clr.textContent="⌫"; clr.onclick=()=>{ pinBuf=pinBuf.slice(0,-1); render(); }; grid.appendChild(clr);
+    const zero=document.createElement("button"); zero.textContent="0"; zero.onclick=()=>press("0"); grid.appendChild(zero);
+    const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=()=>{ const who=staff.find(s=>String(s.pin)===pinBuf); if(who){ workerId=who.id; pinBuf=""; render(); } else { pinBuf=""; flash("PIN not recognized"); render(); } }; grid.appendChild(ent);
+    pad.appendChild(grid); app.appendChild(pad); return;
+  }
+  // --- my dashboard ---
+  const head=document.createElement("div"); head.className="row"; head.innerHTML="<h3 style='margin:0'>Hi "+me.name+"</h3>"; const sp=document.createElement("span"); sp.className="spacer"; head.appendChild(sp);
+  const out=document.createElement("button"); out.textContent="Log out"; out.onclick=()=>{ workerId=null; render(); }; head.appendChild(out); app.appendChild(head);
+  // today: hours + earnings
+  const open=openPunch(me.id); const stat=document.createElement("div"); stat.className="card"; stat.style.cssText="display:flex;gap:20px;flex-wrap:wrap";
+  const cell=(lab,val)=>"<div><div style='font-size:20px;font-weight:700'>"+val+"</div><div class='muted' style='font-size:12px'>"+lab+"</div></div>";
+  stat.innerHTML=cell("today", hoursToday(me.id).toFixed(2)+" h")+(staffWage(me.id)?cell("earned today","$"+earnedToday(me.id).toFixed(2)):"")+cell("this week", weeklyHours(me.id).toFixed(1)+" h"+(weeklyHours(me.id)>OT_THRESHOLD?" · OT":""))+cell("status", open?(onBreak(open)?"on break":"on the clock"):"off");
+  app.appendChild(stat);
+  // my week
+  const wk=document.createElement("div"); wk.className="card"; wk.innerHTML="<div class='row'><b>My week</b>"+((DB.schedule&&DB.schedule.published)?" <span class='pill'>posted</span>":" <span class='muted'>draft — not final</span>")+"</div>";
+  SCHED_DAYS.forEach((d,di)=>{ const sh=cellShift(me.id,di); const to=timeoffReq(me.id,di); const row=document.createElement("div"); row.className="line";
+    const val = (to&&to.status==="approved") ? "OFF" : (to?"off requested":(sh? sh.start+"–"+sh.end+(sh.offered?" ↔ offered":"") : "—"));
+    row.innerHTML="<span>"+d+"</span><span class='spacer'></span><span class='muted'>"+val+"</span>"; wk.appendChild(row); });
+  app.appendChild(wk);
+  // open shifts I can pick up (self-serve coverage) — the marketplace half, worker-initiated
+  const open4me = offeredShifts().filter(s=>s.staffId!==me.id);
+  const oc=document.createElement("div"); oc.className="card"; oc.innerHTML="<div class='row'><b>Open shifts</b>"+(open4me.length?" <span class='pill'>"+open4me.length+"</span>":"")+"</div>";
+  if(!open4me.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="No shifts are up for coverage right now."; oc.appendChild(e); }
+  open4me.forEach(s=>{ const poster=(staff.find(x=>x.id===s.staffId)||{}).name||"?"; const offday=timeoffReq(me.id,s.day); const busy=cellShift(me.id,s.day);
+    const blocked=(offday&&offday.status==="approved")||busy; const ot=(weeklyHours(me.id)+shiftHrs(s))>OT_THRESHOLD;
+    const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+SCHED_DAYS[s.day]+" "+s.start+"–"+s.end+" <span class='muted'>· "+poster+"'s shift</span>"+(ot?" <span class='pill flag'>OT</span>":"")+"</span>";
+    const spc=document.createElement("span"); spc.className="spacer"; row.appendChild(spc);
+    const cl=document.createElement("button"); cl.className="primary"; cl.textContent="Claim"; if(blocked){ cl.disabled=true; cl.title=busy?"you're already scheduled that day":"you're off that day"; } cl.onclick=()=>coverShift(s.id, me.id); row.appendChild(cl); oc.appendChild(row); });
+  app.appendChild(oc);
+  // request time off
+  const rt=document.createElement("div"); rt.className="card"; rt.innerHTML="<div class='row'><b>Request a day off</b></div>";
+  const drow=document.createElement("div"); drow.className="opts";
+  SCHED_DAYS.forEach((d,di)=>{ const to=timeoffReq(me.id,di); const b=document.createElement("button"); b.textContent=d+(to?(to.status==="approved"?" ✓":" …"):""); if(to){ b.disabled=true; b.title=to.status==="approved"?"approved off":"requested"; } b.onclick=()=>{ requestTimeoff(me.id, me.name, di, ""); }; drow.appendChild(b); });
+  rt.appendChild(drow); const hint=document.createElement("div"); hint.className="muted"; hint.style.marginTop="6px"; hint.textContent="Tap a day to request it off — your manager approves."; rt.appendChild(hint);
+  app.appendChild(rt);
+}
+
 /* STATUS BOARD — internal broadcast: every live record by status, read-only, with location + clock */
 function renderBoard(app, station){
   app.innerHTML="<h2>"+station.label+"</h2>";
@@ -1011,6 +1064,7 @@ let clockWelcome = null; // {name, inbound, staffId?} — the welcome/goodbye sc
 let clockAction = null;  // {staffId} — the on-shift action screen (break / clock out / live earnings)
 let clockTimer = null;   // interval that re-renders the time clock so earnings tick in real time
 let incidentSent = null; // "filed" | "help" — confirmation shown after a worker files an incident / panic alert
+let workerId = null;     // worker portal: who is logged in on this device (by PIN)
 let reportDay = null;  // which day the Z-report shows (YYYY-MM-DD, local); null = today
 let selTable = null;   // floor plan: the table currently opened
 let floorSection = null; // floor plan: active section filter (null = all)
