@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.49";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.50";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -417,6 +417,13 @@ function render(){
   else if(station.type==="worker")      renderWorker(app, station);
 }
 
+/* TIP POOLING — pooled tips shared fairly by hours worked (opt-in). Helps tipped hourly staff split evenly.
+   On when FLOW.endpoints.payment.tipPool (or .tip.pool). Distribution is by each worker's recorded hours. */
+function tipPoolOn(){ const pay=FLOW.endpoints&&FLOW.endpoints.payment; return !!(pay && (pay.tipPool || (pay.tip&&pay.tip.pool))); }
+function poolHours(){ const by={}; let tot=0; (DB.punches||[]).forEach(pn=>{ const h=workedMs(pn)/3600000; by[pn.name]=(by[pn.name]||0)+h; tot+=h; }); return {by, tot}; }
+function tipsForDay(day){ return DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED") && dayOf(r.ts)===day).reduce((s,r)=>s+(r.tip||0),0); }
+function tipShareFor(name, day){ const t=tipsForDay(day); const {by,tot}=poolHours(); return (!tot||!t)?0:t*(by[name]||0)/tot; }
+
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
 function renderReport(app, station){
   const day = reportDay || todayStr(); const isToday = day===todayStr();
@@ -468,6 +475,13 @@ function renderReport(app, station){
     let tot=0; Object.keys(byStaff).forEach(n=>{ tot+=byStaff[n]; lc.innerHTML+=L(n, byStaff[n].toFixed(2)+" h"); });
     lc.innerHTML+=L("Total hours", tot.toFixed(2)+" h", true) + (stillOn?"<div class='muted' style='margin-top:4px'>Some staff are still on the clock"+(onBrk?" (some on break)":"")+".</div>":"");
     app.appendChild(lc);
+  }
+  // ---- tip pool: share the day's tips across everyone who worked, by hours (fair + transparent) ----
+  if(tipPoolOn() && tips>0){ const {by,tot:totH}=poolHours();
+    const tp=document.createElement("div"); tp.className="card"; tp.innerHTML="<div class='row'><b>Tip pool — shared by hours</b></div>";
+    if(totH>0){ Object.keys(by).sort().forEach(n=>{ tp.innerHTML+=L(n+" <span class='muted'>("+by[n].toFixed(2)+" h)</span>", money(tips*by[n]/totH)); }); tp.innerHTML+=L("Pool total", money(tips), true); }
+    else tp.innerHTML+="<div class='muted'>Tips collected, but no clocked hours to share them by.</div>";
+    app.appendChild(tp);
   }
   // ---- worker safety: incident log — open reports first, with acknowledge (urgent panic alerts flagged) ----
   const incs=(DB.incidents||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
@@ -976,7 +990,7 @@ function renderWorker(app, station){
   // today: hours + earnings
   const open=openPunch(me.id); const stat=document.createElement("div"); stat.className="card"; stat.style.cssText="display:flex;gap:20px;flex-wrap:wrap";
   const cell=(lab,val)=>"<div><div style='font-size:20px;font-weight:700'>"+val+"</div><div class='muted' style='font-size:12px'>"+lab+"</div></div>";
-  stat.innerHTML=cell("today", hoursToday(me.id).toFixed(2)+" h")+(staffWage(me.id)?cell("earned today","$"+earnedToday(me.id).toFixed(2)):"")+cell("this week", weeklyHours(me.id).toFixed(1)+" h"+(weeklyHours(me.id)>OT_THRESHOLD?" · OT":""))+cell("status", open?(onBreak(open)?"on break":"on the clock"):"off");
+  stat.innerHTML=cell("today", hoursToday(me.id).toFixed(2)+" h")+(staffWage(me.id)?cell("earned today","$"+earnedToday(me.id).toFixed(2)):"")+(tipPoolOn()?cell("tip share today","$"+tipShareFor(me.name, todayStr()).toFixed(2)):"")+cell("this week", weeklyHours(me.id).toFixed(1)+" h"+(weeklyHours(me.id)>OT_THRESHOLD?" · OT":""))+cell("status", open?(onBreak(open)?"on break":"on the clock"):"off");
   app.appendChild(stat);
   // my week
   const wk=document.createElement("div"); wk.className="card"; wk.innerHTML="<div class='row'><b>My week</b>"+((DB.schedule&&DB.schedule.published)?" <span class='pill'>posted</span>":" <span class='muted'>draft — not final</span>")+"</div>";
