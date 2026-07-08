@@ -64,8 +64,13 @@ open/close **recurring checklists** with photo/count/signature capture; per-cust
       `unitHistory(tag)` recalls returning units across visits. cleaners demo tags Shirt+Pants as HSL; fungible
       items (Wash & Fold) stay untagged. Verified, 0 console errors. (pos.html: `genUnitTag`/`tagChip`/`unitHistory`/`addLine`.)
       ↳ pending (folds into Stage 7): a "unique unit / tag" toggle in the builder's item editor.
-- [ ] **Stage 3 — Detail entry + Assembly** (Gaps 4, 5, 6)
-  - [ ] detail station can add/price/tag pieces (not just "mark done").
+- [x] **Stage 3 — Detail entry + Assembly** (Gaps 4, 5, 6) — SHIPPED
+  - [x] detail station can add/price/tag pieces — SHIPPED. "Drop now, detail later": a counter that has a
+        `detail` station in the flow shows a "Quick drop" (piece count → an `undetailed` order); a
+        `detail`-type station lists dropped orders and itemizes them, reusing the intake catalog + config panel
+        (addLine's `activeCart` hook writes onto the order, not the draft), auto-tagging serialized units, then
+        "Done detailing" releases it onto its normal path. General (cleaner quick→detail, repair drop→quote,
+        tailor drop→measure). Verified in-browser (0 errors) + `tests/detail.js`. (pos.html: `renderDetail`/`quickDrop`/`editingId`.)
   - [x] assembly **smart bag split** + **in/out reconciliation** — SHIPPED. A production/staging station opts
         in via `station.bag = {max, solo:[cats], spread:[cats]}` (solo categories bag alone e.g. comforters;
         spread categories go ≤1 per bag to spread thick items; the rest fill to `max`) and/or

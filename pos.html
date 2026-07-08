@@ -215,6 +215,7 @@ const MODULES = {
   board:   { label:"Status board",            stationTypes:["board"] },
   portal:  { label:"Customer tracker",        stationTypes:["tracker"] },
   office:  { label:"Commission / reports",    stationTypes:["report"] },
+  detail:  { label:"Detail / itemize",        stationTypes:["detail"] },
   clock:   { label:"Time clock",              stationTypes:["timeclock"] },
   booking: { label:"Appointments",            stationTypes:["booking"] },
   kds:     { label:"Kitchen display (bump)",  stationTypes:["kds"] },
@@ -230,6 +231,7 @@ const STATUS_LABEL = { INPROGRESS:"In progress", READY:"Ready for pickup", PAID:
    Falls back to sensible defaults (station labels) when no lifecycle config is present, so every trade benefits. */
 function stageOf(r, pub){
   const base = (FLOW.lifecycle) || {}; const L = (pub && base.public) ? Object.assign({}, base, base.public) : base;
+  if(r.undetailed) return L.dropped || "Received — being itemized";
   if(r.status === "CLOSED") return L.done || "Picked up";
   if(r.status === "READY" || r.status === "PAID") return L.ready || "Ready for pickup";
   const inc = (r.lines||[]).filter(l => !lineComplete(l));
@@ -464,6 +466,7 @@ function render(){
   else if(station.type==="board")       renderBoard(app, station);
   else if(station.type==="tracker")     renderTracker(app, station);
   else if(station.type==="report")      renderReport(app, station);
+  else if(station.type==="detail")      renderDetail(app, station);
   else if(station.type==="timeclock")   renderTimeclock(app, station);
   else if(station.type==="booking")     renderBooking(app, station);
   else if(station.type==="kds")         renderKDS(app, station);
@@ -1255,6 +1258,7 @@ function renderPicker(app){
 
 /* ---- intake with the rules evaluator (modifiers + 86) ---- */
 let draft = null;      // the order being built
+let editingId = null;  // detail station: id of the order currently being itemized (null = normal intake-draft mode)
 let pending = null;    // an item being configured (required mods / add-ons / flags)
 let receiptOpen = {};  // which orders have their receipt open
 let pinBuf = "";       // time-clock PIN entry buffer
@@ -1374,6 +1378,9 @@ function renderIntake(app, station){
     app.appendChild(info);
   }
   const send=document.createElement("button"); send.className="primary"; send.textContent="Send order →"; send.disabled=!draft.lines.length||!!pending||atCapacity; send.onclick=sendDraft; app.appendChild(send);
+  if(FLOW.stations.some(s=>s.type==="detail")){   // "drop now, detail later" — only when a detail station exists
+    const qd=document.createElement("button"); qd.textContent="⛅ Quick drop (detail later)"; qd.style.marginLeft="8px"; qd.disabled=!!pending; qd.onclick=quickDrop; app.appendChild(qd);
+  }
   // quotes / estimates: save the current draft to come back to, or load a saved one into the order
   if(FLOW.endpoints.quotes){
     const sq=document.createElement("button"); sq.textContent="Save as quote"; sq.style.margin="0 0 0 8px"; sq.disabled=!draft.lines.length||!!pending;
@@ -1441,8 +1448,10 @@ function addLine(item, choices, addons, flags, performer){
   const mods=[...Object.values(choices||{}), ...(addons||[])];
   const price=item.price + mods.reduce((s,m)=>s+(m.price||0),0);
   const modLabel=mods.map(m=>m.name).filter(Boolean).join(", ");
-  draft.lines.push({ id:"L"+Math.round(performance.now())+Math.floor(Math.random()*1e4), catId:item.id, name:item.name, modLabel, flags:(flags||[]).slice(), performer:performer||null, price, qty:1, category:item.category, path:item.path.slice(), stage:0, course:item.course||1,
+  const cart = editingId ? ((DB.records||[]).find(r=>r.id===editingId)||draft) : draft;   // detailing edits the order; intake edits the draft
+  cart.lines.push({ id:"L"+Math.round(performance.now())+Math.floor(Math.random()*1e4), catId:item.id, name:item.name, modLabel, flags:(flags||[]).slice(), performer:performer||null, price, qty:1, category:item.category, path:item.path.slice(), stage:0, course:item.course||1,
     serialized: !!item.serialized, tag: item.serialized ? genUnitTag() : undefined, tagLabel: item.serialized ? (item.tagLabel||"Tag") : undefined });
+  if(editingId) saveDB(DB);
   render();
 }
 function sendDraft(){
@@ -1461,6 +1470,18 @@ function sendDraft(){
     c.lastItems = rec.lines.map(l=>({ catId:l.catId, name:l.name, price:l.price, qty:l.qty, category:l.category, path:(l.path||[]).slice(), performer:l.performer||null, modLabel:l.modLabel||"", flags:(l.flags||[]).slice() }));
   }
   DB.records.push(rec); saveDB(DB); draft=null; render();
+}
+/* QUICK DROP — take an order now as a piece count, itemize it later at a detail station ("drop now, detail
+   later"): a cleaner counts bags at the counter and details at the plant; a repair shop takes the device and
+   quotes after diagnosis. General — enabled just by having a `detail` station in the flow. */
+function quickDrop(){
+  const n=parseInt(prompt("How many pieces are being dropped?","1"),10); if(!n||n<1) return;
+  DB=loadDB(); DB.seq++;
+  const rec={ id:"R"+DB.seq, number:DB.seq, lines:[], tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now(), undetailed:true, dropCount:n, status:"INPROGRESS" };
+  if(storesOn()) rec.storeId = storeForOrder(draft&&draft.customer);
+  if(draft && draft.customer){ rec.customer={ name:draft.customer.name, phone:draft.customer.phone };
+    let c=DB.customers.find(x=>x.phone===draft.customer.phone); if(!c){ c={ phone:draft.customer.phone, name:draft.customer.name }; DB.customers.push(c); } if(storesOn()&&!c.storeId) c.storeId=rec.storeId; }
+  DB.records.push(rec); draft=null; saveDB(DB); render();
 }
 
 /* --- ASSEMBLY: smart bag splitting + in/out reconciliation — both opt-in via station config (inert otherwise).
@@ -1517,6 +1538,41 @@ function renderPipeline(app, station){
     app.appendChild(c); });
 }
 
+/* DETAIL STATION — itemize a "quick drop" order: reuses the intake catalog + config panel (via addLine's
+   activeCart hook) to add/price/tag real pieces onto the dropped order, then "Done detailing" releases it
+   onto its normal path. Generalizes a cleaner's quick→detail two-step to any drop-now/itemize-later trade. */
+function renderDetail(app, station){
+  if(editingId && !(DB.records||[]).find(r=>r.id===editingId)) editingId=null;
+  const rec = editingId ? (DB.records||[]).find(r=>r.id===editingId) : null;
+  if(!rec){
+    app.innerHTML="<h2>"+station.label+"</h2><p class='muted'>Orders dropped, waiting to be itemized.</p>";
+    const undetailed=DB.records.filter(r=>r.undetailed);
+    if(!undetailed.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nothing waiting to detail."; app.appendChild(e); }
+    undetailed.forEach(r=>{ const c=document.createElement("div"); c.className="card"; const cnt=r.dropCount||r.lines.length;
+      c.innerHTML="<div class='row'><b>#"+r.number+"</b>"+storeChip(r)+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+(r.customer?r.customer.name+" · ":"")+cnt+" piece(s) dropped</span></div>";
+      const open=document.createElement("button"); open.className="primary"; open.textContent="Detail this order"; open.style.marginTop="8px"; open.onclick=()=>{ editingId=r.id; pending=null; render(); }; c.appendChild(open);
+      app.appendChild(c); });
+    return;
+  }
+  app.innerHTML="<h2>Detailing #"+rec.number+"</h2>"+(rec.customer?"<p class='muted'>"+rec.customer.name+" · "+rec.customer.phone+"</p>":"")+(rec.dropCount?"<p class='muted'>"+rec.dropCount+" piece(s) were dropped — itemize them below.</p>":"");
+  const addItem=item=> needsConfig(item) ? (pending={item, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(item, {}, [], [], null);
+  const grid=document.createElement("div"); grid.className="grid";
+  FLOW.catalog.forEach(item=>{ if(is86(item)||isOutOfStock(item)) return; const b=document.createElement("button"); b.className="tile"; b.innerHTML=item.name+"<small>"+(station.view.money?money(item.price):((item.path||[]).join(' → ')||'no prep'))+"</small>"; b.onclick=()=>addItem(item); grid.appendChild(b); });
+  app.appendChild(grid);
+  if(pending) app.appendChild(configPanel(station));
+  const c=document.createElement("div"); c.className="card";
+  if(!rec.lines.length){ c.innerHTML="<div class='empty'>No pieces yet — tap items above.</div>"; }
+  else rec.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
+    row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+tagChip(l)+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":""));
+    if(l.serialized){ const tb=document.createElement("button"); tb.textContent="🏷 "+(l.tag||"tag"); tb.title="Scan / set the "+(l.tagLabel||"tag"); tb.style.cssText="padding:2px 8px;margin-left:6px"; tb.onclick=()=>{ const v=prompt("Scan or type the "+(l.tagLabel||"tag")+" for this "+l.name+":", l.tag||""); if(v!=null&&v.trim()){ l.tag=v.trim(); saveDB(DB); render(); } }; row.appendChild(tb); }
+    const rm=document.createElement("button"); rm.textContent="✕"; rm.title="Remove"; rm.style.cssText="padding:2px 8px;margin-left:6px"; rm.onclick=()=>{ rec.lines=rec.lines.filter(x=>x.id!==l.id); saveDB(DB); render(); }; row.appendChild(rm);
+    c.appendChild(row); });
+  app.appendChild(c);
+  const done=document.createElement("button"); done.className="good"; done.textContent="Done detailing"; done.disabled=!rec.lines.length||!!pending;
+  done.onclick=()=>{ delete rec.undetailed; delete rec.dropCount; rec.detailedAt=new Date().toISOString().slice(11,16); rec.status=allComplete(rec)?"READY":"INPROGRESS"; editingId=null; pending=null; saveDB(DB); render(); };
+  app.appendChild(done);
+  const back=document.createElement("button"); back.textContent="← Back"; back.style.marginLeft="8px"; back.onclick=()=>{ editingId=null; pending=null; render(); }; app.appendChild(back);
+}
 function receiptPanel(r){
   const sub=lineSubtotal(r), disc=recordDiscount(r), tax=recordTax(r), tip=r.tip||0, tot=recordTotal(r);
   const line=(l,v,b)=>"<div class='line'>"+(b?"<b>":"<span class='muted'>")+l+(b?"</b>":"</span>")+"<span class='spacer'></span>"+(b?"<b>":"<span>")+v+(b?"</b>":"</span>")+"</div>";
