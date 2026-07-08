@@ -935,4 +935,16 @@ tip pool and the earnings screen use, so a worker and an owner are looking at th
 number, shown daily, in plain money — the difference between finding out now and finding out too late. Fifty-two
 suites, all green.
 
+### Come back, we miss you
+The cheapest customer to win is the one you already had. Every shop has regulars who just… drifted — moved, got
+busy, forgot — and most owners have no idea who they are, because that knowledge is buried in a year of receipts.
+customPOS already remembers who bought what and when, so it can just *ask the question*: who haven't we seen in a
+while? The report now grows a **win-back list** — customers whose last visit was more than thirty days ago (tune
+the window), newest-lapsed first, each with the number of days since they came in. Next to each name is one
+button: **📱 Invite back**, which sends them a warm note over the same texting seam the shop already uses — *"We
+miss you at Rae's, come see us soon"* — and marks them invited so nobody gets pestered twice. It's not a mailing
+list or a marketing suite; it's the shop's own memory, turned into a reason to reach out to the exact people most
+likely to come back. In lean times, that list is money sitting in the receipts, waiting to be asked. Fifty-three
+suites, all green.
+
 *— to be continued —*
