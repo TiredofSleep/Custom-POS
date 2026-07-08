@@ -57,6 +57,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `guided.js` | the guided setup interview — Shape → Name → People → Pay → Run, "I have a team" bakes in the worker suite (time-clock + scheduling + portal) and pooled tips, then builds a downloadable POS with the flow inlined; the `?guided` deep-link opens it directly |
 | `worker-signin.js` | worker portal stay-signed-in — PIN login persists per device (survives reload), log out clears it, and unchecking "keep me signed in" makes it session-only |
 | `kudos.js` | shout-outs — a worker sends a teammate a kudos from the portal; the recipient sees it on their portal and is greeted with it at clock-in |
+| `report-headline.js` | the "how today went" verdict — the report leads with one plain-language line fusing sales, gross margin, and labor % (color-coded good/watch) |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);

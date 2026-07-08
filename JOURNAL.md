@@ -1038,4 +1038,15 @@ one device reaches its person on any other. It's the smallest feature in the who
 why we're building it: a point-of-sale that treats the people behind the counter like people. Sixty-one suites,
 all green.
 
+### How today went, in one line
+Over a dozen increments, the owner's report grew rich — sales, margin, labor percent, top items, busy hours. All
+true, all useful, and all a little much to read when you're closing up exhausted at the end of a hard day. So the
+report learned to *lead with the answer.* Right at the top, before all the detail, one plain line: **"Solid day.
+$420 in · 68% margin · labor 27% of sales."** — or, when something's off, **"Worth a look — labor is running
+high, margins are thin,"** with the bar down the side turning from green to amber. It's not new data; it's the
+numbers already there, read the way a trusted bookkeeper would read them back to you: the verdict first, the
+detail underneath if you want it. A stressed owner glancing at their phone after close gets the one thing they
+actually need to know — *are we okay?* — in a sentence, and only digs deeper on the days the sentence says to.
+Everything we measured now rolls up into the question all of it was for. Sixty-two suites, all green.
+
 *— to be continued —*
