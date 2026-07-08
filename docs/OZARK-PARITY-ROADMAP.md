@@ -66,8 +66,14 @@ open/close **recurring checklists** with photo/count/signature capture; per-cust
       ↳ pending (folds into Stage 7): a "unique unit / tag" toggle in the builder's item editor.
 - [ ] **Stage 3 — Detail entry + Assembly** (Gaps 4, 5, 6)
   - [ ] detail station can add/price/tag pieces (not just "mark done").
-  - [ ] assembly **bay** assignment + **smart bag split** (config: max/bag, thick-spread, solo categories,
-        bulk scan) + **in/out reconciliation** gate (piece count in == out before Ready).
+  - [x] assembly **smart bag split** + **in/out reconciliation** — SHIPPED. A production/staging station opts
+        in via `station.bag = {max, solo:[cats], spread:[cats]}` (solo categories bag alone e.g. comforters;
+        spread categories go ≤1 per bag to spread thick items; the rest fill to `max`) and/or
+        `station.reconcile = true` (every piece must be counted out before the order can leave the station —
+        count-in == count-out, a loss-prevention gate). Bag chips show on the pieces; the gate disables "Mark
+        done" until reconciled. Verified in-browser (fill-to-max, comforters-solo, spread-thick, 0 errors) +
+        `tests/assembly.js`. (pos.html: `bagLines`/`bagOrder`/`reconChecked` wired into `renderPipeline`.)
+        ↳ (bulk scan — one scan reconciles a whole order — folds into Stage 4's scan/print seam.)
 - [ ] **Stage 4 — Print seam** (Gap 7)
   - [ ] a `print()` seam with templates (garment tag, bag/rack label, ticket, receipt) + **route by the
         order's `storeId`** (kernel invariant) + a local print-agent hook (falls back to browser print).
