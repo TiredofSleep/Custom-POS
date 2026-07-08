@@ -65,7 +65,12 @@ function serve() {
   const nameOk = built.name === "Rosa's Cafe";
   const workerSuite = ['timeclock','schedule','worker'].every(t => built.types.includes(t));
   const injectOk = built.html.includes('window.CUSTOMPOS_FLOW') && built.html.includes('"type":"worker"');
-  const ready = /your pos is ready/i.test(await p.locator('#app').innerText());
+  const appText = await p.locator('#app').innerText();
+  const ready = /your pos is ready/i.test(appText);
+  // the deployment answer ("several computers") produced real run-it guidance, on-screen and in CLAUDE.md
+  const runGuidance = /how to run it/i.test(appText) && /sync hub/i.test(appText);
+  const claudeMd = await p.evaluate(() => window.__build.claudeMd);
+  const mdGuidance = /How you'll run it/.test(claudeMd) && /Several computers/.test(claudeMd);
 
   await b.close(); server.close();
   console.log('\n=== RESULTS ===');
@@ -76,6 +81,8 @@ function serve() {
   console.log('tips pooled + cards enabled from answers:', built.tipPool && built.card);
   console.log('downloadable POS inlines the flow (worker station):', injectOk);
   console.log('lands on the ready-to-download screen:', ready);
+  console.log('deployment answer produces run-it guidance on screen:', runGuidance);
+  console.log('CLAUDE.md carries the run-it guidance:', mdGuidance);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!startedOk||!teamOk||!nameOk||!workerSuite||!(built.tipPool&&built.card)||!injectOk||!ready?1:0);
+  process.exit(errors.length||!startedOk||!teamOk||!nameOk||!workerSuite||!(built.tipPool&&built.card)||!injectOk||!ready||!runGuidance||!mdGuidance?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });

@@ -224,6 +224,11 @@ function importItemsCSV(text){
 function chooseTrade(k){ tradeKey=k; cfg=JSON.parse(JSON.stringify(TEMPLATES[k])); selStation=-1; selItem=-1; step=2; render(); }
 
 /* ---- guided interview: a plain-language path for non-technical owners (Shape → Config → People → Pay → Run) ---- */
+const DEPLOY_NOTE = {
+  one:     "**One computer.** Everything lives in this browser on that device — no server, no monthly fee. Use **Data & backup → Backup (JSON)** now and then (or let Claude Code automate it) so a copy lives somewhere safe.",
+  several: "**Several computers.** Run the small sync hub (`hub.js`) on one always-on machine (a spare PC or a ~a-few-dollars/month cloud box) and point each device at it with `?hub=…`; every register shares one live POS. Each device still keeps its own local copy, so a dropped connection never stops a sale.",
+  backup:  "**Several computers + off-site backup.** As above with the sync hub, plus schedule the hub's rolling snapshots to copy off-site (another drive or cloud) on a timer — so a dead hard drive is never the end of your data. Ask Claude Code to set the backup schedule up for you."
+};
 function startGuide(){ step='guide'; gstep=1; guide={}; render(); }
 function guideTrade(k){ tradeKey=k; cfg=JSON.parse(JSON.stringify(TEMPLATES[k])); selStation=-1; selItem=-1; render(); }
 function ensureStation(type,label){ if(!cfg.stations.some(s=>s.type===type)) cfg.stations.push({ id:uid(), type, label, view:{} }); }
@@ -439,6 +444,9 @@ ${stations}
 **Catalog**
 ${items}
 
+## How you'll run it
+${DEPLOY_NOTE[guide.deploy] || DEPLOY_NOTE.one}
+
 ## Across devices & payments
 Run the optional hub (\`hub.js\`) to share one live POS across devices; otherwise each device is local.
 Card payments are PCI-safe — the browser never sees a card number (see \`docs/PAYMENTS-MODULE.md\`); your
@@ -649,6 +657,10 @@ function render(){
       h('a',{class:'dl', id:'dlMd'},[h('button',{class:'big'},['⬇ Download CLAUDE.md (your Claude Code guide)'])]),
       h('h2',{},['Live preview — your actual POS']) ]);
     app.appendChild(p);
+    if(guide.deploy){ const raw=DEPLOY_NOTE[guide.deploy]||DEPLOY_NOTE.one;
+      const plain=raw.replace(/\*\*(.+?)\*\*/g,'$1').replace(/`([^`]+)`/g,'$1');
+      app.appendChild(h('div',{class:'panel'},[ h('h2',{},['How to run it']), h('div',{}, [plain]),
+        h('div',{class:'hint', style:'margin-top:6px'},['This is written into your CLAUDE.md too, so Claude Code can set it up with you.']) ])); }
     app.appendChild(h('iframe',{id:'preview'}));
     app.appendChild(h('button',{onclick:()=>{ step=2; render(); }},['← keep editing']));
     app.appendChild(h('button',{onclick:()=>{ step=1; tradeKey=null; render(); }},['start over']));
