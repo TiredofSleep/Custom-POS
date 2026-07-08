@@ -58,6 +58,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `worker-signin.js` | worker portal stay-signed-in — PIN login persists per device (survives reload), log out clears it, and unchecking "keep me signed in" makes it session-only |
 | `kudos.js` | shout-outs — a worker sends a teammate a kudos from the portal; the recipient sees it on their portal and is greeted with it at clock-in |
 | `report-headline.js` | the "how today went" verdict — the report leads with one plain-language line fusing sales, gross margin, and labor % (color-coded good/watch) |
+| `roundup.js` | round up for charity — checkout offers to round the total up to the next dollar for a named cause; the donation adds to the balance and the report tallies the community total |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
