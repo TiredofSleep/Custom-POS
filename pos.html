@@ -489,6 +489,24 @@ function customerLastVisit(phone){ let mx=0; DB.records.forEach(r=>{ if(r.custom
 function lapsedCustomers(){ const cut=Date.now()-winbackDays()*86400000; return (DB.customers||[]).map(c=>({c, last:customerLastVisit(c.phone)})).filter(x=>x.last>0 && x.last<cut).sort((a,b)=>a.last-b.last); }
 
 /* COMMISSION & TIPS report — money-math primitive: per-performer service sales, commission %, tips */
+/* ===================================== ROLES + MONEY-GATE (optional) =====================================
+   Money-reversing / discretionary actions (refund, return) can require a manager/owner approval. Opt-in via
+   FLOW.endpoints.approvals = { refund:true } together with FLOW.staff roles (role "owner"|"manager" may
+   approve). Inert when unconfigured — a shop with no approver roles keeps the plain actions. The approver
+   enters their PIN at the moment of the action; every approval is written to an audit log (DB.approvals).
+   Generalizes "staff requests, owner approves" — the anti-theft gate — with no per-trade code. */
+function approvers(){ return (FLOW.staff||[]).filter(s=> s.role==="owner" || s.role==="manager"); }
+function needsApproval(action){ return !!(FLOW.endpoints && FLOW.endpoints.approvals && FLOW.endpoints.approvals[action]) && approvers().length>0; }
+function withApproval(action, label, fn){
+  if(!needsApproval(action)){ fn(null); render(); return; }
+  const pin = prompt(label + "\nEnter a manager/owner PIN to approve this " + action + ":");
+  if(pin==null) return;                                  // cancelled — no change
+  const who = approvers().find(s=> String(s.pin)===String(pin));
+  if(!who){ flash("Not authorized — a manager or owner PIN is required"); return; }
+  fn(who);
+  DB=loadDB(); DB.approvals=DB.approvals||[]; DB.approvals.push({ action, label, by:who.name, at:new Date().toISOString().slice(11,16), ts:Date.now() }); saveDB(DB);
+  render();
+}
 function renderReport(app, station){
   const day = reportDay || todayStr(); const isToday = day===todayStr();
   app.innerHTML="<h2>"+station.label+" — "+(isToday?"today":day)+"</h2>";
@@ -668,7 +686,7 @@ function renderReport(app, station){
     const row=document.createElement("div"); row.className="line";
     row.innerHTML="<span>#"+r.number+" · "+money(recordPaid(r))+" left <small class='muted'>"+tl+"</small></span><span class='spacer'></span>";
     const rb=document.createElement("button"); rb.className="danger"; rb.textContent="Refund"; rb.style.padding="4px 10px";
-    rb.onclick=()=>{ if(!confirm("Refund #"+r.number+" "+money(recordPaid(r))+" to "+tl+"?")) return; refundRecord(r); saveDB(DB); render(); };
+    rb.onclick=()=>{ if(needsApproval("refund")){ withApproval("refund","Refund #"+r.number+" "+money(recordPaid(r)),(who)=>{ refundRecord(r); if(who) r.refundBy=who.name; saveDB(DB); }); } else { if(!confirm("Refund #"+r.number+" "+money(recordPaid(r))+" to "+tl+"?")) return; refundRecord(r); saveDB(DB); render(); } };
     row.appendChild(rb); wrap.appendChild(row);
     // line-level return: tick the items coming back, refund just their share
     const active=r.lines.filter(l=>!l.returned);
@@ -677,12 +695,14 @@ function renderReport(app, station){
         const cb=document.createElement("input"); cb.type="checkbox"; cb.className="retline"; cb.dataset.rec=r.id; cb.dataset.line=l.id;
         lab.appendChild(cb); lab.appendChild(document.createTextNode(l.qty+"× "+l.name+" "+money(l.price*l.qty))); wrap.appendChild(lab); picks.push({cb, id:l.id}); });
       const retBtn=document.createElement("button"); retBtn.textContent="Return selected"; retBtn.style.cssText="padding:4px 10px;margin-top:6px;display:block";
-      retBtn.onclick=()=>{ const ids=picks.filter(x=>x.cb.checked).map(x=>x.id); if(!ids.length){ flash("Tick the items to return"); return; } returnLines(r, ids); };
+      retBtn.onclick=()=>{ const ids=picks.filter(x=>x.cb.checked).map(x=>x.id); if(!ids.length){ flash("Tick the items to return"); return; } if(needsApproval("refund")){ withApproval("refund","Return items on #"+r.number,()=>{ returnLines(r, ids); }); } else { returnLines(r, ids); } };
       wrap.appendChild(retBtn);
     }
     const ret=r.lines.filter(l=>l.returned); if(ret.length){ const rr=document.createElement("div"); rr.className="muted"; rr.style.marginTop="4px"; rr.textContent="Returned: "+ret.map(l=>l.name).join(", "); wrap.appendChild(rr); }
     rc.appendChild(wrap); });
   app.appendChild(rc);
+  if((DB.approvals||[]).length){ const ac=document.createElement("div"); ac.className="card"; ac.innerHTML="<div class='row'><b>Approvals (audit)</b></div>";
+    DB.approvals.slice(-8).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+a.at+" · "+a.action+" — "+(a.label||"")+"</span><span class='spacer'></span><span class='muted'>by "+a.by+"</span>"; ac.appendChild(row); }); app.appendChild(ac); }
   // ---- commission (only when the trade pays commission) ----
   const pct=(FLOW.commission&&FLOW.commission.pct)||0;
   if(FLOW.performers){
