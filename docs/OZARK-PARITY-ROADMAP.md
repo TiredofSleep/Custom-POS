@@ -1,5 +1,12 @@
 # Ozark-parity roadmap — "build a full dry cleaner from a blank slate"
 
+> ✅ **STATUS: COMPLETE (2026-07-08).** All stages shipped, each verified in-browser (0 console errors) and
+> covered by an automated test (CI green). `tests/ozark-grade.js` proves the full plant loop end-to-end from
+> generalized config alone. New tests this pass: `multistore` · `assembly` · `detail` · `print` · `approvals`
+> · `route` · `ozark-grade`. Remaining polish only: per-field toggle widgets in the builder editor (every
+> field already round-trips on download today, so the "Full-plant cleaner + route" template downloads a
+> fully-working plant POS).
+
 **Goal (owner):** the builder at custompos.org must be able to produce a POS with the *full* feature depth of
 the reference production dry cleaner (the origin app) — from a blank slate, using generalized tools (config +
 a small set of toggle-able modules), with no trade-specific code hardcoded into a single business.
