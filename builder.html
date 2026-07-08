@@ -672,5 +672,6 @@ function render(){
     return;
   }
 }
-render();
+// deep-link: builder.html?guided (or ?start=guided) drops a first-timer straight into the interview
+if(/[?&](guided|start=guided)(=|&|$)/.test(location.search)) startGuide(); else render();
 </script>
