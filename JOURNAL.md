@@ -922,4 +922,17 @@ their hours and pay. It rides the hours the time clock already tracks (minus unp
 construction. The builder gets a one-tap **"pool tips by hours"** toggle. Shops that tip-out by seat or provider
 keep doing that; shops that want it fair by the clock now can, in one click. Fifty-one suites, all green.
 
+### The one number that keeps the doors open
+Ask an accountant what kills small restaurants and shops and they'll say the same thing two ways: *labor as a
+percent of sales.* Pay your people too little and you can't keep them; let payroll run past what the day brings
+in and you quietly bleed out. Most owners never see that number until the monthly books, when it's too late to
+change the week. So the Z-report now shows it **every day**. It takes the hours the clock already tracked, times
+each person's wage, to get the day's **labor cost** — then puts it against the day's sales and prints the
+**percent**, plainly, with a gentle line: *a common healthy target is around 30%.* Cross the line by a wide
+margin and the number turns red — *"payroll is eating a big share of sales today"* — not as a scold but as a
+heads-up while there's still time to send someone home early or pick up the pace. It's the same honest hours the
+tip pool and the earnings screen use, so a worker and an owner are looking at the same truth from two sides. One
+number, shown daily, in plain money — the difference between finding out now and finding out too late. Fifty-two
+suites, all green.
+
 *— to be continued —*
