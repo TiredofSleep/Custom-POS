@@ -146,10 +146,10 @@ let FLOWS = {
       byStation:{ assembly:"In cleaning & pressing", rack:"Being racked" },
       public:{ byStation:{ assembly:"Cleaning your order", rack:"Almost ready" } } },
     catalog:[
-      {id:"g1", name:"Shirt", price:6.50, category:"press", path:["assembly","rack"],
+      {id:"g1", name:"Shirt", price:6.50, category:"press", path:["assembly","rack"], serialized:true, tagLabel:"HSL",
         modifiers:[{group:"Starch", required:true, options:[{name:"None",price:0},{name:"Light",price:0},{name:"Heavy",price:0.50}]}],
         flags:["Pre-existing damage"]},
-      {id:"g2", name:"Pants", price:7.00, category:"press", path:["assembly","rack"]},
+      {id:"g2", name:"Pants", price:7.00, category:"press", path:["assembly","rack"], serialized:true, tagLabel:"HSL"},
       {id:"g3", name:"Wash & Fold", price:2.75, category:"wf", path:["rack"]}
     ],
     stations:[
@@ -1180,7 +1180,7 @@ function renderBoard(app, station){
     recs.forEach(r=>{ const c=document.createElement("div"); c.className="card";
       c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+stageOf(r)+"</span>"+clockChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
       r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const loc=lineComplete(l)?"ready":"at "+l.path[l.stage];
-        row.innerHTML="<span>"+l.qty+"× "+l.name+"</span><span class='spacer'></span><span class='muted'>"+loc+"</span>"; c.appendChild(row); });
+        row.innerHTML="<span>"+l.qty+"× "+l.name+tagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+loc+"</span>"; c.appendChild(row); });
       app.appendChild(c); });
   });
 }
@@ -1318,7 +1318,9 @@ function renderIntake(app, station){
   const c=document.createElement("div"); c.className="card";
   if(!draft.lines.length){ c.innerHTML="<div class='empty'>Tap items to build the order.</div>"; }
   else { draft.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
-      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+(l.performer?" <span class='pill'>"+l.performer+"</span>":"")+"</span><span class='pill route'>"+((l.path||[]).join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":""); c.appendChild(row); });
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+(l.performer?" <span class='pill'>"+l.performer+"</span>":"")+tagChip(l)+"</span><span class='pill route'>"+((l.path||[]).join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":"");
+      if(l.serialized){ const tb=document.createElement("button"); tb.textContent="🏷 "+(l.tag||"tag"); tb.title="Scan / set the "+(l.tagLabel||"tag")+" on this unit"; tb.style.cssText="padding:2px 8px;margin-left:6px"; tb.onclick=()=>{ const v=prompt("Scan or type the "+(l.tagLabel||"tag")+" for this "+l.name+":", l.tag||""); if(v!=null&&v.trim()){ l.tag=v.trim(); render(); } }; row.appendChild(tb); }
+      c.appendChild(row); });
     const tot=document.createElement("div"); tot.className="line"; tot.innerHTML="<b>Total</b><span class='spacer'></span><b>"+money(draft.lines.reduce((s,l)=>s+l.price*l.qty,0))+"</b>"; c.appendChild(tot); }
   app.appendChild(c);
   // deposit control (deposit-balance payment point)
@@ -1396,11 +1398,20 @@ function configPanel(station){
   return c;
 }
 
+/* --- UNIQUE / SERIALIZED INVENTORY: an item marked `serialized` becomes an individually-tracked UNIT with a
+   durable tag (HSL for a cleaner, serial for jewelry, IMEI for a repair). Each unit is its own line and flows
+   through the item's stops before it's fulfilled. Generalizes per-piece garment tracking — it's just unique
+   inventory with stops before it sells. `tagLabel` names the tag; history recall keys off the tag across visits. */
+function genUnitTag(){ return (Math.floor(performance.now()).toString(36) + Math.floor(Math.random()*46656).toString(36)).toUpperCase().slice(-7); }
+function unitHistory(tag){ if(!tag) return []; try{ return (loadDB().records||[]).filter(r => (r.lines||[]).some(l => l.tag===tag)); }catch(e){ return []; } }
+function tagChip(l){ if(!l||!l.serialized) return ""; const lbl=l.tagLabel||"Tag"; const seen=unitHistory(l.tag).length;
+  return " <span class='pill' title='"+lbl+"'>🏷 "+(l.tag||"—")+"</span>" + (seen?" <span class='pill' style='border-color:var(--good);color:var(--good)'>↩ returning ×"+(seen+1)+"</span>":""); }
 function addLine(item, choices, addons, flags, performer){
   const mods=[...Object.values(choices||{}), ...(addons||[])];
   const price=item.price + mods.reduce((s,m)=>s+(m.price||0),0);
   const modLabel=mods.map(m=>m.name).filter(Boolean).join(", ");
-  draft.lines.push({ id:"L"+Math.round(performance.now()), catId:item.id, name:item.name, modLabel, flags:(flags||[]).slice(), performer:performer||null, price, qty:1, category:item.category, path:item.path.slice(), stage:0, course:item.course||1 });
+  draft.lines.push({ id:"L"+Math.round(performance.now())+Math.floor(Math.random()*1e4), catId:item.id, name:item.name, modLabel, flags:(flags||[]).slice(), performer:performer||null, price, qty:1, category:item.category, path:item.path.slice(), stage:0, course:item.course||1,
+    serialized: !!item.serialized, tag: item.serialized ? genUnitTag() : undefined, tagLabel: item.serialized ? (item.tagLabel||"Tag") : undefined });
   render();
 }
 function sendDraft(){
@@ -1429,7 +1440,7 @@ function renderPipeline(app, station){
     mine.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const next=l.path[l.stage+1];
       const flagHtml=(l.flags||[]).map(f=>{ hasFlags=true; return " <span class='pill flag'>⚠ "+f+"</span>"; }).join("");
       const perfHtml=l.performer?" <span class='pill'>"+l.performer+"</span>":"";
-      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+perfHtml+flagHtml+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"; c.appendChild(row); });
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+perfHtml+flagHtml+tagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"; c.appendChild(row); });
     // checklist-as-gate: steps at this station must all be done before the record can advance
     let checksOk=true;
     if(station.checklist && station.checklist.length){
@@ -1448,7 +1459,7 @@ function renderPipeline(app, station){
 function receiptPanel(r){
   const sub=lineSubtotal(r), disc=recordDiscount(r), tax=recordTax(r), tip=r.tip||0, tot=recordTotal(r);
   const line=(l,v,b)=>"<div class='line'>"+(b?"<b>":"<span class='muted'>")+l+(b?"</b>":"</span>")+"<span class='spacer'></span>"+(b?"<b>":"<span>")+v+(b?"</b>":"</span>")+"</div>";
-  const rows=r.lines.map(l=>"<div class='line'><span>"+l.qty+"× "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span></div>").join("");
+  const rows=r.lines.map(l=>"<div class='line'><span>"+l.qty+"× "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.serialized&&l.tag?" <small class='muted'>["+(l.tagLabel||"Tag")+" "+l.tag+"]</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span></div>").join("");
   const hr="<hr style='border:none;border-top:1px dashed var(--line)'>";
   const totals=(disc||tax?line("Subtotal",money(sub)):"")+(disc?line("Discount","−"+money(disc)):"")+(tax?line(taxIncluded()?"Tax (incl.)":"Tax",money(tax)):"")+(tip?line("Tip",money(tip)):"")+line("Total",money(tot),true);
   const tenders=(r.tenders||[]).map(t=>line(t.type==="card"?("💳 "+t.brand+" ••"+t.last4):t.type[0].toUpperCase()+t.type.slice(1), money(t.amount))).join("");

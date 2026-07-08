@@ -52,10 +52,13 @@ open/close **recurring checklists** with photo/count/signature capture; per-cust
         (a station can be pinned to a store); order belongs to the customer's store.
   - [ ] 1c. Extensible **sub-records** on a record (child objects: pieces, route-stop) — the substrate Stages
         3/8 hang on.
-- [ ] **Stage 2 — Per-piece unit model + HSL tag module** (Gap 3)
-  - [ ] lines can expand to individual **piece units** (item flag `perPiece` or flow setting); each piece has
-        id, durable tag/HSL, status, current station, location, flags, bag.
-  - [ ] per-garment **profile/history recall** keyed by tag (extends the existing entity-profile primitive).
+- [x] **Stage 2 — Unique / serialized inventory + tag** (Gap 3) — SHIPPED (engine). Owner's reframe: HSL is just
+      *unique inventory with stops before it sells.* An item marked `serialized` (+ `tagLabel`) becomes an
+      individually-tracked UNIT — each is its own qty-1 line with a durable tag (HSL / serial / IMEI) that rides
+      the item's stops. `tagChip` shows it on draft/board/pipeline/receipt; the tag is scan/editable at intake;
+      `unitHistory(tag)` recalls returning units across visits. cleaners demo tags Shirt+Pants as HSL; fungible
+      items (Wash & Fold) stay untagged. Verified, 0 console errors. (pos.html: `genUnitTag`/`tagChip`/`unitHistory`/`addLine`.)
+      ↳ pending (folds into Stage 7): a "unique unit / tag" toggle in the builder's item editor.
 - [ ] **Stage 3 — Detail entry + Assembly** (Gaps 4, 5, 6)
   - [ ] detail station can add/price/tag pieces (not just "mark done").
   - [ ] assembly **bay** assignment + **smart bag split** (config: max/bag, thick-spread, solo categories,
