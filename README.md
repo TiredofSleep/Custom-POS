@@ -77,6 +77,13 @@ staff, commission, and a booking calendar). More business types to come.
     per-item routing & fan-out, timers/SLAs, flags, modifiers, 86 counts.
   - **People & customers:** **staff time-clock + PIN + clock-in welcome**, roles/tips/commission, customer
     profiles + "the usual", **loyalty + gift cards**, **text-when-ready**, status board + customer tracker.
+  - **Worker rights** (defaults tilt toward the worker): **staff scheduling** (weekly grid, OT flag,
+    publish → text), **breaks + real-time earnings** with meal/rest reminders, **time-off requests**, **shift
+    coverage** (no double-book / no hidden OT), **incident reports + 🆘 panic alert**, **tip pooling by hours**,
+    and a **worker portal** — your own schedule, hours, and a **pay estimate with overtime shown at 1.5×**.
+  - **Business health** (survive the hard days): **labor as % of sales** with a high-payroll flag, **gross
+    margin** (cost of goods → real profit), **top items by sales + margin**, **busy-hours** bars to staff the
+    rush, and a **win-back list** that re-invites lapsed regulars in one tap.
 - ✅ **The builder** — [`builder.html`](builder.html): pick a trade, deep-configure clickable workstations & items,
   **download your POS** plus a generated **`CLAUDE.md`**. Seven templates (retail, café, dry cleaner, repair,
   salon, the real **Hamburger Barn**, and a **full-service restaurant** with a floor plan) each ship with their
@@ -95,10 +102,10 @@ staff, commission, and a booking calendar). More business types to come.
   different station) share one live POS. Sync is opt-in (`?hub=…`); the downloaded POS is fully local otherwise.
 - ✅ **One-click build** — `node build.js` → `dist/custompos.html`, a single self-contained file that runs the
   whole builder with **no server** (host it anywhere as customPOS.com).
-- ✅ **Tested** — 31 browser test suites in [`tests/`](tests), each driving the real app, all green with zero
+- ✅ **Tested** — 58 browser test suites in [`tests/`](tests), each driving the real app, all green with zero
   console errors.
 
-**Next:** more trade templates, a drag-to-arrange visual flow editor, CSV importers, and hosting customPOS.com.
+**Next:** the worker portal on personal-device auth, calendar-dated PTO balances, and hosting customPOS.com.
 The whole build story is in [JOURNAL.md](JOURNAL.md).
 
 ### Try it
