@@ -13,11 +13,18 @@ and a DNS switch, which only you can do because they cost a little money and use
 ## What's already true (no action needed)
 - **The site builds itself.** `.github/workflows/pages.yml` runs on every push to `main`: it runs `node build.js`,
   assembles `index.html` (landing) + `builder.html` (the builder) + `pos.html` (the demo engine) + `app.html`
-  (the one-file self-contained build), and publishes them to **GitHub Pages**.
-- **It's live right now at the GitHub Pages URL.** Find it under the repo's **Settings → Pages** (it looks like
-  `https://tiredofsleep.github.io/Custom-POS/`). Open it — that's the real site, today, minus the pretty domain.
+  (the one-file self-contained build), and uploads them as a Pages artifact — all green.
 - **Everything is static and self-contained.** No server to run for the website itself. (The optional sync `hub.js`
   and the payments service are separate, per-business, and only needed by a shop that wants them.)
+
+## Step 0 — Turn GitHub Pages ON (yours; 1 click) ⚠️ do this first
+Right now the workflow **builds** the site successfully but the final publish step **fails with a 404** because
+GitHub Pages hasn't been enabled on the repo yet. One click fixes it:
+- Repo → **Settings → Pages → Build and deployment → Source →** choose **GitHub Actions**.
+That's it. Re-run the latest **deploy demo to GitHub Pages** action (repo → Actions → that run → *Re-run jobs*), or
+just push any commit, and it will publish. The site then goes live at the GitHub Pages URL (shown at the top of
+Settings → Pages, like `https://tiredofsleep.github.io/Custom-POS/`) — the real site, minus the pretty domain.
+**Verify the github.io URL works before doing the domain steps below.**
 
 ## Step 1 — Register the domain (yours; ~$10–15/year)
 Buy **custompos.com** at any registrar (Cloudflare, Namecheap, Porkbun, Google Domains successor, etc.).
