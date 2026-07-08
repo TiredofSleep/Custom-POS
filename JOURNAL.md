@@ -1000,4 +1000,19 @@ removable — and it steps aside the moment you actually take a break. Meal brea
 the person. A small line of code, but it says the thing the whole track has been saying: the tool notices when
 you're running yourself down, and it speaks up for you. Fifty-eight suites, all green.
 
+### A door a regular person can walk through
+All of this — the scheduling, the fair tips, the margin math, the safety line — is worthless if the person who
+needs it can't get it set up. The builder had a fast path for someone who already knew what a "station" was, but
+that's not the owner we're building for. So the builder grew a **guided setup**: a plain-language interview that
+asks the five questions a real owner can actually answer. *What kind of business is this?* (pick the closest
+picture). *What's it called?* *Who works here* — just you, or a team? Say "a team" and the software quietly turns
+on the whole worker suite: a time clock, fair scheduling, a worker portal, a safety line — no jargon, just *on*,
+because those protections should be the default, not a thing you have to know to ask for. *How do people pay?*
+*How will you run it* — one computer, several, or with off-site backup? Five answers later there's a **Build my
+POS** button, and out comes the same single self-contained file, configured, downloadable, yours. The expert
+editor is still one click away for anyone who wants it; but now the front door is a conversation, not a control
+panel — and it hands a nervous first-timer a working point-of-sale with their people already protected. That's the
+whole thesis in one screen: the tools that help you survive shouldn't require an expert to switch on. Fifty-nine
+suites, all green.
+
 *— to be continued —*
