@@ -970,4 +970,14 @@ walk in already knowing roughly what you earned, instead of hoping the number at
 owner's labor-cost line uses — one truth, shown to both sides. When money's tight, being able to see your own pay,
 overtime and all, isn't a nicety. It's leverage. Fifty-five suites, all green.
 
+### Know your winners
+Not everything on the menu earns its place. Some items sell in a blur and barely clear their cost; some move
+slowly but carry the whole margin. An owner running lean needs to know which is which, and the receipts already
+hold the answer. So the Z-report now ranks the day's **top items by revenue** — what actually sold, most first —
+and, when items carry a cost, prints each one's **margin** right beside it. Now "Coffee — 90%" and "Muffin — 80%"
+sit in plain view, and the owner can see at a glance what to feature, what to reprice, and what's quietly not
+worth the shelf. It's the same honest sale-and-cost data everything else here runs on, just tilted to answer the
+merchandiser's question instead of the accountant's. In a good year you can afford not to look; in a hard one,
+knowing your winners is how you spend a shrinking bit of attention where it pays. Fifty-six suites, all green.
+
 *— to be continued —*
