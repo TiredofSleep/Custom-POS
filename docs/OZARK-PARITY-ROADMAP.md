@@ -92,8 +92,14 @@ open/close **recurring checklists** with photo/count/signature capture; per-cust
 - [ ] **Stage 5 — Delivery route module** (Gap 8)
   - [ ] route/stop/driver as config + sub-records; driver view, manifest, per-stop pickup/no-pickup,
         scan-to-rack, per-day scheduling; a "picked up a bag" → uncounted intake.
-- [ ] **Stage 6 — Roles + money-gating** (Gap 9)
-  - [ ] a permission layer (roles → allowed actions) + **request→approve** gate on refunds/voids/discounts.
+- [x] **Stage 6 — Roles + money-gating** (Gap 9) — SHIPPED. Opt-in via `FLOW.endpoints.approvals = {refund:true}`
+      + `FLOW.staff` roles (`owner`/`manager` may approve). A gated action (refund / line-return) prompts for a
+      manager/owner PIN at the moment of the action; a wrong or staff-only PIN is denied, an approver's PIN runs
+      it, and every approval is written to an audit log (`DB.approvals`) shown on the office screen. Inert
+      without the config. Generalizes "staff requests → owner approves" (the anti-theft gate). Verified
+      in-browser (deny / approve / wrong-PIN, 0 errors) + `tests/approvals.js`.
+      (pos.html: `approvers`/`needsApproval`/`withApproval`.)
+      ↳ (discount gating + an async request→approve queue extend the same primitive; folds into Stage 7.)
 - [ ] **Stage 7 — Expose + prove**
   - [ ] surface every new module/config in the **builder** UI (toggles + settings).
   - [ ] ship an **"Ozark-grade dry cleaner"** template that turns them all on.
