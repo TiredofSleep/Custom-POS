@@ -205,6 +205,7 @@ const PATH_TYPES = ["production","staging"];   // the station types an item can 
 
 /* ---- wizard state ---- */
 let step=1, tradeKey=null, cfg=null, selStation=-1, selItem=-1, showImport=false, selFloorTable=null;
+let gstep=1, guide={};   // guided-interview sub-wizard (Shape → Config → People → Pay → Deployment)
 function flashB(msg){ let t=document.getElementById('bToast'); if(!t){ t=document.createElement('div'); t.id='bToast'; t.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1f6feb;color:#fff;padding:10px 16px;border-radius:8px;z-index:99;font-weight:600'; document.body.appendChild(t); } t.textContent=msg; t.style.display='block'; }
 // bulk item import: parse "name, price, category, barcode" rows (header auto-detected) into the catalog
 function importItemsCSV(text){
@@ -221,6 +222,20 @@ function importItemsCSV(text){
   return added;
 }
 function chooseTrade(k){ tradeKey=k; cfg=JSON.parse(JSON.stringify(TEMPLATES[k])); selStation=-1; selItem=-1; step=2; render(); }
+
+/* ---- guided interview: a plain-language path for non-technical owners (Shape → Config → People → Pay → Run) ---- */
+function startGuide(){ step='guide'; gstep=1; guide={}; render(); }
+function guideTrade(k){ tradeKey=k; cfg=JSON.parse(JSON.stringify(TEMPLATES[k])); selStation=-1; selItem=-1; render(); }
+function ensureStation(type,label){ if(!cfg.stations.some(s=>s.type===type)) cfg.stations.push({ id:uid(), type, label, view:{} }); }
+function dropStation(type){ cfg.stations=cfg.stations.filter(s=>s.type!==type); }
+function guideTeam(has){ guide.team=has;
+  if(has){ ensureStation('timeclock','Time Clock'); ensureStation('schedule','Schedule'); ensureStation('worker','My Portal');
+    if(!cfg.staff||!cfg.staff.length) cfg.staff=[{ id:uid(), name:'You', pin:'1111', wage:0 }];
+    if(!cfg.endpoints.notify) cfg.endpoints.notify={template:"Hi {name}, your order #{number} at {biz} is ready."}; }   // scheduling/safety texts ride the notify seam
+  else { dropStation('timeclock'); dropStation('schedule'); dropStation('worker'); }
+  render();
+}
+function guideFinish(){ buildAndShow(); }
 
 /* ---- flow preview (clickable stations) ---- */
 function flowPreview(cfg, clickable){
@@ -455,9 +470,75 @@ async function buildAndShow(){ await assemble(cfg); step=3; render(); }
 /* ---- render ---- */
 function render(){
   const app=document.getElementById('app'); app.innerHTML="";
+  // ---- guided interview (opt-in from step 1) — plain-language questions for a non-technical owner ----
+  if(step==='guide'){
+    app.appendChild(h('div',{class:'step'},['Guided setup · '+gstep+' of 5']));
+    const cont=(label,to)=>h('button',{class:'primary big', onclick:()=>{ gstep=to; render(); }},[label||'Continue →']);
+    const back=(to)=>h('button',{onclick:()=>{ gstep=to; render(); }},['← back']);
+    if(gstep===1){
+      app.appendChild(h('h2',{},['First — what kind of business is this?']));
+      app.appendChild(h('p',{class:'hint'},['Pick the closest match; you can change anything later.']));
+      app.appendChild(h('div',{class:'cards'}, Object.keys(TEMPLATES).map(k=>{ const t=TEMPLATES[k];
+        return h('button',{class:'trade'+(tradeKey===k?' on':''), onclick:()=>guideTrade(k)},[ h('b',{},[t.label]), h('small',{},[t.blurb]) ]); })));
+      if(tradeKey) app.appendChild(h('div',{style:'margin-top:12px'},[cont('Continue →',2)]));
+      return;
+    }
+    if(gstep===2){
+      app.appendChild(h('h2',{},['What should we call it?']));
+      app.appendChild(h('div',{class:'panel'},[
+        h('div',{class:'fld'},[ h('span',{class:'flab'},['Business name']), h('input',{id:'gName', class:'nm', style:'flex:1', value:cfg.branding.name, oninput:e=>cfg.branding.name=e.target.value||cfg.branding.name}) ]),
+        h('div',{class:'fld'},[ h('span',{class:'flab'},['Brand color']), h('input',{type:'color', value:cfg.branding.brandColor, oninput:e=>cfg.branding.brandColor=e.target.value}) ]) ]));
+      app.appendChild(h('div',{},[ back(1), ' ', cont('Continue →',3) ]));
+      return;
+    }
+    if(gstep===3){
+      app.appendChild(h('h2',{},['Who works here?']));
+      app.appendChild(h('div',{class:'cards'},[
+        h('button',{class:'trade'+(guide.team===false?' on':''), onclick:()=>guideTeam(false)},[h('b',{},['Just me']), h('small',{},['No time clock or scheduling — keep it simple.'])]),
+        h('button',{class:'trade'+(guide.team===true?' on':''), onclick:()=>guideTeam(true)},[h('b',{},['I have a team']), h('small',{},['Time clock, fair scheduling, a worker portal, and a safety line — all on.'])]) ]));
+      if(guide.team){
+        const staff=cfg.staff||[];
+        const rows=h('div',{}, staff.map((s,i)=>h('div',{class:'row2'},[
+          h('input',{class:'nm', value:s.name, oninput:e=>s.name=e.target.value}),
+          h('span',{class:'muted'},['PIN']), h('input',{class:'sm', value:s.pin, oninput:e=>s.pin=e.target.value.replace(/\D/g,'').slice(0,8)}),
+          h('span',{class:'muted'},['$/hr']), h('input',{class:'sm', value:s.wage||'', placeholder:'0', oninput:e=>{ const v=e.target.value.replace(/[^\d.]/g,''); if(v) s.wage=+v; else delete s.wage; }}),
+          h('button',{class:'danger', onclick:()=>{ cfg.staff.splice(i,1); render(); }},['×']) ])));
+        app.appendChild(h('div',{class:'panel'},[
+          h('h2',{},['Your team']),
+          h('div',{class:'fld'},[h('span',{class:'flab'},['People']), h('span',{class:'hint'},['name · a PIN they clock in with · their hourly wage (drives fair-pay and labor %)'])]),
+          rows, h('button',{onclick:addStaff},['+ Add person']),
+          h('div',{class:'fld', style:'margin-top:10px'},[ h('span',{class:'flab'},['Tips']), h('button',{class:pay().tipPool?'on':'', onclick:()=>toggleTipPool()},['pool tips by hours (fair split)']) ]) ]));
+      }
+      if(guide.team!=null) app.appendChild(h('div',{style:'margin-top:8px'},[ back(2), ' ', cont('Continue →',4) ]));
+      return;
+    }
+    if(gstep===4){
+      app.appendChild(h('h2',{},['How do people pay?']));
+      app.appendChild(h('div',{class:'panel'},[
+        h('div',{class:'fld'},[ h('span',{class:'flab'},['Take']),
+          h('button',{class:'on'},['cash']),
+          h('button',{class:hasTender('card')?'on':'', onclick:()=>toggleTender('card')},['cards']),
+          h('button',{class:pay().tip?'on':'', onclick:()=>toggleTip()},['tips']),
+          h('button',{class:cfg.endpoints.notify?'on':'', onclick:()=>toggleNotify()},['text customers when ready']) ]),
+        h('div',{class:'fld'},[ h('span',{class:'flab'},['Sales tax %']), h('input',{class:'sm',type:'number',step:'0.01', value:(cfg.endpoints.tax&&(cfg.endpoints.tax.rate*100))||'', placeholder:'0', oninput:e=>setTax(e.target.value)}) ]) ]));
+      app.appendChild(h('div',{},[ back(3), ' ', cont('Continue →',5) ]));
+      return;
+    }
+    if(gstep===5){
+      app.appendChild(h('h2',{},['Last thing — how will you run it?']));
+      app.appendChild(h('div',{class:'cards'},[
+        h('button',{class:'trade'+(guide.deploy==='one'?' on':''), onclick:()=>{ guide.deploy='one'; render(); }},[h('b',{},['Just one computer']), h('small',{},['Everything on that device. Free. Export a backup any time.'])]),
+        h('button',{class:'trade'+(guide.deploy==='several'?' on':''), onclick:()=>{ guide.deploy='several'; render(); }},[h('b',{},['Several computers']), h('small',{},['Add a small sync hub so registers share one live POS. ~a few $/mo.'])]),
+        h('button',{class:'trade'+(guide.deploy==='backup'?' on':''), onclick:()=>{ guide.deploy='backup'; render(); }},[h('b',{},['…and off-site backup']), h('small',{},['The hub plus rolling off-site snapshots — a dead drive is never the end.'])]) ]));
+      if(guide.deploy) app.appendChild(h('div',{style:'margin-top:12px'},[ back(4), ' ', h('button',{class:'primary big', onclick:guideFinish},['✨ Build my POS']) ]));
+      return;
+    }
+    return;
+  }
   if(step===1){
     app.appendChild(h('div',{class:'step'},['Step 1 of 3']));
     app.appendChild(h('h2',{},['What kind of business do you run?']));
+    app.appendChild(h('div',{style:'margin-bottom:14px'},[ h('button',{class:'primary big', onclick:startGuide},['✨ Guided setup — answer a few questions']), h('span',{class:'hint', style:'margin-left:10px'},['new to this? start here — or pick a template below to jump into the full editor']) ]));
     const cards=h('div',{class:'cards'}, Object.keys(TEMPLATES).map(k=>{ const t=TEMPLATES[k];
       return h('button',{class:'trade', onclick:()=>chooseTrade(k)},[ h('b',{},[t.label]), h('small',{},[t.blurb]) ]); }));
     app.appendChild(cards);
