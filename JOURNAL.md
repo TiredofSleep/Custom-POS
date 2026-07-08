@@ -980,4 +980,14 @@ worth the shelf. It's the same honest sale-and-cost data everything else here ru
 merchandiser's question instead of the accountant's. In a good year you can afford not to look; in a hard one,
 knowing your winners is how you spend a shrinking bit of attention where it pays. Fifty-six suites, all green.
 
+### When the rush actually hits
+The labor-percent number tells an owner *if* they're overstaffed; it doesn't tell them *when.* Cut the wrong hour
+and you're slammed at noon with one person on; keep everyone through a dead afternoon and payroll eats the day.
+The receipts know exactly when the money comes in, so the report now draws it: **net sales by hour**, a little bar
+per hour, and a plain call-out of the **busiest** one — *staff to the rush, trim the lulls.* It's the missing half
+of the labor story: the percent says how much you can afford to spend on people, and the busy-hours bars say where
+to spend it. Same day's sales, bucketed by the clock on each sale — no new data to enter, it was always there in
+the timestamps. For a shop trying to squeeze payroll without wrecking service, seeing the shape of the day is the
+difference between cutting fat and cutting muscle. Fifty-seven suites, all green.
+
 *— to be continued —*

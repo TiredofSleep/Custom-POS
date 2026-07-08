@@ -98,7 +98,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.55";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.56";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -444,13 +444,14 @@ function renderReport(app, station){
   const done=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED") && dayOf(r.ts)===day);
   const L=(lab,val,bold)=>"<div class='line'>"+(bold?"<b>":"<span>")+lab+(bold?"</b>":"</span>")+"<span class='spacer'></span>"+(bold?"<b>":"<span>")+val+(bold?"</b>":"</span>")+"</div>";
   // ---- daily sales summary (refund-aware: a refunded order's sale nets out, its reversed tender nets its tenders) ----
-  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0, cogs=0; const byTender={}, byCat={}, byItem={};
+  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0, cogs=0; const byTender={}, byCat={}, byItem={}, byHour={};
   const itemCost=(l)=>{ const it=FLOW.catalog.find(i=>i.id===l.catId); return (it&&+it.cost)||0; };
   done.forEach(r=>{ const rf=r.status==="REFUNDED";
     if(rf){ refunds += recordTotal(r); }
     else { orders++;
       const allSub=lineSubtotal(r), frac = allSub>0 ? (allSub-returnedSubtotal(r))/allSub : 1;   // proportion still sold (line-level returns)
       net += recordNet(r)*frac; tax += recordTax(r)*frac; tips += r.tip||0; disc += recordDiscount(r)*frac;
+      if(r.ts){ const hr=new Date(r.ts).getHours(); byHour[hr]=(byHour[hr]||0)+recordNet(r)*frac; }
       r.lines.filter(l=>!l.returned).forEach(l=>{ items += l.qty; cogs += itemCost(l)*l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty;
         const bi=byItem[l.name]=byItem[l.name]||{qty:0,rev:0,cost:0}; bi.qty+=l.qty; bi.rev+=l.price*l.qty; bi.cost+=itemCost(l)*l.qty; });
       const ret = -((r.tenders||[]).filter(t=>t.refund).reduce((s,t)=>s+t.amount,0)); if(ret>0.0001) refunds += ret;   // partial line returns
@@ -483,6 +484,17 @@ function renderReport(app, station){
     top.forEach(n=>{ const bi=byItem[n]; const m=(haveCost && bi.rev>0)?Math.round((bi.rev-bi.cost)/bi.rev*100):null;
       ti.innerHTML+="<div class='line'><span>"+n+" <small class='muted'>×"+bi.qty+"</small></span><span class='spacer'></span><span>"+money(bi.rev)+(m!=null?" <small class='muted'>· "+m+"%</small>":"")+"</span></div>"; });
     app.appendChild(ti);
+  }
+  // ---- busy hours: when the money actually comes in, so staffing can match demand ----
+  const hrs=Object.keys(byHour).map(Number).sort((a,b)=>a-b);
+  if(hrs.length){ const mx=Math.max(...hrs.map(h=>byHour[h]));
+    const fmtHr=h=>{ const ap=h<12?"a":"p"; const h12=(h%12)||12; return h12+ap; };
+    const bh=document.createElement("div"); bh.className="card"; bh.innerHTML="<div class='row'><b>Busy hours</b><span class='spacer'></span><span class='muted'>net sales by hour</span></div>";
+    hrs.forEach(h=>{ const v=byHour[h]; const blocks=mx>0?Math.max(1,Math.round(v/mx*16)):0;
+      bh.innerHTML+="<div class='line'><span style='width:42px;display:inline-block'>"+fmtHr(h)+"</span><span style='font-family:monospace;letter-spacing:-1px;color:var(--brand,#2f7bd6)'>"+"▇".repeat(blocks)+"</span><span class='spacer'></span><span class='muted'>"+money(v)+"</span></div>"; });
+    const busiest=hrs.reduce((a,h)=>byHour[h]>byHour[a]?h:a, hrs[0]);
+    bh.innerHTML+="<div class='muted' style='margin-top:4px'>Busiest around "+fmtHr(busiest)+" — staff to the rush, trim the lulls.</div>";
+    app.appendChild(bh);
   }
   // ---- cash drawer count ----
   const dc=document.createElement("div"); dc.className="card";
