@@ -38,7 +38,7 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   // Back Office: commission 40% of $35 = $14, tips $7, take-home $21
   await changeTo('Back Office');
   const office = await T();
-  const commissionOk = /Alex/.test(office) && /Service sales.*\$35\.00/s.test(office) && /Commission \(40%\).*\$14\.00/s.test(office) && /Tips.*\$7\.00/s.test(office) && /Take-home.*\$21\.00/s.test(office);
+  const commissionOk = /Alex/.test(office) && /Commissioned sales.*\$35\.00/s.test(office) && /Commission \(40%\).*\$14\.00/s.test(office) && /Tips.*\$7\.00/s.test(office) && /Take-home.*\$21\.00/s.test(office);
 
   await b.close();
   console.log('chair:', chair.replace(/\n+/g,' | '));
