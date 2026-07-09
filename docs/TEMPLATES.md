@@ -44,6 +44,7 @@ stations in the flow — see the [module library](MODULE-LIBRARY.md)).
 | **Bakery (pre-order + counter)** | Custom cakes + pastries | **Deposit** on a pre-order, order board, ready-text, counter sales. |
 | **Florist (+ delivery)** | Arrangements & deliveries | **Custom-price** quote, deposit, **delivery route**, ready-text. |
 | **Repair shop** | Phones, bikes, gear | Quote → deposit → fix → ready, aging clock. |
+| **Laundromat / Wash & Fold** | Self-serve + drop-off | **By-weight** wash & fold + per-load self-serve, ready-text. |
 | **Dry cleaner / Laundry** | Full clean & laundry | Tag → clean → assemble → **rack** → pickup, status board + tracker. |
 | **Full-plant cleaner (advanced)** | Multi-store plant + route | Everything on: 2-store plant, per-piece tags, smart assembly, route, refund approvals. |
 
@@ -52,6 +53,7 @@ stations in the flow — see the [module library](MODULE-LIBRARY.md)).
 |---|---|---|
 | **Salon / Spa** | Chairs & appointments | **Performers + commission**, tips, loyalty, booking. |
 | **Mobile / home services** | Groomer, cleaner, handyman | On-the-go checkout + booking, tips, text-when-done. |
+| **Tattoo / Piercing studio** | By-artist appointments | **Deposit + {balance}**, 18+ ID & **waiver flags**, per-artist commission, booking. |
 
 ### Retail & inventory
 | Template | For | Shows off |
