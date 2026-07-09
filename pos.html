@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.64";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.65";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -1423,7 +1423,8 @@ function renderIntake(app, station){
   const cat=document.createElement("div"); cat.innerHTML="<h2>New order</h2>";
   // search / barcode-scan box — shown for big menus or when a scanner is configured (keyboard-wedge types code + Enter)
   const tiles=[];
-  const addItem=item=> needsConfig(item) ? (pending={item, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(item, {}, [], [], null);
+  const addItem=item=>{ if(item.customPrice){ const v=prompt("Price for "+item.name+":", item.price||""); if(v==null) return; const n=Number(v); if(isNaN(n)||n<0){ flash("Enter a price"); return; } item={...item, price:+n.toFixed(2)}; }
+    return needsConfig(item) ? (pending={item, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(item, {}, [], [], null); };
   if(FLOW.catalog.length>5 || FLOW.endpoints.scan){
     const search=document.createElement("input"); search.id="catSearch"; search.placeholder="Search or scan…"; search.autocomplete="off"; search.style.cssText="width:100%;margin-bottom:10px";
     search.oninput=()=>{ const q=search.value.trim().toLowerCase(); tiles.forEach(({item,btn})=>{ const hay=(item.name+" "+(item.category||"")+" "+(item.barcode||item.sku||"")).toLowerCase(); btn.style.display=(!q||hay.includes(q))?"":"none"; }); };
@@ -1454,8 +1455,13 @@ function renderIntake(app, station){
 
   const c=document.createElement("div"); c.className="card";
   if(!draft.lines.length){ c.innerHTML="<div class='empty'>Tap items to build the order.</div>"; }
-  else { draft.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
+  else { draft.lines.forEach((l,idx)=>{ const row=document.createElement("div"); row.className="line";
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+(l.performer?" <span class='pill'>"+l.performer+"</span>":"")+tagChip(l)+"</span><span class='pill route'>"+((l.path||[]).join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":"");
+      if(station.view.money){   // quantity steppers + per-line price edit (haggling, custom items, ring 6 in one tap)
+        const dec=document.createElement("button"); dec.textContent="−"; dec.title="one fewer"; dec.style.cssText="padding:2px 9px;margin-left:6px"; dec.onclick=()=>{ if(l.qty>1) l.qty--; else draft.lines.splice(idx,1); render(); }; row.appendChild(dec);
+        const inc=document.createElement("button"); inc.textContent="+"; inc.title="one more"; inc.style.cssText="padding:2px 9px;margin-left:4px"; inc.onclick=()=>{ l.qty++; render(); }; row.appendChild(inc);
+        const pen=document.createElement("button"); pen.textContent="✎$"; pen.title="Set this line's price"; pen.style.cssText="padding:2px 8px;margin-left:4px"; pen.onclick=()=>{ const v=prompt("Price for "+l.name+" (each):", l.price); if(v!=null){ const n=Number(v); if(!isNaN(n)&&n>=0){ l.price=+n.toFixed(2); render(); } else flash("Enter a price"); } }; row.appendChild(pen);
+      }
       if(l.serialized){ const tb=document.createElement("button"); tb.textContent="🏷 "+(l.tag||"tag"); tb.title="Scan / set the "+(l.tagLabel||"tag")+" on this unit"; tb.style.cssText="padding:2px 8px;margin-left:6px"; tb.onclick=()=>{ const v=prompt("Scan or type the "+(l.tagLabel||"tag")+" for this "+l.name+":", l.tag||""); if(v!=null&&v.trim()){ l.tag=v.trim(); render(); } }; row.appendChild(tb); }
       c.appendChild(row); });
     const tot=document.createElement("div"); tot.className="line"; tot.innerHTML="<b>Total</b><span class='spacer'></span><b>"+money(draft.lines.reduce((s,l)=>s+l.price*l.qty,0))+"</b>"; c.appendChild(tot); }
@@ -1664,7 +1670,8 @@ function renderDetail(app, station){
     return;
   }
   app.innerHTML="<h2>Detailing #"+rec.number+"</h2>"+(rec.customer?"<p class='muted'>"+rec.customer.name+" · "+rec.customer.phone+"</p>":"")+(rec.dropCount?"<p class='muted'>"+rec.dropCount+" piece(s) were dropped — itemize them below.</p>":"");
-  const addItem=item=> needsConfig(item) ? (pending={item, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(item, {}, [], [], null);
+  const addItem=item=>{ if(item.customPrice){ const v=prompt("Price for "+item.name+":", item.price||""); if(v==null) return; const n=Number(v); if(isNaN(n)||n<0){ flash("Enter a price"); return; } item={...item, price:+n.toFixed(2)}; }
+    return needsConfig(item) ? (pending={item, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(item, {}, [], [], null); };
   const grid=document.createElement("div"); grid.className="grid";
   FLOW.catalog.forEach(item=>{ if(is86(item)||isOutOfStock(item)) return; const b=document.createElement("button"); b.className="tile"; b.innerHTML=item.name+"<small>"+(station.view.money?money(item.price):((item.path||[]).join(' → ')||'no prep'))+"</small>"; b.onclick=()=>addItem(item); grid.appendChild(b); });
   app.appendChild(grid);

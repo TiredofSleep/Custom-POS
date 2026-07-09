@@ -62,6 +62,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `table-check.js` | restaurant table↔check linking — a floor shows a table picker on the register, a check tags its table (🍽 chip), the floor tile shows the open-check total + occupies the table, tapping a table lists its open checks |
 | `cash-change.js` | cash change-making — "Make change" opens an amount-tendered pad with quick-cash chips and live change-due; the tender records amount/tendered/change; one-tap exact cash still works |
 | `templates.js` | every builder starter template boots through the engine with zero console errors and rings a sale — the guarantee that picking any template gives a working POS (16 templates: counter, food truck, market, mobile, bar, dispensary, convenience/gas, retail, café, cleaner, ozark, repair, salon, burgerbarn, bistro, blank) |
+| `custom-price.js` | custom-price items + line editing — a customPrice item prompts for a price, +/− quantity steppers, and a ✎$ per-line price override (haggling / made-a-deal), with − removing the line at qty 1 |
 | `age-check.js` | age-restricted items (gas / convenience / liquor) — a 21+/18+ item blocks payment until a photo-ID check is confirmed; unrestricted orders ring straight through |
 
 ## Running
