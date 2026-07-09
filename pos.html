@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.73";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.74";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -566,7 +566,21 @@ function renderReport(app, station){
   if(!isToday){ const next=document.createElement("button"); next.textContent=shiftDay(day,1)+" →"; next.onclick=()=>{ reportDay=shiftDay(day,1); if(reportDay===todayStr()) reportDay=null; render(); }; nav.appendChild(next);
     const tb=document.createElement("button"); tb.textContent="Today"; tb.style.marginLeft="8px"; tb.onclick=()=>{ reportDay=null; render(); }; nav.appendChild(tb); }
   app.appendChild(nav);
-  const done=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED") && dayOf(r.ts)===day);
+  const dayAll=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED") && dayOf(r.ts)===day);
+  // multi-store: scope the whole report to one store, with an all-stores roll-up when viewing "All"
+  if(storesOn()){
+    const chips=document.createElement("div"); chips.className="opts"; chips.style.margin="0 0 10px";
+    const mk=(id,label)=>{ const b=document.createElement("button"); if((reportStore||"")===(id||"")) b.className="sel"; b.textContent=label; b.onclick=()=>{ reportStore=id; render(); }; chips.appendChild(b); };
+    mk(null,"All stores"); storeList().forEach(s=>mk(s.id, s.name)); app.appendChild(chips);
+    if(!reportStore){   // roll-up: net sales + orders per store (only when more than one store rang today)
+      const per={}; dayAll.filter(r=>r.status!=="REFUNDED").forEach(r=>{ const sid=r.storeId||"—"; const allSub=lineSubtotal(r), frac=allSub>0?(allSub-returnedSubtotal(r))/allSub:1; per[sid]=per[sid]||{net:0,orders:0}; per[sid].net+=recordNet(r)*frac; per[sid].orders++; });
+      const ids=Object.keys(per);
+      if(ids.length>1){ const rc=document.createElement("div"); rc.className="card"; rc.innerHTML="<div class='row'><b>By store</b> <span class='muted'>net sales "+(isToday?"today":day)+"</span></div>";
+        let tot=0, to=0; ids.sort((a,b)=>per[b].net-per[a].net).forEach(sid=>{ tot+=per[sid].net; to+=per[sid].orders; const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>🏬 "+(storeName(sid)||sid)+" <span class='muted'>· "+per[sid].orders+" order(s)</span></span><span class='spacer'></span><span>"+money(per[sid].net)+"</span>"; rc.appendChild(row); });
+        const t=document.createElement("div"); t.className="line"; t.innerHTML="<b>All stores</b> <span class='muted'>· "+to+" order(s)</span><span class='spacer'></span><b>"+money(tot)+"</b>"; rc.appendChild(t); app.appendChild(rc); }
+    }
+  }
+  const done = (storesOn() && reportStore) ? dayAll.filter(r=>r.storeId===reportStore) : dayAll;
   const L=(lab,val,bold)=>"<div class='line'>"+(bold?"<b>":"<span>")+lab+(bold?"</b>":"</span>")+"<span class='spacer'></span>"+(bold?"<b>":"<span>")+val+(bold?"</b>":"</span>")+"</div>";
   // ---- daily sales summary (refund-aware: a refunded order's sale nets out, its reversed tender nets its tenders) ----
   let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0, cogs=0, roundUp=0; const byTender={}, byCat={}, byItem={}, byHour={};
@@ -1442,6 +1456,7 @@ let incidentSent = null; // "filed" | "help" — confirmation shown after a work
 let workerId = null;     // worker portal: who is logged in on this device (by PIN)
 let reportDay = null;  // which day the Z-report shows (YYYY-MM-DD, local); null = today
 let activityFilter = "all";   // activity-log category filter in the report: all | money | override | access | admin
+let reportStore = null;       // multi-store report: which store the report is scoped to (null = all stores, with roll-up)
 let selTable = null;   // floor plan: the table currently opened
 let floorSection = null; // floor plan: active section filter (null = all)
 let selCell = null;    // scheduling: the {staffId, day} cell being edited
