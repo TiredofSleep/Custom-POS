@@ -191,7 +191,8 @@ const TEMPLATES = {
     stations:[ {id:"reg",type:"central",label:"Counter",view:{money:true}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
   pizzeria: { flowId:"pizzeria", label:"Pizzeria (+ delivery)", topology:"linear", blurb:"Walk-in & phone orders, made in back, delivered to the door",
     branding:{ name:"Slice House", brandColor:"#c9462c" },
-    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[10,15,20]} }, notify:{template:"Hi {name}, your order #{number} from {biz} is on the way!"} },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[10,15,20]} }, notify:{template:"Hi {name}, your order #{number} from {biz} is on the way!"},
+      tax:{ rate:0.08, zones:[ {name:"Downtown", rate:0.09}, {name:"Across the river", rate:0.0825} ] } },   // delivery = tax at the destination's rate; rename these to your real delivery towns
     timer:{ mode:"aging", warnSec:900, badSec:1800, label:"in kitchen" },
     catalog:[
       {id:"cheese",name:"Cheese Pizza",price:12,category:"pizza",cost:3,path:["kitchen"],modifiers:[{group:"Size",required:true,options:[{name:"Sm",price:0},{name:"Md",price:3},{name:"Lg",price:6}]}],addons:[{name:"Pepperoni",price:2},{name:"Mushroom",price:1.5},{name:"Extra cheese",price:2}]},
@@ -202,7 +203,8 @@ const TEMPLATES = {
     stations:[ {id:"reg",type:"intake",label:"Register",view:{money:true}}, {id:"kitchen",type:"production",label:"Kitchen",view:{money:false}}, {id:"kds",type:"kds",label:"Kitchen Display",view:{money:false}}, {id:"route",type:"route",label:"Delivery",view:{money:true}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
   florist: { flowId:"florist", label:"Florist (+ delivery)", topology:"linear", blurb:"Custom arrangements, phone orders, delivered with a gift card",
     branding:{ name:"Petal & Stem", brandColor:"#d15b93" },
-    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", deposit:{pct:50} }, notify:{template:"Hi {name}, your flowers (order #{number}) from {biz} are ready! Balance due at pickup: {balance}."}, quotes:true },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", deposit:{pct:50} }, notify:{template:"Hi {name}, your flowers (order #{number}) from {biz} are ready! Balance due at pickup: {balance}."}, quotes:true,
+      tax:{ rate:0.075, zones:[ {name:"Next town over", rate:0.09} ] } },   // deliveries taxed at the destination's rate
     timer:{ mode:"due", promiseSec:86400, warnSec:43200, label:"needed by" },
     catalog:[
       {id:"custom",name:"Custom Arrangement (quote)",price:0,category:"custom",customPrice:true,path:["bench"]},
@@ -508,7 +510,20 @@ function toggleCoursing(){ if(cfg.endpoints.coursing) delete cfg.endpoints.cours
 function couponList(){ return Array.isArray(cfg.endpoints.discounts)?cfg.endpoints.discounts:[]; }
 function addCoupon(){ const list=couponList(); list.push({code:"SAVE10", pct:10}); cfg.endpoints.discounts=list; render(); }
 function removeCoupon(i){ const list=couponList(); list.splice(i,1); cfg.endpoints.discounts=list.length?list:true; render(); }
-function setTax(v){ v=Number(v)||0; const inc=cfg.endpoints.tax&&cfg.endpoints.tax.included; if(v>0){ cfg.endpoints.tax={rate:v/100}; if(inc) cfg.endpoints.tax.included=true; } else delete cfg.endpoints.tax; }
+function setTax(v){ v=Number(v)||0; const prev=cfg.endpoints.tax||{}; if(v>0){ cfg.endpoints.tax={rate:v/100}; if(prev.included) cfg.endpoints.tax.included=true; if(Array.isArray(prev.zones)&&prev.zones.length) cfg.endpoints.tax.zones=prev.zones; } else delete cfg.endpoints.tax; }
+function addTaxZone(){ if(!cfg.endpoints.tax) return; cfg.endpoints.tax.zones=cfg.endpoints.tax.zones||[]; cfg.endpoints.tax.zones.push({name:"Delivery area", rate:cfg.endpoints.tax.rate||0}); render(); }
+function removeTaxZone(i){ if(!(cfg.endpoints.tax&&cfg.endpoints.tax.zones)) return; cfg.endpoints.tax.zones.splice(i,1); if(!cfg.endpoints.tax.zones.length) delete cfg.endpoints.tax.zones; render(); }
+function taxZonesEditor(){   // destination sales tax for delivery: name + rate per area
+  if(!cfg.endpoints.tax) return null;
+  const zones=cfg.endpoints.tax.zones||[];
+  const rows=zones.map((z,i)=>h('div',{class:'row2'},[
+    h('input',{class:'nm', value:z.name, placeholder:'Town / area', oninput:e=>z.name=e.target.value}),
+    h('span',{class:'muted'},['%']), h('input',{class:'sm',type:'number',step:'0.01', value:+( (z.rate||0)*100).toFixed(2), oninput:e=>z.rate=(Number(e.target.value)||0)/100}),
+    h('button',{class:'danger', onclick:()=>removeTaxZone(i)},['×']) ]));
+  return h('div',{class:'fld', style:'flex-direction:column;align-items:stretch'},[
+    h('div',{},[ h('span',{class:'flab'},['Delivery tax areas']), h('span',{class:'hint'},['deliveries are taxed at the destination\'s rate — add each town you deliver to (the shop\'s own rate above is the default)']) ]),
+    ...rows, h('button',{onclick:addTaxZone},['+ Add a delivery area']) ]);
+}
 function toggleTaxIncluded(){ if(!cfg.endpoints.tax) return; if(cfg.endpoints.tax.included) delete cfg.endpoints.tax.included; else cfg.endpoints.tax.included=true; render(); }
 /* ---- staff & time clock ---- */
 function addStaff(){ cfg.staff=cfg.staff||[]; cfg.staff.push({ id:uid(), name:"New person", pin:String(1000+cfg.staff.length) }); render(); }
@@ -792,7 +807,8 @@ function render(){
         hasTender('card') ? h('div',{class:'hint'},['Heads up: "cards" records a card sale — it doesn\'t charge the card yet. Connect a processor later (see docs/PAYMENTS-MODULE.md) to actually run cards; cash works fully today.']) : null,
         cfg.endpoints.notify ? h('div',{class:'fld'},[ h('span',{class:'flab'},['Ready message']), h('input',{class:'nm', style:'flex:1', value:cfg.endpoints.notify.template, oninput:e=>cfg.endpoints.notify.template=e.target.value, placeholder:'Hi {name}, your order #{number} at {biz} is ready.'}) ]) : null,
         cfg.endpoints.notify ? h('div',{class:'hint'},['{name} {number} {biz} get filled in automatically'+((cfg.endpoints.payment&&cfg.endpoints.payment.deposit)?' — and {balance} shows what they still owe at pickup.':'.')]) : null,
-        h('div',{class:'fld'},[ h('span',{class:'flab'},['Sales tax %']), h('input',{class:'sm',type:'number',step:'0.01', value:(cfg.endpoints.tax&&(cfg.endpoints.tax.rate*100))||'', placeholder:'0', oninput:e=>setTax(e.target.value)}), h('span',{class:'hint'},['leave blank if you don\'t charge sales tax']) ]) ]));
+        h('div',{class:'fld'},[ h('span',{class:'flab'},['Sales tax %']), h('input',{class:'sm',type:'number',step:'0.01', value:(cfg.endpoints.tax&&(cfg.endpoints.tax.rate*100))||'', placeholder:'0', oninput:e=>setTax(e.target.value)}), h('span',{class:'hint'},['leave blank if you don\'t charge sales tax']) ]),
+        (cfg.endpoints.tax && ((cfg.stations||[]).some(s=>s.type==='route') || (cfg.endpoints.tax.zones&&cfg.endpoints.tax.zones.length))) ? taxZonesEditor() : null ]));
       app.appendChild(h('div',{},[ back(4), ' ', cont('Continue →',6) ]));
       return;
     }
@@ -843,7 +859,8 @@ function render(){
         h('button',{class:(cfg.endpoints.tax&&cfg.endpoints.tax.included)?'on':'', onclick:()=>toggleTaxIncluded()},[(cfg.endpoints.tax&&cfg.endpoints.tax.included)?'✓ tax included in price':'tax added on top']),
         h('span',{class:'flab'},['Deposit %']), h('input',{class:'sm',type:'number', value:(pay().deposit&&pay().deposit.pct)||'', placeholder:'0', oninput:e=>setDeposit(e.target.value)}),
         h('span',{class:'flab'},['Order timer']), h('select',{onchange:e=>setTimer(e.target.value)}, [["off","none"],["aging","prep timer (turns red)"],["due","promise-by / due date"]].map(([v,l])=>h('option',{value:v, selected:(cfg.timer?cfg.timer.mode:'off')===v},[l]))),
-        h('span',{class:'flab'},['Max in queue']), h('input',{class:'sm',type:'number', value:(cfg.capacity&&cfg.capacity.max)||'', placeholder:'∞', oninput:e=>setCapacity(e.target.value)}) ])
+        h('span',{class:'flab'},['Max in queue']), h('input',{class:'sm',type:'number', value:(cfg.capacity&&cfg.capacity.max)||'', placeholder:'∞', oninput:e=>setCapacity(e.target.value)}) ]),
+      (cfg.endpoints.tax && ((cfg.stations||[]).some(s=>s.type==='route') || (cfg.endpoints.tax.zones&&cfg.endpoints.tax.zones.length))) ? taxZonesEditor() : null
     ]);
     app.appendChild(biz);
     // Coupon codes (only when discounts are on) — turns the quick-discount buttons into named codes
