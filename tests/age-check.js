@@ -10,7 +10,8 @@ const FLOW = {
     {id:"beer", name:"Beer 6-pack", price:9, category:"beer", path:[], ageRestricted:21 },
     {id:"water", name:"Water", price:2, category:"drink", path:[] }
   ],
-  stations:[ {id:"reg", type:"central", label:"Register", view:{money:true} } ]
+  stations:[ {id:"reg", type:"central", label:"Register", view:{money:true} },
+             {id:"office", type:"report", label:"Office", view:{money:true} } ]
 };
 (async () => {
   const errors = [];
@@ -43,12 +44,19 @@ const FLOW = {
   const water = await T();
   const noGateOk = /Take payment/.test(water) && !/Age-restricted order/.test(water);
 
+  // the ID check left a defensible audit entry in the report
+  await p.evaluate(() => unbind());
+  await p.getByRole('button',{name:/^Office/}).first().click();
+  const report = await p.locator('main').innerText();
+  const auditOk = /ID checks \(audit\)/.test(report) && /#1 — verified 21\+/.test(report);
+
   await b.close();
   console.log('\n=== RESULTS ===');
   console.log('age-restricted item blocks payment until ID check:', blockedOk);
   console.log('checking the ID unlocks the tenders:', unlockedOk);
   console.log('after verify, the order can be paid:', paidOk);
   console.log('a non-restricted order has no gate:', noGateOk);
+  console.log('the ID check is logged as an audit entry (#1, 21+):', auditOk);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!blockedOk||!unlockedOk||!paidOk||!noGateOk?1:0);
+  process.exit(errors.length||!blockedOk||!unlockedOk||!paidOk||!noGateOk||!auditOk?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });

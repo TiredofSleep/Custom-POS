@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.67";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.68";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -253,7 +253,7 @@ let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
 function wkey(){ return "custompos_worker_"+flowId(); }   // worker portal: who's signed in on THIS device (personal-device stay-signed-in)
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; d.kudos=d.kudos||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[],incidents:[],kudos:[]}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; d.kudos=d.kudos||[]; d.ageLog=d.ageLog||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[],incidents:[],kudos:[],ageLog:[]}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -709,6 +709,10 @@ function renderReport(app, station){
   app.appendChild(rc);
   if((DB.approvals||[]).length){ const ac=document.createElement("div"); ac.className="card"; ac.innerHTML="<div class='row'><b>Approvals (audit)</b></div>";
     DB.approvals.slice(-8).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+a.at+" · "+a.action+" — "+(a.label||"")+"</span><span class='spacer'></span><span class='muted'>by "+a.by+"</span>"; ac.appendChild(row); }); app.appendChild(ac); }
+  // ---- ID checks (audit): defensible record of every age-restricted sale that was verified ----
+  { const idlog=(DB.ageLog||[]).filter(a=>a.day===todayStr());
+    if(idlog.length){ const ic=document.createElement("div"); ic.className="card"; ic.innerHTML="<div class='row'><b>ID checks (audit)</b> <span class='pill'>"+idlog.length+" today</span></div>";
+      idlog.slice(-8).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+a.at+" · #"+a.number+" — verified "+a.req+"+</span><span class='spacer'></span><span class='muted'>"+(a.station||"")+"</span>"; ic.appendChild(row); }); app.appendChild(ic); } }
   // ---- commission (only when the trade pays commission) ----
   const pct=(FLOW.commission&&FLOW.commission.pct)||0;
   if(FLOW.performers){
@@ -1840,7 +1844,12 @@ function renderCheckout(app, station){
       if(ageReq && !r.ageVerified){
         const gate=document.createElement("div"); gate.className="mgroup"; gate.style.cssText="border:1px solid var(--bad);border-radius:8px;padding:10px;margin-top:10px";
         gate.innerHTML="<div style='color:var(--bad);font-weight:700'>⚠ Age-restricted order</div><div class='muted'>This order has items that require the customer to be "+ageReq+"+. Check a photo ID before selling.</div>";
-        const ok=document.createElement("button"); ok.className="primary"; ok.style.marginTop="8px"; ok.textContent="✓ ID checked — customer is "+ageReq+"+"; ok.onclick=()=>{ r.ageVerified=ageReq; saveDB(DB); render(); }; gate.appendChild(ok);
+        const ok=document.createElement("button"); ok.className="primary"; ok.style.marginTop="8px"; ok.textContent="✓ ID checked — customer is "+ageReq+"+";
+        ok.onclick=()=>{ const st=boundStation(); const at=new Date().toISOString().slice(11,16);
+          r.ageVerified={ req:ageReq, at, day:todayStr(), station:(st&&st.label)||"" };   // defensible record: what was required, when, at which station
+          DB.ageLog=DB.ageLog||[]; DB.ageLog.push({ number:r.number, req:ageReq, at, day:todayStr(), station:(st&&st.label)||"" });
+          saveDB(DB); render(); };
+        gate.appendChild(ok);
         c.appendChild(gate); app.appendChild(c); return;   // no tenders until verified
       }
       // split the check evenly N ways (opt-in) — each tap takes one equal share until the balance clears
