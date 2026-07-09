@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.63";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.64";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -1347,6 +1347,7 @@ function renderPicker(app){
 
 /* ---- intake with the rules evaluator (modifiers + 86) ---- */
 let draft = null;      // the order being built
+let cashPad = null;    // cash change-making: { recId, received } while entering amount tendered
 let editingId = null;  // detail station: id of the order currently being itemized (null = normal intake-draft mode)
 let routeDay = null;   // delivery route: selected day filter (null = all days)
 let stopForm = { phone:"", name:"", address:"", day:"", kind:"both" };   // delivery route: the "schedule a stop" form
@@ -1821,7 +1822,9 @@ function renderCheckout(app, station){
       }
       const payAmt = r.splitWays ? Math.min(r.splitShare, bal) : bal;
       const label = r.splitWays ? "Take share " : (paid>0?"Take balance ":"Take payment ");
-      const b=document.createElement("button"); b.className="primary"; b.textContent=label+money(payAmt); b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:payAmt}); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); }; c.appendChild(b);
+      const b=document.createElement("button"); b.className="primary"; b.textContent=label+money(payAmt)+" cash"; b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:payAmt}); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; c.appendChild(b);
+      // make change: enter what the customer handed over and see the change due (the cash-drawer moment)
+      const mc=document.createElement("button"); mc.textContent="＄ Make change"; mc.style.margin="10px 0 0 8px"; mc.onclick=()=>{ cashPad={ recId:r.id, received:payAmt }; render(); }; c.appendChild(mc);
       if((FLOW.endpoints.payment.tenders||[]).includes("card")){
         const cb=document.createElement("button"); cb.textContent=(r.splitWays?"Share by card ":"Pay by card ")+money(payAmt); cb.style.margin="10px 0 0 8px";
         cb.onclick=()=>{ const res=payAdapter().charge(Math.round(payAmt*100)); if(res.status==="approved"){ r.tenders.push({type:"card",amount:payAmt,last4:res.last4,brand:res.brand,ref:res.ref}); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { flash("Card "+(res.message||"declined")); } };
@@ -1831,6 +1834,21 @@ function renderCheckout(app, station){
       if((FLOW.endpoints.payment.tenders||[]).includes("account") && r.customer && r.customer.phone){
         const ab=document.createElement("button"); ab.textContent="Charge to account "+money(payAmt); ab.style.margin="10px 0 0 8px";
         ab.onclick=()=>{ r.tenders.push({type:"account",amount:payAmt}); const cust=DB.customers.find(x=>x.phone===r.customer.phone); if(cust){ cust.balance=+((cust.balance||0)+payAmt).toFixed(2); } if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); }; c.appendChild(ab);
+      }
+      // cash change-making: enter amount tendered, see change due, then take the cash
+      if(cashPad && cashPad.recId===r.id){
+        const pad=document.createElement("div"); pad.className="mgroup"; pad.style.cssText="border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px"; pad.innerHTML="<div class='lbl'>Cash — amount tendered</div>";
+        const row=document.createElement("div"); row.style.cssText="display:flex;align-items:center;gap:8px;flex-wrap:wrap";
+        const inp=document.createElement("input"); inp.id="cashRecv"; inp.type="number"; inp.step="0.01"; inp.value=cashPad.received; inp.style.width="110px";
+        inp.oninput=()=>{ cashPad.received=Number(inp.value)||0; const cd=document.getElementById("changeDue"); if(cd) cd.textContent="Change due "+money(Math.max(0,cashPad.received-payAmt)); const cf=document.getElementById("cashConfirm"); if(cf) cf.disabled=cashPad.received<payAmt-0.0001; };
+        row.appendChild(inp);
+        [["Exact",payAmt],["Next $",Math.ceil(payAmt)],["$20",20],["$50",50],["$100",100]].forEach(([lab,val])=>{ if(lab!=="Exact" && val<payAmt-0.0001) return; const cbtn=document.createElement("button"); cbtn.textContent=lab; cbtn.onclick=()=>{ cashPad.received=+(+val).toFixed(2); render(); }; row.appendChild(cbtn); });
+        pad.appendChild(row);
+        const cd=document.createElement("div"); cd.id="changeDue"; cd.style.cssText="font-size:18px;font-weight:700;margin:8px 0"; cd.textContent="Change due "+money(Math.max(0,(cashPad.received||0)-payAmt)); pad.appendChild(cd);
+        const conf=document.createElement("button"); conf.id="cashConfirm"; conf.className="primary"; conf.textContent="✓ Take "+money(payAmt); conf.disabled=(cashPad.received||0)<payAmt-0.0001;
+        conf.onclick=()=>{ const recv=+(cashPad.received||payAmt).toFixed(2); r.tenders.push({ type:"cash", amount:payAmt, tendered:recv, change:+(recv-payAmt).toFixed(2) }); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; pad.appendChild(conf);
+        const cx=document.createElement("button"); cx.textContent="Cancel"; cx.style.marginLeft="8px"; cx.onclick=()=>{ cashPad=null; render(); }; pad.appendChild(cx);
+        c.appendChild(pad);
       }
     }
     else if(r.status==="READY"){ const b=document.createElement("button"); b.className="good"; b.textContent="Complete (paid)"; b.style.marginTop="10px"; b.onclick=()=>{ r.status="PAID"; onPaid(r); saveDB(DB); render(); }; c.appendChild(b); }   // fully covered by deposit/gift/loyalty
