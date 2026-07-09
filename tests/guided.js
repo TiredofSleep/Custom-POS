@@ -39,17 +39,26 @@ function serve() {
   await p.locator('#gName').fill("Rosa's Cafe");
   await p.getByRole('button',{name:/Continue/}).click();
 
-  // G3 people: "I have a team" -> worker suite turns on; add a waged person; pool tips
+  // G3 menu: the owner sets their OWN item, and pastes a couple more
+  const menu = await T();
+  const menuOk = /What do you sell/i.test(menu);
+  await p.locator('.row2 input.nm').first().fill('Rosa Latte');
+  await p.getByRole('button',{name:/Paste a list/}).click();
+  await p.locator('#gPaste').fill('Croissant, 4.00, food\nCold Brew, 5.25, drink');
+  await p.getByRole('button',{name:/Add these/}).click();
+  await p.getByRole('button',{name:/Continue/}).click();
+
+  // G4 people: "I have a team" -> worker suite turns on; add a waged person; pool tips
   await p.locator('button.trade').filter({ hasText: 'I have a team' }).click();
   const teamPanel = await T();
   const teamOk = /your team/i.test(teamPanel);
   await p.getByRole('button',{name:/pool tips by hours/}).click();   // a payment answer that changes config (off → on)
   await p.getByRole('button',{name:/Continue/}).click();
 
-  // G4 payments: café already takes cash + cards; just continue
+  // G5 payments: café already takes cash + cards; just continue
   await p.getByRole('button',{name:/Continue/}).click();
 
-  // G5 deployment: several computers, then build
+  // G6 deployment: several computers, then build
   await p.locator('button.trade').filter({ hasText: 'Several computers' }).click();
   await p.getByRole('button',{name:/Build my POS/}).click();
 
@@ -60,9 +69,12 @@ function serve() {
     html: window.__build.html,
     types: (window.__build.flow.stations||[]).map(s=>s.type),
     tipPool: !!(window.__build.flow.endpoints.payment.tipPool),
-    card: (window.__build.flow.endpoints.payment.tenders||[]).includes('card')
+    card: (window.__build.flow.endpoints.payment.tenders||[]).includes('card'),
+    items: (window.__build.flow.catalog||[]).map(i=>i.name)
   }));
   const nameOk = built.name === "Rosa's Cafe";
+  // the owner's own menu made it into the downloadable POS (edited item + pasted items)
+  const menuBuilt = menuOk && built.items.includes('Rosa Latte') && built.items.includes('Croissant') && built.items.includes('Cold Brew');
   const workerSuite = ['timeclock','schedule','worker'].every(t => built.types.includes(t));
   const injectOk = built.html.includes('window.CUSTOMPOS_FLOW') && built.html.includes('"type":"worker"');
   const appText = await p.locator('#app').innerText();
@@ -83,6 +95,7 @@ function serve() {
   console.log('?guided deep-link opens the interview directly:', deepLinkOk);
   console.log('"team" turns on the worker suite panel:', teamOk);
   console.log('finished build keeps the entered name:', nameOk);
+  console.log("owner's own menu (edited + pasted) is in the build:", menuBuilt);
   console.log('worker suite baked in (timeclock+schedule+worker):', workerSuite);
   console.log('tips pooled + cards enabled from answers:', built.tipPool && built.card);
   console.log('downloadable POS inlines the flow (worker station):', injectOk);
@@ -90,5 +103,5 @@ function serve() {
   console.log('deployment answer produces run-it guidance on screen:', runGuidance);
   console.log('CLAUDE.md carries the run-it guidance:', mdGuidance);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!startedOk||!deepLinkOk||!teamOk||!nameOk||!workerSuite||!(built.tipPool&&built.card)||!injectOk||!ready||!runGuidance||!mdGuidance?1:0);
+  process.exit(errors.length||!startedOk||!deepLinkOk||!menuBuilt||!teamOk||!nameOk||!workerSuite||!(built.tipPool&&built.card)||!injectOk||!ready||!runGuidance||!mdGuidance?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });
