@@ -232,6 +232,29 @@ const TEMPLATES = {
       {id:"book",name:"Book",price:3,category:"media",path:[]}
     ],
     stations:[ {id:"reg",type:"central",label:"Register",view:{money:true}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
+  laundromat: { flowId:"laundromat", label:"Laundromat / Wash & Fold", topology:"linear", blurb:"Self-serve loads plus drop-off wash-and-fold priced by the pound",
+    branding:{ name:"Sudsy", brandColor:"#2b8fd0" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0" }, notify:{template:"Hi {name}, your wash & fold #{number} at {biz} is ready!"} },
+    timer:{ mode:"due", promiseSec:86400, warnSec:43200, label:"ready by" },
+    catalog:[
+      {id:"wf",name:"Wash & Fold",price:1.75,category:"washfold",byWeight:true,unit:"lb",cost:0.4,path:["laundry"]},
+      {id:"comforter",name:"Comforter (each)",price:20,category:"washfold",cost:4,path:["laundry"]},
+      {id:"wash",name:"Self-serve Wash (per load)",price:3.5,category:"selfserve",path:[]},
+      {id:"dry",name:"Self-serve Dry (per load)",price:2.5,category:"selfserve",path:[]},
+      {id:"soap",name:"Detergent",price:1.5,category:"goods",cost:0.5,path:[]}
+    ],
+    stations:[ {id:"reg",type:"central",label:"Counter",view:{money:true}}, {id:"laundry",type:"production",label:"Wash & Fold",view:{money:false}}, {id:"board",type:"board",label:"Board",view:{money:false}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
+  tattoo: { flowId:"tattoo", label:"Tattoo / Piercing studio", topology:"linear", blurb:"By-artist appointments with a deposit, 18+ ID & waiver, commission",
+    branding:{ name:"Ink & Iron", brandColor:"#7a3fd0" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,20,25]}, deposit:{pct:25} }, notify:{template:"Hi {name}, your appointment at {biz} is set — deposit paid, balance at your session: {balance}."} },
+    performers:["Artist A","Artist B"], commission:{pct:50},
+    catalog:[
+      {id:"small",name:"Small Tattoo (quote)",price:0,category:"tattoo",customPrice:true,ageRestricted:18,performer:true,path:[],flags:["Consent / waiver signed","Aftercare explained"]},
+      {id:"large",name:"Large / custom piece (quote)",price:0,category:"tattoo",customPrice:true,ageRestricted:18,performer:true,path:[],flags:["Consent / waiver signed","Aftercare explained"]},
+      {id:"pierce",name:"Piercing",price:45,category:"piercing",ageRestricted:18,performer:true,path:[],flags:["Consent / waiver signed"]},
+      {id:"jewelry",name:"Jewelry / Aftercare",price:25,category:"goods",cost:9,path:[]}
+    ],
+    stations:[ {id:"reg",type:"central",label:"Front Desk",view:{money:true}}, {id:"book",type:"booking",label:"Appointments",view:{}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
   cafe: { flowId:"cafe", label:"Café / Counter", topology:"linear", blurb:"Made-to-order food & drinks",
     branding:{ name:"My Café", brandColor:"#8a5a2b" },
     endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}, split:true} },
