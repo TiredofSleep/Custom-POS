@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.72";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.73";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -310,13 +310,24 @@ function taxIncluded(){ return !!(FLOW.endpoints.tax && FLOW.endpoints.tax.inclu
 function orderTaxRate(r){ const t=FLOW.endpoints.tax; if(!t) return 0;
   if(r && r.taxZone && Array.isArray(t.zones)){ const z=t.zones.find(z=>z.name===r.taxZone); if(z) return +z.rate||0; }
   return +t.rate||0; }
-function recordTax(r){                                   // per-line taxable; rate from the order's zone (else shop rate); discount prorated
-  const rate=orderTaxRate(r); if(!rate) return 0;
+/* Rate for ONE line. Non-taxable items (taxable:false) and gift cards are 0. When FLOW.endpoints.tax.classes
+   is configured (states that tax categories differently — grocery exempt, prepared food/soda taxed), an item's
+   taxClass picks that class's rate; otherwise the order's default (zone-aware) rate applies. Lets a single
+   basket mix rates line by line. Backward-compatible — no classes ⇒ every taxable line uses the default rate. */
+function lineTaxRate(l, r){ const t=FLOW.endpoints.tax; if(!t) return 0;
+  if(l.taxable===false || l.category==="giftcard") return 0;
+  const it=(FLOW.catalog||[]).find(i=>i.id===l.catId); const cls=(it&&it.taxClass)||l.taxClass;
+  if(cls && t.classes && t.classes[cls]!=null) return +t.classes[cls]||0;
+  return orderTaxRate(r); }
+function recordTax(r){                                   // per-LINE rate (class/zone aware); non-taxable & gift cards excluded; discount prorated
+  const t=FLOW.endpoints.tax; if(!t) return 0;
   const sub=lineSubtotal(r); if(sub<=0) return 0;
-  const taxable=r.lines.filter(l=>l.taxable!==false && l.category!=="giftcard").reduce((s,l)=>s+l.price*l.qty,0);
-  const eff=taxable*(sub-recordDiscount(r))/sub;                       // taxable base after prorated discount
-  return taxIncluded() ? +(eff*rate/(1+rate)).toFixed(2)              // VAT-style: tax is the portion already inside the price
-                       : +(eff*rate).toFixed(2);                       // added on top
+  const discFactor=(sub-recordDiscount(r))/sub;                        // spread any discount evenly across lines
+  let tax=0; const inc=taxIncluded();
+  r.lines.forEach(l=>{ const rate=lineTaxRate(l,r); if(!rate) return; const base=l.price*l.qty*discFactor;
+    tax += inc ? base*rate/(1+rate)                                    // VAT-style: tax already inside the price
+               : base*rate; });                                        // added on top
+  return +tax.toFixed(2);
 }
 function recordNet(r){ return +(lineSubtotal(r) - recordDiscount(r) - (taxIncluded()?recordTax(r):0)).toFixed(2); }   // sales excluding tax
 function recordTotal(r){ return +(lineSubtotal(r) - recordDiscount(r) + (taxIncluded()?0:recordTax(r)) + (r.tip||0) + (r.roundUp||0)).toFixed(2); }   // included tax is already inside the price; roundUp = optional charity add-on

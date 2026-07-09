@@ -50,6 +50,27 @@ catalog: [
 Gift-card sales are never taxed automatically (category `"giftcard"`). Builder: each item has a **Taxable /
 tax-exempt** toggle in the deep editor.
 
+### Different rates per category (tax classes)
+
+On/off isn't always enough — some states tax **prepared food or soda** but exempt **grocery**, or tax goods and
+services differently. Define named **tax classes** with their own rates, then tag items with a class. Items with
+no class use the base rate; `taxable:false` still fully exempts:
+
+```js
+endpoints: { tax: {
+  rate: 0.08,                                   // the standard rate (soda, general goods)
+  classes: { grocery: 0, prepared: 0.08 }       // named rates
+} },
+catalog: [
+  { id:"milk", name:"Milk",    price:2, taxClass:"grocery"  },   // 0%
+  { id:"dog",  name:"Hot Dog", price:5, taxClass:"prepared" },   // 8%
+  { id:"soda", name:"Soda",    price:3 },                        // standard 8%
+]
+```
+
+Each line is taxed at its own class rate — a mixed basket comes out correct ($0 + $0.40 + $0.24 = $0.64 here).
+Builder: define the classes in the **Pay step** ("Tax classes"), then pick each item's class in its deep editor.
+
 ## 4. Destination tax for **delivery** (zones)
 
 US sales tax is frequently **destination-based**: a delivery into another town/jurisdiction owes *that* place's
@@ -85,6 +106,7 @@ optional **hub-side** add-on, not the downloaded file.
 |---|---|
 | One US location, tax added at register | `{ rate: 0.0X }` |
 | Groceries/clothing exempt | above + `taxable:false` on the exempt items |
+| Prepared food/soda taxed, grocery exempt (different rates) | above + `classes:{…}` and an item `taxClass` |
 | You deliver into other towns (destination tax) | above + `zones:[{name,rate},…]` |
 | EU/UK/AU — prices already include VAT/GST | `{ rate: 0.XX, included: true }` |
 | No tax at all (some booths, resale, wholesale) | omit `endpoints.tax` entirely |
@@ -92,8 +114,6 @@ optional **hub-side** add-on, not the downloaded file.
 
 ## What's not built yet (be honest with yourself)
 
-- **Item tax *categories*** (e.g. one rate for food, another for prepared food/soda) — today an item is taxable
-  or not, at one rate. A per-category rate table is a reasonable next step if your state needs it.
 - **Automatic address → rate lookup** — deliberately out of the free/offline file (see above).
 - **Tax holidays / date-driven rules** and **per-store roll-up reporting** — not yet.
 
