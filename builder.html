@@ -167,7 +167,7 @@ const TEMPLATES = {
   // ── Community-seed starters (from the AI-persona stress test) ─────────────────────────────────────────
   bakery: { flowId:"bakery", label:"Bakery (pre-order + counter)", topology:"linear", blurb:"Custom cake pre-orders with a deposit, plus pastries over the counter",
     branding:{ name:"Sweet Crumb", brandColor:"#c2708a" },
-    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", deposit:{pct:50} }, notify:{template:"Hi {name}, your order #{number} at {biz} is ready for pickup!"} },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", deposit:{pct:50} }, notify:{template:"Hi {name}, your order #{number} at {biz} is ready for pickup! Balance due at pickup: {balance}."} },
     timer:{ mode:"due", promiseSec:86400, warnSec:43200, label:"ready by" },
     catalog:[
       {id:"cake",name:"Custom Cake (quote)",price:0,category:"custom",customPrice:true,path:["kitchen"]},
@@ -202,7 +202,7 @@ const TEMPLATES = {
     stations:[ {id:"reg",type:"intake",label:"Register",view:{money:true}}, {id:"kitchen",type:"production",label:"Kitchen",view:{money:false}}, {id:"kds",type:"kds",label:"Kitchen Display",view:{money:false}}, {id:"route",type:"route",label:"Delivery",view:{money:true}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
   florist: { flowId:"florist", label:"Florist (+ delivery)", topology:"linear", blurb:"Custom arrangements, phone orders, delivered with a gift card",
     branding:{ name:"Petal & Stem", brandColor:"#d15b93" },
-    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", deposit:{pct:50} }, notify:{template:"Hi {name}, your flowers (order #{number}) from {biz} are ready!"}, quotes:true },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", deposit:{pct:50} }, notify:{template:"Hi {name}, your flowers (order #{number}) from {biz} are ready! Balance due at pickup: {balance}."}, quotes:true },
     timer:{ mode:"due", promiseSec:86400, warnSec:43200, label:"needed by" },
     catalog:[
       {id:"custom",name:"Custom Arrangement (quote)",price:0,category:"custom",customPrice:true,path:["bench"]},
@@ -768,7 +768,7 @@ function render(){
           h('button',{class:cfg.endpoints.notify?'on':'', onclick:()=>toggleNotify()},['text customers when ready']) ]),
         hasTender('card') ? h('div',{class:'hint'},['Heads up: "cards" records a card sale — it doesn\'t charge the card yet. Connect a processor later (see docs/PAYMENTS-MODULE.md) to actually run cards; cash works fully today.']) : null,
         cfg.endpoints.notify ? h('div',{class:'fld'},[ h('span',{class:'flab'},['Ready message']), h('input',{class:'nm', style:'flex:1', value:cfg.endpoints.notify.template, oninput:e=>cfg.endpoints.notify.template=e.target.value, placeholder:'Hi {name}, your order #{number} at {biz} is ready.'}) ]) : null,
-        cfg.endpoints.notify ? h('div',{class:'hint'},['{name} {number} {biz} get filled in automatically.']) : null,
+        cfg.endpoints.notify ? h('div',{class:'hint'},['{name} {number} {biz} get filled in automatically'+((cfg.endpoints.payment&&cfg.endpoints.payment.deposit)?' — and {balance} shows what they still owe at pickup.':'.')]) : null,
         h('div',{class:'fld'},[ h('span',{class:'flab'},['Sales tax %']), h('input',{class:'sm',type:'number',step:'0.01', value:(cfg.endpoints.tax&&(cfg.endpoints.tax.rate*100))||'', placeholder:'0', oninput:e=>setTax(e.target.value)}), h('span',{class:'hint'},['leave blank if you don\'t charge sales tax']) ]) ]));
       app.appendChild(h('div',{},[ back(4), ' ', cont('Continue →',6) ]));
       return;

@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.66";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.67";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -364,7 +364,7 @@ const NOTIFY = { sim: { label:"Simulator", send(to, body){ return { status:"sent
 function notifyAdapter(){ const pr=(FLOW.endpoints.notify&&FLOW.endpoints.notify.provider)||"sim"; return NOTIFY[pr]||NOTIFY.sim; }
 function composeNotify(r){
   const t=(FLOW.endpoints.notify&&FLOW.endpoints.notify.template)||"Hi {name}, your order #{number} at {biz} is ready.";
-  return t.replace(/\{name\}/g, (r.customer&&r.customer.name)||"there").replace(/\{number\}/g, r.number).replace(/\{biz\}/g, FLOW.branding.name).replace(/\{status\}/g, STATUS_LABEL[r.status]||r.status);
+  return t.replace(/\{name\}/g, (r.customer&&r.customer.name)||"there").replace(/\{number\}/g, r.number).replace(/\{biz\}/g, FLOW.branding.name).replace(/\{status\}/g, STATUS_LABEL[r.status]||r.status).replace(/\{balance\}/g, money(Math.max(0,recordBalance(r))));
 }
 function lineComplete(l){ return l.stage >= l.path.length; }
 function allComplete(r){ return r.lines.every(lineComplete); }
@@ -1291,7 +1291,9 @@ function renderBoard(app, station){
     const h=document.createElement("h2"); h.textContent=lbl+" ("+recs.length+")"; h.style.fontSize="13px"; app.appendChild(h);
     if(!recs.length){ const e=document.createElement("div"); e.className="muted"; e.style.margin="0 0 8px"; e.textContent="—"; app.appendChild(e); }
     recs.forEach(r=>{ const c=document.createElement("div"); c.className="card";
-      c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+stageOf(r)+"</span>"+clockChip(r)+storeChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+      const _paid=recordPaid(r), _bal=recordBalance(r);   // a taken deposit → show what's still owed at pickup (staff-facing, not on the customer tracker)
+      const _balPill = (_paid>0.0001 && _bal>0.0001) ? " <span class='pill flag'>💵 "+money(_bal)+" due</span>" : "";
+      c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+stageOf(r)+"</span>"+_balPill+clockChip(r)+storeChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
       { const _aa=assembledAt(r); if(_aa){ const n=document.createElement("div"); n.className="muted"; n.style.fontSize="12px"; n.textContent=_aa; c.appendChild(n); } }
       r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const loc=lineComplete(l)?"ready":"at "+l.path[l.stage];
         row.innerHTML="<span>"+l.qty+"× "+l.name+tagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+loc+"</span>"; c.appendChild(row); });
