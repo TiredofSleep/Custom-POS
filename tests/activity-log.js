@@ -30,11 +30,13 @@ const FLOW = {
   await p.getByRole('button',{name:/Send order/}).click();
   await p.getByRole('button',{name:/Take payment/}).first().click();
 
-  // over at the office, the activity log has the order, the cash payment, and the price override
+  // over at the office: refund the order (a theft-sensitive action), then read the log + watch summary
   await p.evaluate(() => unbind());
   await p.getByRole('button',{name:/^Office/}).first().click();
+  await p.getByRole('button',{name:/^Refund$/}).first().click();
   const office = await T();
   const hasLog = /Activity log/.test(office);
+  const watchOk = /Watch — voids, refunds/.test(office) && /Price overrides/.test(office) && /Refunds/.test(office) && /\$8\.00/.test(office);
   const loggedOrder = /order.*created/i.test(office);
   const loggedCash = /cash \$8\.00/.test(office);
   const loggedOverride = /price of Widget changed \$10\.00 → \$8\.00/.test(office);
@@ -55,7 +57,8 @@ const FLOW = {
   console.log('cash payment is logged ($8.00):', loggedCash);
   console.log('price override is logged ($10 → $8):', loggedOverride);
   console.log('the Overrides filter isolates overrides (hides money):', filterOk);
+  console.log('Watch card summarizes overrides + refunds by count/$$:', watchOk);
   console.log('activity exports to CSV with the override row:', csvOk);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!hasLog||!loggedOrder||!loggedCash||!loggedOverride||!filterOk||!csvOk?1:0);
+  process.exit(errors.length||!hasLog||!loggedOrder||!loggedCash||!loggedOverride||!filterOk||!watchOk||!csvOk?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });

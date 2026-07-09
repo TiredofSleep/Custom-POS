@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.71";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.72";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -334,7 +334,7 @@ function refundRecord(r){
   const refunded=(r.tenders||[]).filter(t=>!t.refund).reduce((s,t)=>s+t.amount,0);
   (r.tenders||[]).filter(t=>!t.refund).slice().forEach(t=>{ r.tenders.push({ type:t.type, amount:+(-t.amount).toFixed(2), refund:true, ref:t.ref }); });
   r.status="REFUNDED"; r.refundedAt=new Date().toISOString().slice(11,16);
-  logActivity("refund", "full refund "+money(refunded)+" on #"+r.number+" — "+r.lines.length+" item(s)", r.number);
+  logActivity("refund", "full refund "+money(refunded)+" on #"+r.number+" — "+r.lines.length+" item(s)", r.number, refunded);
 }
 function returnedSubtotal(r){ return (r.lines||[]).filter(l=>l.returned).reduce((s,l)=>s+l.price*l.qty,0); }
 // LINE-LEVEL return: refund selected lines' share of the total to the original tender(s), mark them returned
@@ -349,7 +349,7 @@ function returnLines(r, lineIds){
   lineIds.forEach(id=>{ const l=r.lines.find(x=>x.id===id); if(l) l.returned=true; });
   if(r.lines.every(l=>l.returned)) r.status="REFUNDED";
   r.refundedAt=new Date().toISOString().slice(11,16);
-  logActivity("refund", "line refund "+money(amount)+" on #"+r.number+" — "+names.join(", "), r.number);
+  logActivity("refund", "line refund "+money(amount)+" on #"+r.number+" — "+names.join(", "), r.number, amount);
   saveDB(DB); render();
 }
 
@@ -442,16 +442,16 @@ function flash(msg){ let t=document.getElementById("toast"); if(!t){ t=document.
    Categories: order · money · override · void · refund · discount · idcheck · stock · clock · access · admin. */
 const ACT_CAT = { order:"money", money:"money", refund:"money", discount:"money", override:"override", void:"override", idcheck:"access", clock:"access", access:"access", stock:"admin", admin:"admin" };
 function actingStaff(){ try{ const on=(FLOW.staff||[]).filter(s=>openPunch(s.id)); return on.length===1?on[0].name:(on.length>1?"(multiple on shift)":""); }catch(e){ return ""; } }
-function logActivity(type, detail, orderNo){
+function logActivity(type, detail, orderNo, amt){
   try{ DB=DB||loadDB(); DB.activity=DB.activity||[];
     const st=(typeof boundStation==="function")?boundStation():null;
-    DB.activity.push({ ts:Date.now(), at:new Date().toISOString().slice(11,16), day:todayStr(), type, detail:detail||"", order:(orderNo!=null?orderNo:null), station:(st&&st.label)||"", staff:actingStaff() });
+    DB.activity.push({ ts:Date.now(), at:new Date().toISOString().slice(11,16), day:todayStr(), type, detail:detail||"", order:(orderNo!=null?orderNo:null), amt:(amt!=null?+(+amt).toFixed(2):null), station:(st&&st.label)||"", staff:actingStaff() });
     if(DB.activity.length>3000) DB.activity=DB.activity.slice(-3000);   // keep the most recent 3000 events
     saveDB(DB);
   }catch(e){}
 }
-function activityCSV(day){ const rows=[["time","type","detail","order","station","staff"]];
-  (loadDB().activity||[]).filter(a=>!day||a.day===day).forEach(a=>rows.push([a.at, a.type, a.detail, a.order==null?"":("#"+a.order), a.station, a.staff]));
+function activityCSV(day){ const rows=[["time","type","detail","amount","order","station","staff"]];
+  (loadDB().activity||[]).filter(a=>!day||a.day===day).forEach(a=>rows.push([a.at, a.type, a.detail, a.amt==null?"":a.amt, a.order==null?"":("#"+a.order), a.station, a.staff]));
   return csvRows(rows); }
 // data ownership: your data is yours to take out. Everything below builds plain files from the local DB.
 /* ===================================== DATA & BACKUP ===================================== */
@@ -758,6 +758,22 @@ function renderReport(app, station){
         +"<div class='line'><b>Take-home</b><span class='spacer'></span><b>"+money(comm+d.tips)+"</b></div>";
       app.appendChild(c); });
   }
+  // ---- watch: the theft-sensitive actions summarized by count, dollars, and staff (sourced from the activity log) ----
+  { const dayAct=(DB.activity||[]).filter(a=>a.day===day);
+    const watchTypes=[["refund","Refunds"],["void","Voids (removed before sending)"],["override","Price overrides"],["discount","Discounts"]];
+    if(watchTypes.some(([t])=>dayAct.some(a=>a.type===t))){
+      const w=document.createElement("div"); w.className="card";
+      w.innerHTML="<div class='row'><b>Watch — voids, refunds &amp; overrides</b></div>"
+        +"<div class='muted' style='margin:2px 0 8px'>The theft-sensitive actions "+(isToday?"today":"on "+day)+", by count, dollars, and staff. Unusual patterns stand out.</div>";
+      watchTypes.forEach(([t,label])=>{ const evs=dayAct.filter(a=>a.type===t); if(!evs.length) return;
+        const sum=evs.reduce((s,a)=>s+(a.amt||0),0);
+        const byStaff={}; evs.forEach(a=>{ const who=a.staff||"—"; byStaff[who]=(byStaff[who]||0)+1; });
+        const parts=Object.keys(byStaff).map(k=>k+" ×"+byStaff[k]).join(", ");
+        const row=document.createElement("div"); row.className="line";
+        row.innerHTML="<span><b>"+label+"</b> <span class='muted'>"+parts+"</span></span><span class='spacer'></span><span>"+evs.length+(sum>0.0001?" · "+money(sum):"")+"</span>";
+        w.appendChild(row); });
+      app.appendChild(w);
+    } }
   // ---- activity log (audit trail): every meaningful action, filterable + exportable — the theft-watch record ----
   { const allDay=(DB.activity||[]).filter(a=>a.day===day);
     const cats={ all:"All", money:"Money", override:"Overrides & voids", access:"ID & staff", admin:"Approvals & stock" };
@@ -1514,7 +1530,7 @@ function renderIntake(app, station){
   else { draft.lines.forEach((l,idx)=>{ const row=document.createElement("div"); row.className="line";
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+(l.performer?" <span class='pill'>"+l.performer+"</span>":"")+tagChip(l)+"</span><span class='pill route'>"+((l.path||[]).join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":"");
       if(station.view.money){   // quantity steppers + per-line price edit (haggling, custom items, ring 6 in one tap)
-        const dec=document.createElement("button"); dec.textContent="−"; dec.title="one fewer"; dec.style.cssText="padding:2px 9px;margin-left:6px"; dec.onclick=()=>{ if(l.qty>1) l.qty--; else { logActivity("void", "removed "+l.name+" ("+money(l.price)+") from an unsent ticket"); draft.lines.splice(idx,1); } render(); }; row.appendChild(dec);
+        const dec=document.createElement("button"); dec.textContent="−"; dec.title="one fewer"; dec.style.cssText="padding:2px 9px;margin-left:6px"; dec.onclick=()=>{ if(l.qty>1) l.qty--; else { logActivity("void", "removed "+l.name+" ("+money(l.price)+") from an unsent ticket", null, l.price); draft.lines.splice(idx,1); } render(); }; row.appendChild(dec);
         const inc=document.createElement("button"); inc.textContent="+"; inc.title="one more"; inc.style.cssText="padding:2px 9px;margin-left:4px"; inc.onclick=()=>{ l.qty++; render(); }; row.appendChild(inc);
         const pen=document.createElement("button"); pen.textContent="✎$"; pen.title="Set this line's price"; pen.style.cssText="padding:2px 8px;margin-left:4px"; pen.onclick=()=>{ const v=prompt("Price for "+l.name+" (each):", l.price); if(v!=null){ const n=Number(v); if(!isNaN(n)&&n>=0){ if(+n.toFixed(2)!==l.price) logActivity("override", "price of "+l.name+" changed "+money(l.price)+" → "+money(+n.toFixed(2))+" on an unsent ticket"); l.price=+n.toFixed(2); render(); } else flash("Enter a price"); } }; row.appendChild(pen);
       }
@@ -1875,13 +1891,13 @@ function renderCheckout(app, station){
       if(coupons){   // named coupon codes: type a code to apply its % or $ off
         const box=document.createElement("div"); box.className="opts";
         const inp=document.createElement("input"); inp.id="couponCode"; inp.placeholder="Coupon code"; inp.style.width="140px"; if(r.coupon) inp.value=r.coupon;
-        const apply=document.createElement("button"); apply.textContent="Apply"; apply.onclick=()=>{ const code=(inp.value||"").trim().toUpperCase(); const co=coupons.find(x=>String(x.code).toUpperCase()===code); if(!co){ flash("No such coupon"); return; } r.discount = co.pct ? +(lineSubtotal(r)*co.pct/100).toFixed(2) : (co.amount||0); r.coupon=co.code; logActivity("discount", "coupon "+co.code+" applied (−"+money(r.discount)+")", r.number); saveDB(DB); render(); };
+        const apply=document.createElement("button"); apply.textContent="Apply"; apply.onclick=()=>{ const code=(inp.value||"").trim().toUpperCase(); const co=coupons.find(x=>String(x.code).toUpperCase()===code); if(!co){ flash("No such coupon"); return; } r.discount = co.pct ? +(lineSubtotal(r)*co.pct/100).toFixed(2) : (co.amount||0); r.coupon=co.code; logActivity("discount", "coupon "+co.code+" applied (−"+money(r.discount)+")", r.number, r.discount); saveDB(DB); render(); };
         const clr=document.createElement("button"); clr.textContent="Clear"; clr.onclick=()=>{ r.discount=0; delete r.coupon; saveDB(DB); render(); };
         box.appendChild(inp); box.appendChild(apply); box.appendChild(clr); wrap.appendChild(box);
         if(r.coupon){ const ap=document.createElement("div"); ap.className="muted"; ap.style.marginTop="4px"; ap.textContent="✓ "+r.coupon+" applied"; wrap.appendChild(ap); }
       } else {
         const opts=document.createElement("div"); opts.className="opts";
-        const mk=(lab,fn,on)=>{ const bb=document.createElement("button"); if(on) bb.className="sel"; bb.textContent=lab; bb.onclick=()=>{ fn(); if((r.discount||0)>0) logActivity("discount", lab+" (−"+money(r.discount)+")", r.number); saveDB(DB); render(); }; opts.appendChild(bb); };
+        const mk=(lab,fn,on)=>{ const bb=document.createElement("button"); if(on) bb.className="sel"; bb.textContent=lab; bb.onclick=()=>{ fn(); if((r.discount||0)>0) logActivity("discount", lab+" (−"+money(r.discount)+")", r.number, r.discount); saveDB(DB); render(); }; opts.appendChild(bb); };
         mk("10% off", ()=>{ r.discount=+(lineSubtotal(r)*0.10).toFixed(2); }, Math.abs((r.discount||0)-lineSubtotal(r)*0.10)<0.005 && r.discount);
         mk("$5 off", ()=>{ r.discount=5; }, r.discount===5);
         mk("None", ()=>{ r.discount=0; delete r.coupon; }, !r.discount);
