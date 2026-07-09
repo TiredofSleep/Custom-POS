@@ -61,6 +61,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `roundup.js` | round up for charity — checkout offers to round the total up to the next dollar for a named cause; the donation adds to the balance and the report tallies the community total |
 | `table-check.js` | restaurant table↔check linking — a floor shows a table picker on the register, a check tags its table (🍽 chip), the floor tile shows the open-check total + occupies the table, tapping a table lists its open checks |
 | `cash-change.js` | cash change-making — "Make change" opens an amount-tendered pad with quick-cash chips and live change-due; the tender records amount/tendered/change; one-tap exact cash still works |
+| `templates.js` | every builder starter template boots through the engine with zero console errors and rings a sale — the guarantee that picking any template gives a working POS (16 templates: counter, food truck, market, mobile, bar, dispensary, convenience/gas, retail, café, cleaner, ozark, repair, salon, burgerbarn, bistro, blank) |
 | `age-check.js` | age-restricted items (gas / convenience / liquor) — a 21+/18+ item blocks payment until a photo-ID check is confirmed; unrestricted orders ring straight through |
 
 ## Running
