@@ -537,7 +537,7 @@ function render(){
   const app=document.getElementById('app'); app.innerHTML="";
   // ---- guided interview (opt-in from step 1) — plain-language questions for a non-technical owner ----
   if(step==='guide'){
-    app.appendChild(h('div',{class:'step'},['Guided setup · '+gstep+' of 5']));
+    app.appendChild(h('div',{class:'step'},['Guided setup · '+gstep+' of 6']));
     const cont=(label,to)=>h('button',{class:'primary big', onclick:()=>{ gstep=to; render(); }},[label||'Continue →']);
     const back=(to)=>h('button',{onclick:()=>{ gstep=to; render(); }},['← back']);
     if(gstep===1){
@@ -557,6 +557,28 @@ function render(){
       return;
     }
     if(gstep===3){
+      app.appendChild(h('h2',{},['What do you sell?']));
+      app.appendChild(h('p',{class:'hint'},['We started you with examples — change them to your real items and prices, add more, or paste your whole list.']));
+      const irows=h('div',{}, cfg.catalog.map((it,i)=>h('div',{class:'row2'},[
+        h('input',{class:'nm', value:it.name, oninput:e=>it.name=e.target.value}),
+        h('span',{class:'muted'},['$']), h('input',{class:'sm',type:'number',step:'0.01', value:it.price, oninput:e=>it.price=Number(e.target.value)||0}),
+        h('input',{class:'sm', value:it.category||'', placeholder:'category', oninput:e=>it.category=e.target.value}),
+        h('button',{class:'danger', onclick:()=>{ cfg.catalog.splice(i,1); render(); }},['×']) ])));
+      app.appendChild(h('div',{class:'panel'},[
+        h('div',{class:'fld'},[ h('span',{class:'flab'},['Your items']), h('span',{class:'hint'},['name · price · a category like "drink" or "service" (a downloaded POS groups by category)'])]),
+        irows,
+        h('button',{onclick:()=>{ cfg.catalog.push({id:uid(), name:'New item', price:0, category:'item', path:[]}); render(); }},['+ Add item']),
+        h('button',{style:'margin-left:8px', onclick:()=>{ guide.showPaste=!guide.showPaste; render(); }},[guide.showPaste?'Close paste':'⇪ Paste a list']),
+        guide.showPaste ? h('div',{style:'margin-top:10px'},[
+          h('div',{class:'hint'},['one per line: name, price, category — e.g. "Coffee, 3.50, drink"']),
+          h('textarea',{id:'gPaste', class:'nm', style:'width:100%;min-height:88px', placeholder:'Coffee, 3.50, drink\nMuffin, 2.75, food'}, []),
+          h('button',{class:'primary', style:'margin-top:8px', onclick:()=>{ const n=importItemsCSV(document.getElementById('gPaste').value); flashB(n?('Added '+n+' item'+(n>1?'s':'')):'Nothing to add — check the format'); guide.showPaste=false; render(); }},['Add these'])
+        ]) : null
+      ]));
+      app.appendChild(h('div',{style:'margin-top:8px'},[ back(2), ' ', cont('Continue →',4) ]));
+      return;
+    }
+    if(gstep===4){
       app.appendChild(h('h2',{},['Who works here?']));
       app.appendChild(h('div',{class:'cards'},[
         h('button',{class:'trade'+(guide.team===false?' on':''), onclick:()=>guideTeam(false)},[h('b',{},['Just me']), h('small',{},['No time clock or scheduling — keep it simple.'])]),
@@ -574,10 +596,10 @@ function render(){
           rows, h('button',{onclick:addStaff},['+ Add person']),
           h('div',{class:'fld', style:'margin-top:10px'},[ h('span',{class:'flab'},['Tips']), h('button',{class:pay().tipPool?'on':'', onclick:()=>toggleTipPool()},['pool tips by hours (fair split)']) ]) ]));
       }
-      if(guide.team!=null) app.appendChild(h('div',{style:'margin-top:8px'},[ back(2), ' ', cont('Continue →',4) ]));
+      if(guide.team!=null) app.appendChild(h('div',{style:'margin-top:8px'},[ back(3), ' ', cont('Continue →',5) ]));
       return;
     }
-    if(gstep===4){
+    if(gstep===5){
       app.appendChild(h('h2',{},['How do people pay?']));
       app.appendChild(h('div',{class:'panel'},[
         h('div',{class:'fld'},[ h('span',{class:'flab'},['Take']),
@@ -586,16 +608,16 @@ function render(){
           h('button',{class:pay().tip?'on':'', onclick:()=>toggleTip()},['tips']),
           h('button',{class:cfg.endpoints.notify?'on':'', onclick:()=>toggleNotify()},['text customers when ready']) ]),
         h('div',{class:'fld'},[ h('span',{class:'flab'},['Sales tax %']), h('input',{class:'sm',type:'number',step:'0.01', value:(cfg.endpoints.tax&&(cfg.endpoints.tax.rate*100))||'', placeholder:'0', oninput:e=>setTax(e.target.value)}) ]) ]));
-      app.appendChild(h('div',{},[ back(3), ' ', cont('Continue →',5) ]));
+      app.appendChild(h('div',{},[ back(4), ' ', cont('Continue →',6) ]));
       return;
     }
-    if(gstep===5){
+    if(gstep===6){
       app.appendChild(h('h2',{},['Last thing — how will you run it?']));
       app.appendChild(h('div',{class:'cards'},[
         h('button',{class:'trade'+(guide.deploy==='one'?' on':''), onclick:()=>{ guide.deploy='one'; render(); }},[h('b',{},['Just one computer']), h('small',{},['Everything on that device. Free. Export a backup any time.'])]),
         h('button',{class:'trade'+(guide.deploy==='several'?' on':''), onclick:()=>{ guide.deploy='several'; render(); }},[h('b',{},['Several computers']), h('small',{},['Add a small sync hub so registers share one live POS. ~a few $/mo.'])]),
         h('button',{class:'trade'+(guide.deploy==='backup'?' on':''), onclick:()=>{ guide.deploy='backup'; render(); }},[h('b',{},['…and off-site backup']), h('small',{},['The hub plus rolling off-site snapshots — a dead drive is never the end.'])]) ]));
-      if(guide.deploy) app.appendChild(h('div',{style:'margin-top:12px'},[ back(4), ' ', h('button',{class:'primary big', onclick:guideFinish},['✨ Build my POS']) ]));
+      if(guide.deploy) app.appendChild(h('div',{style:'margin-top:12px'},[ back(5), ' ', h('button',{class:'primary big', onclick:guideFinish},['✨ Build my POS']) ]));
       return;
     }
     return;
