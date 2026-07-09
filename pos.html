@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.69";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.70";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -253,7 +253,7 @@ let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
 function wkey(){ return "custompos_worker_"+flowId(); }   // worker portal: who's signed in on THIS device (personal-device stay-signed-in)
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; d.kudos=d.kudos||[]; d.ageLog=d.ageLog||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[],incidents:[],kudos:[],ageLog:[]}; } }
+function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; d.kudos=d.kudos||[]; d.ageLog=d.ageLog||[]; d.activity=d.activity||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[],incidents:[],kudos:[],ageLog:[],activity:[]}; } }
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -324,8 +324,10 @@ function refundRecord(r){
   (r.tenders||[]).filter(t=>!t.refund).forEach(t=>{ if(t.type==="card" && payAdapter().refund){ payAdapter().refund(t.ref, Math.round(t.amount*100)); } });
   // reversing a house-account charge also credits the customer's balance (A/R)
   if(r.customer){ const cust=(DB.customers||[]).find(x=>x.phone===r.customer.phone); if(cust){ const acct=(r.tenders||[]).filter(t=>!t.refund&&t.type==="account").reduce((s,t)=>s+t.amount,0); if(acct){ cust.balance=+((cust.balance||0)-acct).toFixed(2); if(cust.balance<0) cust.balance=0; } } }
+  const refunded=(r.tenders||[]).filter(t=>!t.refund).reduce((s,t)=>s+t.amount,0);
   (r.tenders||[]).filter(t=>!t.refund).slice().forEach(t=>{ r.tenders.push({ type:t.type, amount:+(-t.amount).toFixed(2), refund:true, ref:t.ref }); });
   r.status="REFUNDED"; r.refundedAt=new Date().toISOString().slice(11,16);
+  logActivity("refund", "full refund "+money(refunded)+" on #"+r.number+" — "+r.lines.length+" item(s)", r.number);
 }
 function returnedSubtotal(r){ return (r.lines||[]).filter(l=>l.returned).reduce((s,l)=>s+l.price*l.qty,0); }
 // LINE-LEVEL return: refund selected lines' share of the total to the original tender(s), mark them returned
@@ -336,9 +338,12 @@ function returnLines(r, lineIds){
   const pos=(r.tenders||[]).filter(t=>!t.refund && t.amount>0); const posTotal=pos.reduce((s,t)=>s+t.amount,0)||amount;
   pos.forEach(t=>{ const share=+(-(amount*t.amount/posTotal)).toFixed(2); if(share){ if(t.type==="card"&&payAdapter().refund) payAdapter().refund(t.ref, Math.round(-share*100)); r.tenders.push({ type:t.type, amount:share, refund:true, ref:t.ref }); } });
   if(r.customer){ const cust=(DB.customers||[]).find(x=>x.phone===r.customer.phone); if(cust){ const acctPos=pos.filter(t=>t.type==="account").reduce((s,t)=>s+t.amount,0); if(acctPos>0){ const acctShare=+((amount*acctPos/posTotal)).toFixed(2); cust.balance=+((cust.balance||0)-acctShare).toFixed(2); if(cust.balance<0) cust.balance=0; } } }
+  const names=lineIds.map(id=>{ const l=r.lines.find(x=>x.id===id); return l?l.name:null; }).filter(Boolean);
   lineIds.forEach(id=>{ const l=r.lines.find(x=>x.id===id); if(l) l.returned=true; });
   if(r.lines.every(l=>l.returned)) r.status="REFUNDED";
-  r.refundedAt=new Date().toISOString().slice(11,16); saveDB(DB); render();
+  r.refundedAt=new Date().toISOString().slice(11,16);
+  logActivity("refund", "line refund "+money(amount)+" on #"+r.number+" — "+names.join(", "), r.number);
+  saveDB(DB); render();
 }
 
 /* Processor-agnostic PAYMENTS interface (matches docs/PAYMENTS-MODULE.md). A simulator adapter ships by
@@ -410,7 +415,7 @@ function adjustStock(item, qty, reason){
   const delta = reason==="Recount" ? +(qty - stockOnHand(item)) : sign*Math.abs(qty);
   DB.received=DB.received||{}; DB.received[item.id]=(DB.received[item.id]||0)+delta;
   DB.adjustLog=DB.adjustLog||[]; DB.adjustLog.push({ catId:item.id, name:item.name, reason, delta, at:new Date().toISOString().slice(11,16), day:todayStr() });
-  saveDB(DB); render();
+  saveDB(DB); logActivity("stock", reason+" "+item.name+" "+(delta>0?"+":"")+delta); render();
 }
 function isLowStock(item){ return tracksStock(item) && stockOnHand(item) <= (item.reorderAt!=null?item.reorderAt:0); }
 function isOutOfStock(item){ return tracksStock(item) && stockOnHand(item) <= 0; }
@@ -422,6 +427,25 @@ function dayOf(ts){ return new Date(ts||Date.now()).toLocaleDateString("en-CA");
 function todayStr(){ return new Date().toLocaleDateString("en-CA"); }
 function shiftDay(dstr, delta){ const d=new Date(dstr+"T12:00:00"); d.setDate(d.getDate()+delta); return d.toLocaleDateString("en-CA"); }
 function flash(msg){ let t=document.getElementById("toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.setAttribute("role","status"); t.setAttribute("aria-live","polite"); t.style.cssText="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--bad);color:#fff;padding:10px 16px;border-radius:8px;z-index:99;font-weight:600"; document.body.appendChild(t); } t.textContent=msg; t.style.display="block"; }
+/* ===================================== ACTIVITY LOG (audit trail) =====================================
+   One durable stream of every meaningful action the POS takes — orders, money, overrides, voids, refunds,
+   discounts, ID checks, stock changes, staff clock events, station access. NOT literal keystrokes (noise +
+   privacy); the theft-relevant events, each attributed to a station, the acting staff (when one person is
+   clocked in), and a timestamp. Owner-facing, exportable, capped so localStorage never runs away.
+   Categories: order · money · override · void · refund · discount · idcheck · stock · clock · access · admin. */
+const ACT_CAT = { order:"money", money:"money", refund:"money", discount:"money", override:"override", void:"override", idcheck:"access", clock:"access", access:"access", stock:"admin", admin:"admin" };
+function actingStaff(){ try{ const on=(FLOW.staff||[]).filter(s=>openPunch(s.id)); return on.length===1?on[0].name:(on.length>1?"(multiple on shift)":""); }catch(e){ return ""; } }
+function logActivity(type, detail, orderNo){
+  try{ DB=DB||loadDB(); DB.activity=DB.activity||[];
+    const st=(typeof boundStation==="function")?boundStation():null;
+    DB.activity.push({ ts:Date.now(), at:new Date().toISOString().slice(11,16), day:todayStr(), type, detail:detail||"", order:(orderNo!=null?orderNo:null), station:(st&&st.label)||"", staff:actingStaff() });
+    if(DB.activity.length>3000) DB.activity=DB.activity.slice(-3000);   // keep the most recent 3000 events
+    saveDB(DB);
+  }catch(e){}
+}
+function activityCSV(day){ const rows=[["time","type","detail","order","station","staff"]];
+  (loadDB().activity||[]).filter(a=>!day||a.day===day).forEach(a=>rows.push([a.at, a.type, a.detail, a.order==null?"":("#"+a.order), a.station, a.staff]));
+  return csvRows(rows); }
 // data ownership: your data is yours to take out. Everything below builds plain files from the local DB.
 /* ===================================== DATA & BACKUP ===================================== */
 function downloadFile(name, text, type){ const blob=new Blob([text],{type:type||"text/plain"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
@@ -511,6 +535,7 @@ function withApproval(action, label, fn){
   if(!who){ flash("Not authorized — a manager or owner PIN is required"); return; }
   fn(who);
   DB=loadDB(); DB.approvals=DB.approvals||[]; DB.approvals.push({ action, label, by:who.name, at:new Date().toISOString().slice(11,16), ts:Date.now() }); saveDB(DB);
+  logActivity("admin", action+" approved — "+(label||"")+" (by "+who.name+")");
   render();
 }
 function renderReport(app, station){
@@ -726,6 +751,22 @@ function renderReport(app, station){
         +"<div class='line'><b>Take-home</b><span class='spacer'></span><b>"+money(comm+d.tips)+"</b></div>";
       app.appendChild(c); });
   }
+  // ---- activity log (audit trail): every meaningful action, filterable + exportable — the theft-watch record ----
+  { const allDay=(DB.activity||[]).filter(a=>a.day===day);
+    const cats={ all:"All", money:"Money", override:"Overrides & voids", access:"ID & staff", admin:"Approvals & stock" };
+    const shown=allDay.filter(a=> activityFilter==="all" || (ACT_CAT[a.type]||"admin")===activityFilter);
+    const al=document.createElement("div"); al.className="card";
+    al.innerHTML="<div class='row'><b>Activity log</b> <span class='pill'>"+allDay.length+(isToday?" today":" on "+day)+"</span></div>"
+      +"<div class='muted' style='margin:2px 0 8px'>Every order, payment, override, void, refund, discount, ID check, stock change and clock event — who, what, when, where.</div>";
+    const chips=document.createElement("div"); chips.className="opts"; chips.style.marginBottom="8px";
+    Object.keys(cats).forEach(k=>{ const bb=document.createElement("button"); if(activityFilter===k) bb.className="sel"; bb.textContent=cats[k]; bb.onclick=()=>{ activityFilter=k; render(); }; chips.appendChild(bb); });
+    al.appendChild(chips);
+    if(!shown.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="No matching activity "+(isToday?"today":"on "+day)+"."; al.appendChild(e); }
+    else { shown.slice(-60).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line"; row.style.fontSize="13px";
+        row.innerHTML="<span><span class='muted'>"+a.at+"</span> <span class='pill'>"+a.type+"</span> "+a.detail+(a.order!=null?" <span class='muted'>#"+a.order+"</span>":"")+"</span>"
+          +"<span class='spacer'></span><span class='muted'>"+[a.staff,a.station].filter(Boolean).join(" · ")+"</span>"; al.appendChild(row); }); }
+    const exp=document.createElement("button"); exp.textContent="⬇ Activity "+day+" (CSV)"; exp.style.marginTop="8px"; exp.onclick=()=>downloadFile(slug()+"-activity-"+day+".csv", activityCSV(day), "text/csv"); al.appendChild(exp);
+    app.appendChild(al); }
   // ---- data & backup: your data is yours — take it out any time, restore it any time ----
   const bk=document.createElement("div"); bk.className="card"; bk.innerHTML="<div class='row'><b>Data &amp; backup</b></div>"
     +"<div class='muted' style='margin:2px 0 10px'>Your data lives only in this file (plus your optional hub). Back it up regularly — it's plain, portable, and yours.</div>";
@@ -782,8 +823,8 @@ function fileIncident(staff, type, note, urgent){ DB=loadDB(); DB.incidents=DB.i
   if(phone && FLOW.endpoints && FLOW.endpoints.notify){ try{ notifyAdapter().send(phone, (urgent?"🆘 HELP NOW — ":"⚠️ Incident — ")+rec.name+": "+type+(note?" — "+note:"")+" @ "+rec.at); }catch(e){} }
   incidentSent = urgent?"help":"filed"; saveDB(DB); render();
 }
-function clockIn(staff){ DB.punches.push({ staffId:staff.id, name:staff.name, in:nowHM(), inTs:Date.now(), out:null, outTs:null, breaks:[], wage:+staff.wage||0 }); clockWelcome={ name:staff.name, inbound:true, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); render(); }
-function clockOut(staff){ const p=openPunch(staff.id); if(!p) return; const b=curBreak(p); if(b){ b.end=nowHM(); b.endTs=Date.now(); } p.out=nowHM(); p.outTs=Date.now(); clockWelcome={ name:staff.name, inbound:false, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); render(); }
+function clockIn(staff){ DB.punches.push({ staffId:staff.id, name:staff.name, in:nowHM(), inTs:Date.now(), out:null, outTs:null, breaks:[], wage:+staff.wage||0 }); clockWelcome={ name:staff.name, inbound:true, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); logActivity("clock", staff.name+" clocked in"); render(); }
+function clockOut(staff){ const p=openPunch(staff.id); if(!p) return; const b=curBreak(p); if(b){ b.end=nowHM(); b.endTs=Date.now(); } p.out=nowHM(); p.outTs=Date.now(); clockWelcome={ name:staff.name, inbound:false, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); logActivity("clock", staff.name+" clocked out"); render(); }
 function startBreak(staff){ const p=openPunch(staff.id); if(!p||onBreak(p)) return; p.breaks.push({ start:nowHM(), startTs:Date.now(), end:null, endTs:null }); saveDB(DB); render(); }
 function endBreak(staff){ const p=openPunch(staff.id); const b=curBreak(p); if(!b) return; b.end=nowHM(); b.endTs=Date.now(); saveDB(DB); render(); }
 function renderTimeclock(app, station){
@@ -1366,6 +1407,7 @@ let clockTimer = null;   // interval that re-renders the time clock so earnings 
 let incidentSent = null; // "filed" | "help" — confirmation shown after a worker files an incident / panic alert
 let workerId = null;     // worker portal: who is logged in on this device (by PIN)
 let reportDay = null;  // which day the Z-report shows (YYYY-MM-DD, local); null = today
+let activityFilter = "all";   // activity-log category filter in the report: all | money | override | access | admin
 let selTable = null;   // floor plan: the table currently opened
 let floorSection = null; // floor plan: active section filter (null = all)
 let selCell = null;    // scheduling: the {staffId, day} cell being edited
@@ -1465,9 +1507,9 @@ function renderIntake(app, station){
   else { draft.lines.forEach((l,idx)=>{ const row=document.createElement("div"); row.className="line";
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+(l.performer?" <span class='pill'>"+l.performer+"</span>":"")+tagChip(l)+"</span><span class='pill route'>"+((l.path||[]).join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":"");
       if(station.view.money){   // quantity steppers + per-line price edit (haggling, custom items, ring 6 in one tap)
-        const dec=document.createElement("button"); dec.textContent="−"; dec.title="one fewer"; dec.style.cssText="padding:2px 9px;margin-left:6px"; dec.onclick=()=>{ if(l.qty>1) l.qty--; else draft.lines.splice(idx,1); render(); }; row.appendChild(dec);
+        const dec=document.createElement("button"); dec.textContent="−"; dec.title="one fewer"; dec.style.cssText="padding:2px 9px;margin-left:6px"; dec.onclick=()=>{ if(l.qty>1) l.qty--; else { logActivity("void", "removed "+l.name+" ("+money(l.price)+") from an unsent ticket"); draft.lines.splice(idx,1); } render(); }; row.appendChild(dec);
         const inc=document.createElement("button"); inc.textContent="+"; inc.title="one more"; inc.style.cssText="padding:2px 9px;margin-left:4px"; inc.onclick=()=>{ l.qty++; render(); }; row.appendChild(inc);
-        const pen=document.createElement("button"); pen.textContent="✎$"; pen.title="Set this line's price"; pen.style.cssText="padding:2px 8px;margin-left:4px"; pen.onclick=()=>{ const v=prompt("Price for "+l.name+" (each):", l.price); if(v!=null){ const n=Number(v); if(!isNaN(n)&&n>=0){ l.price=+n.toFixed(2); render(); } else flash("Enter a price"); } }; row.appendChild(pen);
+        const pen=document.createElement("button"); pen.textContent="✎$"; pen.title="Set this line's price"; pen.style.cssText="padding:2px 8px;margin-left:4px"; pen.onclick=()=>{ const v=prompt("Price for "+l.name+" (each):", l.price); if(v!=null){ const n=Number(v); if(!isNaN(n)&&n>=0){ if(+n.toFixed(2)!==l.price) logActivity("override", "price of "+l.name+" changed "+money(l.price)+" → "+money(+n.toFixed(2))+" on an unsent ticket"); l.price=+n.toFixed(2); render(); } else flash("Enter a price"); } }; row.appendChild(pen);
       }
       if(l.serialized){ const tb=document.createElement("button"); tb.textContent="🏷 "+(l.tag||"tag"); tb.title="Scan / set the "+(l.tagLabel||"tag")+" on this unit"; tb.style.cssText="padding:2px 8px;margin-left:6px"; tb.onclick=()=>{ const v=prompt("Scan or type the "+(l.tagLabel||"tag")+" for this "+l.name+":", l.tag||""); if(v!=null&&v.trim()){ l.tag=v.trim(); render(); } }; row.appendChild(tb); }
       c.appendChild(row); });
@@ -1608,7 +1650,10 @@ function sendDraft(){
     if(storesOn() && !c.storeId) c.storeId = rec.storeId;   // remember the customer's home store
     c.lastItems = rec.lines.map(l=>({ catId:l.catId, name:l.name, price:l.price, qty:l.qty, category:l.category, path:(l.path||[]).slice(), performer:l.performer||null, modLabel:l.modLabel||"", flags:(l.flags||[]).slice() }));
   }
-  DB.records.push(rec); saveDB(DB); draft=null; render();
+  DB.records.push(rec); saveDB(DB);
+  logActivity("order", "created — "+rec.lines.length+" item(s), "+money(recordTotal(rec))+(rec.customer?" · "+rec.customer.name:""), rec.number);
+  if(draft.takeDeposit && dep) logActivity("money", "deposit taken "+money((rec.tenders.find(t=>t.type==="deposit")||{}).amount||0), rec.number);
+  draft=null; render();
 }
 /* QUICK DROP — take an order now as a piece count, itemize it later at a detail station ("drop now, detail
    later"): a cleaner counts bags at the counter and details at the plant; a repair shop takes the device and
@@ -1620,7 +1665,9 @@ function quickDrop(){
   if(storesOn()) rec.storeId = storeForOrder(draft&&draft.customer);
   if(draft && draft.customer){ rec.customer={ name:draft.customer.name, phone:draft.customer.phone };
     let c=DB.customers.find(x=>x.phone===draft.customer.phone); if(!c){ c={ phone:draft.customer.phone, name:draft.customer.name }; DB.customers.push(c); } if(storesOn()&&!c.storeId) c.storeId=rec.storeId; }
-  DB.records.push(rec); draft=null; saveDB(DB); render();
+  DB.records.push(rec); saveDB(DB);
+  logActivity("order", "quick-drop — "+n+" piece(s) taken in"+(rec.customer?" · "+rec.customer.name:""), rec.number);
+  draft=null; render();
 }
 
 /* --- ASSEMBLY: smart bag splitting + in/out reconciliation — both opt-in via station config (inert otherwise).
@@ -1809,13 +1856,13 @@ function renderCheckout(app, station){
       if(coupons){   // named coupon codes: type a code to apply its % or $ off
         const box=document.createElement("div"); box.className="opts";
         const inp=document.createElement("input"); inp.id="couponCode"; inp.placeholder="Coupon code"; inp.style.width="140px"; if(r.coupon) inp.value=r.coupon;
-        const apply=document.createElement("button"); apply.textContent="Apply"; apply.onclick=()=>{ const code=(inp.value||"").trim().toUpperCase(); const co=coupons.find(x=>String(x.code).toUpperCase()===code); if(!co){ flash("No such coupon"); return; } r.discount = co.pct ? +(lineSubtotal(r)*co.pct/100).toFixed(2) : (co.amount||0); r.coupon=co.code; saveDB(DB); render(); };
+        const apply=document.createElement("button"); apply.textContent="Apply"; apply.onclick=()=>{ const code=(inp.value||"").trim().toUpperCase(); const co=coupons.find(x=>String(x.code).toUpperCase()===code); if(!co){ flash("No such coupon"); return; } r.discount = co.pct ? +(lineSubtotal(r)*co.pct/100).toFixed(2) : (co.amount||0); r.coupon=co.code; logActivity("discount", "coupon "+co.code+" applied (−"+money(r.discount)+")", r.number); saveDB(DB); render(); };
         const clr=document.createElement("button"); clr.textContent="Clear"; clr.onclick=()=>{ r.discount=0; delete r.coupon; saveDB(DB); render(); };
         box.appendChild(inp); box.appendChild(apply); box.appendChild(clr); wrap.appendChild(box);
         if(r.coupon){ const ap=document.createElement("div"); ap.className="muted"; ap.style.marginTop="4px"; ap.textContent="✓ "+r.coupon+" applied"; wrap.appendChild(ap); }
       } else {
         const opts=document.createElement("div"); opts.className="opts";
-        const mk=(lab,fn,on)=>{ const bb=document.createElement("button"); if(on) bb.className="sel"; bb.textContent=lab; bb.onclick=()=>{ fn(); saveDB(DB); render(); }; opts.appendChild(bb); };
+        const mk=(lab,fn,on)=>{ const bb=document.createElement("button"); if(on) bb.className="sel"; bb.textContent=lab; bb.onclick=()=>{ fn(); if((r.discount||0)>0) logActivity("discount", lab+" (−"+money(r.discount)+")", r.number); saveDB(DB); render(); }; opts.appendChild(bb); };
         mk("10% off", ()=>{ r.discount=+(lineSubtotal(r)*0.10).toFixed(2); }, Math.abs((r.discount||0)-lineSubtotal(r)*0.10)<0.005 && r.discount);
         mk("$5 off", ()=>{ r.discount=5; }, r.discount===5);
         mk("None", ()=>{ r.discount=0; delete r.coupon; }, !r.discount);
@@ -1827,8 +1874,8 @@ function renderCheckout(app, station){
     // redemptions: gift card balance + loyalty points (both attached to the customer)
     if(r.customer && r.status==="READY" && bal>0.0001){
       const cust=(DB.customers||[]).find(x=>x.phone===r.customer.phone)||{}; const loy=FLOW.endpoints.loyalty;
-      if((cust.gift||0)>0 && !r.giftUsed){ const amt=Math.min(cust.gift, bal); const b=document.createElement("button"); b.textContent="Pay with gift card "+money(amt); b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"gift",amount:amt}); r.giftUsed=amt; saveDB(DB); render(); }; c.appendChild(b); }
-      if(loy && (cust.points||0)>=loy.redeemPoints && !r.redeemPts){ const b=document.createElement("button"); b.textContent="Redeem "+loy.redeemPoints+" pts (−"+money(loy.redeemValue)+")"; b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"loyalty",amount:loy.redeemValue}); r.redeemPts=loy.redeemPoints; saveDB(DB); render(); }; c.appendChild(b); }
+      if((cust.gift||0)>0 && !r.giftUsed){ const amt=Math.min(cust.gift, bal); const b=document.createElement("button"); b.textContent="Pay with gift card "+money(amt); b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"gift",amount:amt}); r.giftUsed=amt; logActivity("money", "gift card "+money(amt), r.number); saveDB(DB); render(); }; c.appendChild(b); }
+      if(loy && (cust.points||0)>=loy.redeemPoints && !r.redeemPts){ const b=document.createElement("button"); b.textContent="Redeem "+loy.redeemPoints+" pts (−"+money(loy.redeemValue)+")"; b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"loyalty",amount:loy.redeemValue}); r.redeemPts=loy.redeemPoints; logActivity("money", "redeemed "+loy.redeemPoints+" pts (−"+money(loy.redeemValue)+")", r.number); saveDB(DB); render(); }; c.appendChild(b); }
     }
     (r.tenders||[]).filter(t=>t.type==="card").forEach(t=>{ const cl=document.createElement("div"); cl.className="line"; cl.innerHTML="<span class='muted'>💳 "+t.brand+" ••"+t.last4+"</span><span class='spacer'></span><span>"+money(t.amount)+"</span>"; c.appendChild(cl); });
     // totals: subtotal / discount / tax (shown when either applies)
@@ -1848,6 +1895,7 @@ function renderCheckout(app, station){
         ok.onclick=()=>{ const st=boundStation(); const at=new Date().toISOString().slice(11,16);
           r.ageVerified={ req:ageReq, at, day:todayStr(), station:(st&&st.label)||"" };   // defensible record: what was required, when, at which station
           DB.ageLog=DB.ageLog||[]; DB.ageLog.push({ number:r.number, req:ageReq, at, day:todayStr(), station:(st&&st.label)||"" });
+          logActivity("idcheck", "ID checked — customer verified "+ageReq+"+", r.number);
           saveDB(DB); render(); };
         gate.appendChild(ok);
         c.appendChild(gate); app.appendChild(c); return;   // no tenders until verified
@@ -1863,18 +1911,18 @@ function renderCheckout(app, station){
       }
       const payAmt = r.splitWays ? Math.min(r.splitShare, bal) : bal;
       const label = r.splitWays ? "Take share " : (paid>0?"Take balance ":"Take payment ");
-      const b=document.createElement("button"); b.className="primary"; b.textContent=label+money(payAmt)+" cash"; b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:payAmt}); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; c.appendChild(b);
+      const b=document.createElement("button"); b.className="primary"; b.textContent=label+money(payAmt)+" cash"; b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:payAmt}); logActivity("money", "cash "+money(payAmt), r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; c.appendChild(b);
       // make change: enter what the customer handed over and see the change due (the cash-drawer moment)
       const mc=document.createElement("button"); mc.textContent="＄ Make change"; mc.style.margin="10px 0 0 8px"; mc.onclick=()=>{ cashPad={ recId:r.id, received:payAmt }; render(); }; c.appendChild(mc);
       if((FLOW.endpoints.payment.tenders||[]).includes("card")){
         const cb=document.createElement("button"); cb.textContent=(r.splitWays?"Share by card ":"Pay by card ")+money(payAmt); cb.style.margin="10px 0 0 8px";
-        cb.onclick=()=>{ const res=payAdapter().charge(Math.round(payAmt*100)); if(res.status==="approved"){ r.tenders.push({type:"card",amount:payAmt,last4:res.last4,brand:res.brand,ref:res.ref}); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { flash("Card "+(res.message||"declined")); } };
+        cb.onclick=()=>{ const res=payAdapter().charge(Math.round(payAmt*100)); if(res.status==="approved"){ r.tenders.push({type:"card",amount:payAmt,last4:res.last4,brand:res.brand,ref:res.ref}); logActivity("money", "card "+money(payAmt)+(res.brand?" ("+res.brand+" ••"+res.last4+")":""), r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { logActivity("money", "card declined "+money(payAmt), r.number); flash("Card "+(res.message||"declined")); } };
         c.appendChild(cb);
       }
       // house account: put it on the customer's tab (A/R) — settles the order now, they pay it later
       if((FLOW.endpoints.payment.tenders||[]).includes("account") && r.customer && r.customer.phone){
         const ab=document.createElement("button"); ab.textContent="Charge to account "+money(payAmt); ab.style.margin="10px 0 0 8px";
-        ab.onclick=()=>{ r.tenders.push({type:"account",amount:payAmt}); const cust=DB.customers.find(x=>x.phone===r.customer.phone); if(cust){ cust.balance=+((cust.balance||0)+payAmt).toFixed(2); } if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); }; c.appendChild(ab);
+        ab.onclick=()=>{ r.tenders.push({type:"account",amount:payAmt}); const cust=DB.customers.find(x=>x.phone===r.customer.phone); if(cust){ cust.balance=+((cust.balance||0)+payAmt).toFixed(2); } logActivity("money", "charged to account "+money(payAmt)+(r.customer?" · "+r.customer.name:""), r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); }; c.appendChild(ab);
       }
       // cash change-making: enter amount tendered, see change due, then take the cash
       if(cashPad && cashPad.recId===r.id){
@@ -1887,7 +1935,7 @@ function renderCheckout(app, station){
         pad.appendChild(row);
         const cd=document.createElement("div"); cd.id="changeDue"; cd.style.cssText="font-size:18px;font-weight:700;margin:8px 0"; cd.textContent="Change due "+money(Math.max(0,(cashPad.received||0)-payAmt)); pad.appendChild(cd);
         const conf=document.createElement("button"); conf.id="cashConfirm"; conf.className="primary"; conf.textContent="✓ Take "+money(payAmt); conf.disabled=(cashPad.received||0)<payAmt-0.0001;
-        conf.onclick=()=>{ const recv=+(cashPad.received||payAmt).toFixed(2); r.tenders.push({ type:"cash", amount:payAmt, tendered:recv, change:+(recv-payAmt).toFixed(2) }); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; pad.appendChild(conf);
+        conf.onclick=()=>{ const recv=+(cashPad.received||payAmt).toFixed(2); const chg=+(recv-payAmt).toFixed(2); r.tenders.push({ type:"cash", amount:payAmt, tendered:recv, change:chg }); logActivity("money", "cash "+money(payAmt)+" (tendered "+money(recv)+", change "+money(chg)+")", r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; pad.appendChild(conf);
         const cx=document.createElement("button"); cx.textContent="Cancel"; cx.style.marginLeft="8px"; cx.onclick=()=>{ cashPad=null; render(); }; pad.appendChild(cx);
         c.appendChild(pad);
       }
