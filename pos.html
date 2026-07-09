@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.65";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.66";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -1423,8 +1423,8 @@ function renderIntake(app, station){
   const cat=document.createElement("div"); cat.innerHTML="<h2>New order</h2>";
   // search / barcode-scan box — shown for big menus or when a scanner is configured (keyboard-wedge types code + Enter)
   const tiles=[];
-  const addItem=item=>{ if(item.customPrice){ const v=prompt("Price for "+item.name+":", item.price||""); if(v==null) return; const n=Number(v); if(isNaN(n)||n<0){ flash("Enter a price"); return; } item={...item, price:+n.toFixed(2)}; }
-    return needsConfig(item) ? (pending={item, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(item, {}, [], [], null); };
+  const addItem=item=>{ const it=priceItem(item); if(!it) return;
+    return needsConfig(it) ? (pending={item:it, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(it, {}, [], [], null); };
   if(FLOW.catalog.length>5 || FLOW.endpoints.scan){
     const search=document.createElement("input"); search.id="catSearch"; search.placeholder="Search or scan…"; search.autocomplete="off"; search.style.cssText="width:100%;margin-bottom:10px";
     search.oninput=()=>{ const q=search.value.trim().toLowerCase(); tiles.forEach(({item,btn})=>{ const hay=(item.name+" "+(item.category||"")+" "+(item.barcode||item.sku||"")).toLowerCase(); btn.style.display=(!q||hay.includes(q))?"":"none"; }); };
@@ -1440,7 +1440,8 @@ function renderIntake(app, station){
     item.__out=out;
     if(out) b.className="tile eightysix";
     const via=item.path.length?item.path.join(" → "):"no prep";
-    let sub = station.view.money?money(item.price)+" · "+via:via;
+    const priceLbl = item.customPrice ? "price at ring" : money(item.price)+(item.byWeight?" / "+(item.unit||"lb"):"");
+    let sub = station.view.money?priceLbl+" · "+via:via;
     if(item.par!=null) sub += is86(item) ? " · <span class='pill x86'>86</span>" : " · "+rem+" left";
     if(tracksStock(item)) sub += isOutOfStock(item) ? " · <span class='pill x86'>out of stock</span>" : " · "+stockOnHand(item)+" in stock"+(isLowStock(item)?" <span class='pill flag'>low</span>":"");
     b.innerHTML = item.name + "<small>"+sub+"</small>";
@@ -1562,6 +1563,28 @@ function addLine(item, choices, addons, flags, performer){
   if(editingId) saveDB(DB);
   render();
 }
+/* PRICE-AT-RING resolver — turns a catalog item into the item that actually gets added, handling the two
+   "price isn't fixed" cases before a line exists:
+   • byWeight — item priced per unit (item.price = $/unit, item.unit = "lb"/"ft"/…): ask the AMOUNT, line
+     price = unitPrice × amount, and annotate the name with the math so the ticket reads "2.4 lb × $8.99".
+   • customPrice — item priced per sale (quote/haggle): ask the total.
+   Returns a possibly-modified clone, or null if the clerk cancels. One place, so intake + detail agree. */
+function priceItem(item){
+  if(item.byWeight){
+    const unit=item.unit||"lb"; const per=Number(item.price)||0;
+    const v=prompt("How many "+unit+" of "+item.name+"?  ("+money(per)+" / "+unit+")", "1");
+    if(v==null) return null; const amt=Number(v);
+    if(isNaN(amt)||amt<=0){ flash("Enter an amount"); return null; }
+    return {...item, price:+(per*amt).toFixed(2), name:item.name+" ("+(+amt.toFixed(3))+" "+unit+" × "+money(per)+")"};
+  }
+  if(item.customPrice){
+    const v=prompt("Price for "+item.name+":", item.price||"");
+    if(v==null) return null; const n=Number(v);
+    if(isNaN(n)||n<0){ flash("Enter a price"); return null; }
+    return {...item, price:+n.toFixed(2)};
+  }
+  return item;
+}
 function sendDraft(){
   DB=loadDB(); DB.seq++;
   const rec={ id:"R"+DB.seq, number:DB.seq, lines:draft.lines.map(l=>({...l, stage:0})), tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now() };
@@ -1670,10 +1693,10 @@ function renderDetail(app, station){
     return;
   }
   app.innerHTML="<h2>Detailing #"+rec.number+"</h2>"+(rec.customer?"<p class='muted'>"+rec.customer.name+" · "+rec.customer.phone+"</p>":"")+(rec.dropCount?"<p class='muted'>"+rec.dropCount+" piece(s) were dropped — itemize them below.</p>":"");
-  const addItem=item=>{ if(item.customPrice){ const v=prompt("Price for "+item.name+":", item.price||""); if(v==null) return; const n=Number(v); if(isNaN(n)||n<0){ flash("Enter a price"); return; } item={...item, price:+n.toFixed(2)}; }
-    return needsConfig(item) ? (pending={item, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(item, {}, [], [], null); };
+  const addItem=item=>{ const it=priceItem(item); if(!it) return;
+    return needsConfig(it) ? (pending={item:it, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(it, {}, [], [], null); };
   const grid=document.createElement("div"); grid.className="grid";
-  FLOW.catalog.forEach(item=>{ if(is86(item)||isOutOfStock(item)) return; const b=document.createElement("button"); b.className="tile"; b.innerHTML=item.name+"<small>"+(station.view.money?money(item.price):((item.path||[]).join(' → ')||'no prep'))+"</small>"; b.onclick=()=>addItem(item); grid.appendChild(b); });
+  FLOW.catalog.forEach(item=>{ if(is86(item)||isOutOfStock(item)) return; const b=document.createElement("button"); b.className="tile"; const pl=item.customPrice?"price at ring":money(item.price)+(item.byWeight?" / "+(item.unit||"lb"):""); b.innerHTML=item.name+"<small>"+(station.view.money?pl:((item.path||[]).join(' → ')||'no prep'))+"</small>"; b.onclick=()=>addItem(item); grid.appendChild(b); });
   app.appendChild(grid);
   if(pending) app.appendChild(configPanel(station));
   const c=document.createElement("div"); c.className="card";

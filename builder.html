@@ -181,10 +181,10 @@ const TEMPLATES = {
     branding:{ name:"Prime Cuts", brandColor:"#a33b3b" },
     endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0" }, scan:true },
     catalog:[
-      {id:"ribeye",name:"Ribeye — per lb (enter total)",price:0,category:"beef",customPrice:true,path:[]},
-      {id:"ground",name:"Ground Beef — per lb (enter total)",price:0,category:"beef",customPrice:true,path:[]},
-      {id:"chicken",name:"Chicken Breast — per lb (enter total)",price:0,category:"poultry",customPrice:true,path:[]},
-      {id:"bacon",name:"Bacon — per lb (enter total)",price:0,category:"pork",customPrice:true,path:[]},
+      {id:"ribeye",name:"Ribeye",price:15.99,category:"beef",byWeight:true,unit:"lb",cost:9,path:[]},
+      {id:"ground",name:"Ground Beef",price:6.49,category:"beef",byWeight:true,unit:"lb",cost:3.5,path:[]},
+      {id:"chicken",name:"Chicken Breast",price:4.99,category:"poultry",byWeight:true,unit:"lb",cost:2.2,path:[]},
+      {id:"bacon",name:"Bacon",price:7.99,category:"pork",byWeight:true,unit:"lb",cost:4,path:[]},
       {id:"sub",name:"Deli Sandwich",price:8.5,category:"deli",cost:2.5,path:[]},
       {id:"side",name:"Side Salad",price:4,category:"deli",cost:1,path:[]}
     ],
@@ -200,7 +200,7 @@ const TEMPLATES = {
       {id:"soda",name:"2-Liter Soda",price:3,category:"drink",cost:1,path:[]}
     ],
     stations:[ {id:"reg",type:"intake",label:"Register",view:{money:true}}, {id:"kitchen",type:"production",label:"Kitchen",view:{money:false}}, {id:"kds",type:"kds",label:"Kitchen Display",view:{money:false}}, {id:"route",type:"route",label:"Delivery",view:{money:true}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
-  florist: { flowId:"florist", label:"Florist (+ delivery)", topology:"linear", blurb:"Made-to-order arrangements, phone orders, delivered with a gift card",
+  florist: { flowId:"florist", label:"Florist (+ delivery)", topology:"linear", blurb:"Custom arrangements, phone orders, delivered with a gift card",
     branding:{ name:"Petal & Stem", brandColor:"#d15b93" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", deposit:{pct:50} }, notify:{template:"Hi {name}, your flowers (order #{number}) from {biz} are ready!"}, quotes:true },
     timer:{ mode:"due", promiseSec:86400, warnSec:43200, label:"needed by" },
@@ -602,6 +602,14 @@ function itemEditor(i){
       h('span',{class:'flab'},['Taxable']), h('button',{class:(it.taxable!==false)?'on':'', onclick:()=>{ if(it.taxable===false) delete it.taxable; else it.taxable=false; render(); }},[(it.taxable!==false)?'✓ taxed':'tax-exempt']),
       h('span',{class:'flab'},['Age check']), h('button',{class:it.ageRestricted?'on':'', onclick:()=>{ if(it.ageRestricted) delete it.ageRestricted; else it.ageRestricted=21; render(); }},[it.ageRestricted?('✓ '+(it.ageRestricted===true?21:it.ageRestricted)+'+ ID'):'none']),
       it.ageRestricted ? h('input',{class:'sm',type:'number',value:(it.ageRestricted===true?21:it.ageRestricted), title:'minimum age', oninput:e=>{ const v=Number(e.target.value)||21; it.ageRestricted=v; }}) : null
+    ]),
+    h('div',{class:'fld'},[
+      h('span',{class:'flab'},['Pricing']), h('span',{class:'hint'},['most items are a fixed price; pick another mode only if this one is priced at the counter'])]),
+    h('div',{class:'fld'},[
+      h('span',{class:'flab'},['Custom price']), h('button',{class:it.customPrice?'on':'', title:'ask for the price at ring time (quotes, haggling)', onclick:()=>{ if(it.customPrice) delete it.customPrice; else { it.customPrice=true; delete it.byWeight; delete it.unit; } render(); }},[it.customPrice?'✓ ask at ring':'no']),
+      h('span',{class:'flab'},['By weight']), h('button',{class:it.byWeight?'on':'', title:'price per unit — ask the amount and multiply (per lb, per ft…)', onclick:()=>{ if(it.byWeight){ delete it.byWeight; delete it.unit; } else { it.byWeight=true; it.unit=it.unit||'lb'; delete it.customPrice; } render(); }},[it.byWeight?('✓ per '+(it.unit||'lb')):'no']),
+      it.byWeight ? h('input',{class:'sm',value:it.unit||'lb', title:'unit: lb, oz, ft, yd…', oninput:e=>{ it.unit=e.target.value||'lb'; }}) : null,
+      it.byWeight ? h('span',{class:'hint'},['the price above is per '+(it.unit||'lb')]) : null
     ]),
     h('div',{class:'fld'},[
       h('span',{class:'flab'},['In stock']), h('input',{class:'sm',type:'number',value:it.stock!=null?it.stock:'', placeholder:'∞', oninput:e=>{ const v=e.target.value; if(v==='') delete it.stock; else it.stock=Number(v)||0; }}),
