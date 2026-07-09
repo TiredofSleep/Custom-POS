@@ -59,7 +59,7 @@ stations in the flow — see the [module library](MODULE-LIBRARY.md)).
 | **Retail store** | Sell from stock | Catalog, stock levels, reorder, reports. |
 | **Consignment / Thrift** | One-of-a-kind resale | **Custom-price** unique items + consignor **store-credit accounts**. |
 | **Dispensary (21+)** | Age-gated retail | 21+ ID gate, member accounts, tracked inventory, tax. |
-| **Butcher / Deli (by weight)** | Price-by-the-pound | Custom-price "enter total" per pound + fixed deli items. |
+| **Butcher / Deli (by weight)** | Price-by-the-pound | **By-weight** items (enter the pounds, it multiplies) + fixed deli items. |
 
 ### Start from nothing
 | Template | For | Shows off |
