@@ -164,6 +164,74 @@ const TEMPLATES = {
       {id:"v1",name:"Vape Cartridge",price:40,category:"vape",ageRestricted:21,cost:22,stock:30,reorderAt:6,path:[]}
     ],
     stations:[ {id:"reg",type:"central",label:"Register",view:{money:true}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
+  // ── Community-seed starters (from the AI-persona stress test) ─────────────────────────────────────────
+  bakery: { flowId:"bakery", label:"Bakery (pre-order + counter)", topology:"linear", blurb:"Custom cake pre-orders with a deposit, plus pastries over the counter",
+    branding:{ name:"Sweet Crumb", brandColor:"#c2708a" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", deposit:{pct:50} }, notify:{template:"Hi {name}, your order #{number} at {biz} is ready for pickup!"} },
+    timer:{ mode:"due", promiseSec:86400, warnSec:43200, label:"ready by" },
+    catalog:[
+      {id:"cake",name:"Custom Cake (quote)",price:0,category:"custom",customPrice:true,path:["kitchen"]},
+      {id:"cupcake",name:"Cupcake (each)",price:3.5,category:"pastry",cost:0.8,path:[]},
+      {id:"croissant",name:"Croissant",price:4,category:"pastry",cost:1,path:[]},
+      {id:"loaf",name:"Sourdough Loaf",price:8,category:"bread",cost:2,path:[]},
+      {id:"cookie",name:"Cookie (each)",price:2.5,category:"pastry",cost:0.5,path:[]}
+    ],
+    stations:[ {id:"counter",type:"central",label:"Counter",view:{money:true}}, {id:"kitchen",type:"production",label:"Kitchen",view:{money:false}}, {id:"board",type:"board",label:"Order Board",view:{money:false}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
+  butcher: { flowId:"butcher", label:"Butcher / Deli (by weight)", topology:"linear", blurb:"Price-by-the-pound meats plus fixed-price deli items — weigh, price, ring",
+    branding:{ name:"Prime Cuts", brandColor:"#a33b3b" },
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0" }, scan:true },
+    catalog:[
+      {id:"ribeye",name:"Ribeye — per lb (enter total)",price:0,category:"beef",customPrice:true,path:[]},
+      {id:"ground",name:"Ground Beef — per lb (enter total)",price:0,category:"beef",customPrice:true,path:[]},
+      {id:"chicken",name:"Chicken Breast — per lb (enter total)",price:0,category:"poultry",customPrice:true,path:[]},
+      {id:"bacon",name:"Bacon — per lb (enter total)",price:0,category:"pork",customPrice:true,path:[]},
+      {id:"sub",name:"Deli Sandwich",price:8.5,category:"deli",cost:2.5,path:[]},
+      {id:"side",name:"Side Salad",price:4,category:"deli",cost:1,path:[]}
+    ],
+    stations:[ {id:"reg",type:"central",label:"Counter",view:{money:true}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
+  pizzeria: { flowId:"pizzeria", label:"Pizzeria (+ delivery)", topology:"linear", blurb:"Walk-in & phone orders, made in back, delivered to the door",
+    branding:{ name:"Slice House", brandColor:"#c9462c" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[10,15,20]} }, notify:{template:"Hi {name}, your order #{number} from {biz} is on the way!"} },
+    timer:{ mode:"aging", warnSec:900, badSec:1800, label:"in kitchen" },
+    catalog:[
+      {id:"cheese",name:"Cheese Pizza",price:12,category:"pizza",cost:3,path:["kitchen"],modifiers:[{group:"Size",required:true,options:[{name:"Sm",price:0},{name:"Md",price:3},{name:"Lg",price:6}]}],addons:[{name:"Pepperoni",price:2},{name:"Mushroom",price:1.5},{name:"Extra cheese",price:2}]},
+      {id:"wings",name:"Wings (10)",price:11,category:"sides",cost:3.5,path:["kitchen"]},
+      {id:"salad",name:"House Salad",price:7,category:"sides",cost:1.5,path:["kitchen"]},
+      {id:"soda",name:"2-Liter Soda",price:3,category:"drink",cost:1,path:[]}
+    ],
+    stations:[ {id:"reg",type:"intake",label:"Register",view:{money:true}}, {id:"kitchen",type:"production",label:"Kitchen",view:{money:false}}, {id:"kds",type:"kds",label:"Kitchen Display",view:{money:false}}, {id:"route",type:"route",label:"Delivery",view:{money:true}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
+  florist: { flowId:"florist", label:"Florist (+ delivery)", topology:"linear", blurb:"Made-to-order arrangements, phone orders, delivered with a gift card",
+    branding:{ name:"Petal & Stem", brandColor:"#d15b93" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", deposit:{pct:50} }, notify:{template:"Hi {name}, your flowers (order #{number}) from {biz} are ready!"}, quotes:true },
+    timer:{ mode:"due", promiseSec:86400, warnSec:43200, label:"needed by" },
+    catalog:[
+      {id:"custom",name:"Custom Arrangement (quote)",price:0,category:"custom",customPrice:true,path:["bench"]},
+      {id:"dozen",name:"Dozen Roses",price:60,category:"arrangement",cost:22,path:["bench"]},
+      {id:"bouquet",name:"Mixed Bouquet",price:40,category:"arrangement",cost:14,path:["bench"]},
+      {id:"vase",name:"Vase Add-on",price:12,category:"addon",cost:4,path:[]},
+      {id:"note",name:"Gift Card Message",price:3,category:"addon",path:[]}
+    ],
+    stations:[ {id:"counter",type:"central",label:"Counter",view:{money:true}}, {id:"bench",type:"production",label:"Design Bench",view:{money:false}}, {id:"route",type:"route",label:"Delivery",view:{money:true}}, {id:"board",type:"board",label:"Order Board",view:{money:false}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
+  scoop: { flowId:"scoop", label:"Ice cream / Scoop shop", topology:"linear", blurb:"Fast summer counter — pick a size, a cone or cup, done",
+    branding:{ name:"Sweet Scoops", brandColor:"#5bb5d1" },
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[10,15,20]} } },
+    catalog:[
+      {id:"scoopitem",name:"Ice Cream",price:3.5,category:"cream",cost:0.7,path:[],modifiers:[{group:"Size",required:true,options:[{name:"Single",price:0},{name:"Double",price:2},{name:"Triple",price:3.5}]},{group:"Serve",required:true,options:[{name:"Cup",price:0},{name:"Cone",price:0.5},{name:"Waffle cone",price:1.5}]}],addons:[{name:"Sprinkles",price:0.5},{name:"Hot fudge",price:0.75}]},
+      {id:"sundae",name:"Sundae",price:6,category:"cream",cost:1.5,path:[]},
+      {id:"shake",name:"Milkshake",price:5.5,category:"cream",cost:1.3,path:[]},
+      {id:"water",name:"Bottled Water",price:1.5,category:"drink",cost:0.4,path:[]}
+    ],
+    stations:[ {id:"reg",type:"central",label:"Window",view:{money:true}} ] },
+  consignment: { flowId:"consignment", label:"Consignment / Thrift", topology:"linear", blurb:"One-of-a-kind items priced individually, with consignor store-credit accounts",
+    branding:{ name:"Second Look", brandColor:"#6a8f3a" },
+    endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0" }, scan:true },
+    catalog:[
+      {id:"item",name:"Consigned Item (enter price)",price:0,category:"resale",customPrice:true,path:[]},
+      {id:"cloth",name:"Clothing",price:8,category:"apparel",path:[]},
+      {id:"home",name:"Home Goods",price:12,category:"home",path:[]},
+      {id:"book",name:"Book",price:3,category:"media",path:[]}
+    ],
+    stations:[ {id:"reg",type:"central",label:"Register",view:{money:true}}, {id:"office",type:"report",label:"Office",view:{money:true}} ] },
   cafe: { flowId:"cafe", label:"Café / Counter", topology:"linear", blurb:"Made-to-order food & drinks",
     branding:{ name:"My Café", brandColor:"#8a5a2b" },
     endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}, split:true} },
