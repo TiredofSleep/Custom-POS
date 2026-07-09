@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.68";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.69";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -717,10 +717,10 @@ function renderReport(app, station){
   const pct=(FLOW.commission&&FLOW.commission.pct)||0;
   if(FLOW.performers){
     const per={};
-    done.forEach(r=>{ r.lines.filter(l=>l.performer && l.category==="service").forEach(l=>{ per[l.performer]=per[l.performer]||{svc:0,tips:0}; per[l.performer].svc += l.price*l.qty; }); if(r.tip && r.tipTo){ per[r.tipTo]=per[r.tipTo]||{svc:0,tips:0}; per[r.tipTo].tips += r.tip; } });
+    done.forEach(r=>{ r.lines.filter(l=>l.performer).forEach(l=>{ per[l.performer]=per[l.performer]||{svc:0,tips:0}; per[l.performer].svc += l.price*l.qty; }); if(r.tip && r.tipTo){ per[r.tipTo]=per[r.tipTo]||{svc:0,tips:0}; per[r.tipTo].tips += r.tip; } });   // any line a performer did is commissionable — not just a hardcoded "service" category (salon, tattoo, barber, spa…)
     Object.keys(per).forEach(n=>{ const d=per[n]; const comm=+(d.svc*pct/100).toFixed(2); const c=document.createElement("div"); c.className="card";
       c.innerHTML="<div class='row'><b>"+n+"</b></div>"
-        +"<div class='line'><span>Service sales</span><span class='spacer'></span><span>"+money(d.svc)+"</span></div>"
+        +"<div class='line'><span>Commissioned sales</span><span class='spacer'></span><span>"+money(d.svc)+"</span></div>"
         +"<div class='line'><span>Commission ("+pct+"%)</span><span class='spacer'></span><span>"+money(comm)+"</span></div>"
         +"<div class='line'><span>Tips</span><span class='spacer'></span><span>"+money(d.tips)+"</span></div>"
         +"<div class='line'><b>Take-home</b><span class='spacer'></span><b>"+money(comm+d.tips)+"</b></div>";
