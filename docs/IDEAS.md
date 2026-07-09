@@ -36,6 +36,28 @@ the shop: where each item is on the path right now (in the kitchen, at the bar, 
 - **Cross-industry:** yes — any trade where one person owns an order that others work (restaurant, cleaner,
   repair, salon).
 
+### Sell by weight / quantity — price = unit × amount  ·  *from the butcher persona*
+A butcher, deli, produce stand, or bulk-goods store sells things **by the pound** (or by the foot, the gram, the
+yard). Today the closest fit is a **custom-price** item where the clerk does the math and enters the total. Let an
+item declare a **unit price + a unit** ("$/lb") so the register asks for the **amount** and multiplies for them.
+- **Problem it solves:** removes hand-math at the counter (fewer errors, faster line), and prints an honest
+  "2.4 lb × $8.99" line the customer can check.
+- **Station / trigger:** ring time at any money station — an item flagged `byWeight` (or `unit:"lb"`) prompts for
+  the amount instead of a flat price.
+- **Primitive underneath:** the existing **customPrice** prompt generalized to `price = unitPrice × qtyEntered`,
+  with the unit shown on the line. A scale-hardware read is a later depth (keyboard-wedge scales type the weight).
+- **Cross-industry:** yes — butcher/deli, produce, cheese/bulk, fabric/rope by length, coffee roasters, hardware.
+
+### By-order deposit that shows a running balance  ·  *from the bakery & florist personas*
+Pre-order trades (custom cakes, flower arrangements, big catering) take a **deposit now, balance on pickup**. The
+`deposit:{pct}` config already splits it; the ask is that the **order card and the ready-text both show the balance
+still owed** so nobody is surprised at the counter.
+- **Problem it solves:** the customer and the staffer always know what's left to collect; avoids awkward "wait,
+  how much?" at pickup.
+- **Primitive underneath:** the deposit/balance ledger already exists — this is a **surfacing** of `balanceDue` on
+  the board card + an optional `{balance}` token in the notify template.
+- **Cross-industry:** yes — bakery, florist, caterer, repair shop, tailor, any quote-then-deliver trade.
+
 ---
 
 ## Deep design handoffs (from ClaudeChat sessions)
