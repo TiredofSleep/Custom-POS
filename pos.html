@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.62";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.63";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -296,6 +296,7 @@ function homeStore(){ if(!storesOn()) return null; const id=localStorage.getItem
 function setStore(id){ if(id) localStorage.setItem(stkey(), id); else localStorage.removeItem(stkey()); render(); }
 function storeForOrder(cust){ return (cust && cust.storeId) || homeStore() || defaultStoreId(); }   // an order's home store
 function storeChip(r){ if(!storesOn() || !r.storeId) return ""; const nm=storeName(r.storeId); return nm ? " <span class='pill' title='Store'>🏬 "+nm+"</span>" : ""; }
+function tableChip(r){ return r.tableId ? " <span class='pill' title='Table'>🍽 "+tableLabel(r.tableId)+"</span>" : ""; }
 function assembledAt(r){ if(!storesOn() || !r.storeId) return ""; const p=plantStore(); return (p && r.storeId!==p.id) ? "assembled at "+p.name : ""; }   // a drop-store order is done at the plant
 
 /* ===================================== MONEY MATH ===================================== */
@@ -1001,6 +1002,10 @@ function setTableState(id, state){ DB=loadDB(); DB.tables=DB.tables||{}; DB.turn
   DB.tables[id]={ state, since:now, seatedTs }; saveDB(DB); render();
 }
 function tableSeats(id){ const t=((FLOW.floor&&FLOW.floor.tables)||[]).find(x=>x.id===id); return (t&&+t.seats)||0; }
+function tableLabel(id){ const t=((FLOW.floor&&FLOW.floor.tables)||[]).find(x=>x.id===id); return (t&&(t.label||t.id))||id; }
+// a check belongs to a table (restaurants): open orders tagged with tableId, and their running balance
+function tableOpenOrders(id){ return DB.records.filter(r=>r.tableId===id && r.status!=="CLOSED" && r.status!=="REFUNDED"); }
+function tableOpenTotal(id){ return tableOpenOrders(id).reduce((s,r)=>s+recordBalance(r),0); }
 function turnsToday(){ return (DB.turns||[]).filter(x=>x.day===todayStr()); }
 function turnStats(){ const ts=turnsToday(); const n=ts.length; return { n, avgMs:n?ts.reduce((s,x)=>s+x.dur,0)/n:0, covers:ts.reduce((s,x)=>s+tableSeats(x.table),0) }; }
 function renderFloor(app, station){
@@ -1031,9 +1036,10 @@ function renderFloor(app, station){
   tables.forEach(t=>{ const tr=tableRec(t); const st=floorStateById(tr.state); const el=tr.since?(Date.now()-tr.since)/1000:0;
     const b=document.createElement("button"); b.className="tabletile"+(tr.since&&el>=warn&&st.id!=="empty"?" warn":""); b.style.background=st.color; b.dataset.table=t.id;
     if(positioned){ b.style.position="absolute"; b.style.left=(t.x||0)+"px"; b.style.top=(t.y||0)+"px"; b.style.width="88px"; }
+    const chk=tableOpenTotal(t.id);
     b.innerHTML="<b>"+ (t.label||t.id) +"</b> <span style='float:right;font-size:12px'>"+st.label+"</span>"
       +"<small>"+(t.seats?t.seats+" seats":"")+(t.section?" · "+t.section:"")+"</small>"
-      +"<small>"+(tr.since?fmtDur(el)+" in state":"—")+"</small>";
+      +"<small>"+(chk>0.0001?"🧾 "+money(chk)+" open":(tr.since?fmtDur(el)+" in state":"—"))+"</small>";
     b.onclick=()=>{ selTable=(selTable===t.id?null:t.id); render(); };
     grid.appendChild(b); });
   app.appendChild(grid);
@@ -1042,6 +1048,12 @@ function renderFloor(app, station){
     if(t){ const tr=tableRec(t); const st=floorStateById(tr.state); const nx=st.next?floorStateById(st.next):null;
       const c=document.createElement("div"); c.className="card"; c.style.marginTop="12px";
       c.innerHTML="<div class='row'><b>"+(t.label||t.id)+"</b> <span class='pill'>"+st.label+"</span><span class='spacer'></span><span class='muted'>"+(t.seats?t.seats+" seats":"")+"</span></div>";
+      // open check(s) rung to this table
+      const chks=tableOpenOrders(t.id);
+      if(chks.length){ const ck=document.createElement("div"); ck.style.cssText="margin:6px 0"; ck.innerHTML="<div class='muted'>Open check"+(chks.length>1?"s":"")+"</div>";
+        chks.forEach(r=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>#"+r.number+" · "+r.lines.length+" item(s)</span><span class='spacer'></span><span>"+money(recordBalance(r))+" due</span>"; ck.appendChild(row); });
+        c.appendChild(ck);
+      } else { const e=document.createElement("div"); e.className="muted"; e.style.margin="4px 0"; e.textContent="No open check — ring one at the register and tag this table."; c.appendChild(e); }
       if(nx){ const adv=document.createElement("button"); adv.className="primary"; adv.textContent="→ "+nx.label; adv.style.margin="4px 8px 8px 0"; adv.onclick=()=>{ setTableState(t.id, nx.id); }; c.appendChild(adv); }
       const jump=document.createElement("div"); jump.className="opts";
       floorStates().forEach(s=>{ const b=document.createElement("button"); if(s.id===st.id) b.className="sel"; b.textContent=s.label; b.onclick=()=>setTableState(t.id, s.id); jump.appendChild(b); });
@@ -1397,6 +1409,16 @@ function renderCustomerBar(app, station){
 function renderIntake(app, station){
   if(!draft) draft = { lines:[] };
   renderCustomerBar(app, station);
+  // table selector — when a floor is configured, ring this check to a table (restaurants)
+  if(FLOW.floor && (FLOW.floor.tables||[]).length){
+    const tb=document.createElement("div"); tb.className="card"; tb.style.cssText="padding:8px 10px;margin-bottom:10px";
+    const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="8px"; lbl.textContent="🍽 Table:"; tb.appendChild(lbl);
+    const opts=document.createElement("div"); opts.className="opts"; opts.style.display="inline-flex"; opts.style.flexWrap="wrap";
+    (FLOW.floor.tables||[]).forEach(t=>{ const b=document.createElement("button"); const open=tableOpenTotal(t.id); if(draft.tableId===t.id) b.className="sel";
+      b.textContent=(t.label||t.id)+(open>0.0001?" · "+money(open):""); b.onclick=()=>{ draft.tableId=(draft.tableId===t.id?null:t.id); render(); }; opts.appendChild(b); });
+    const none=document.createElement("button"); if(!draft.tableId) none.className="sel"; none.textContent="No table"; none.onclick=()=>{ draft.tableId=null; render(); }; opts.appendChild(none);
+    tb.appendChild(opts); app.appendChild(tb);
+  }
   const cat=document.createElement("div"); cat.innerHTML="<h2>New order</h2>";
   // search / barcode-scan box — shown for big menus or when a scanner is configured (keyboard-wedge types code + Enter)
   const tiles=[];
@@ -1537,6 +1559,8 @@ function sendDraft(){
   DB=loadDB(); DB.seq++;
   const rec={ id:"R"+DB.seq, number:DB.seq, lines:draft.lines.map(l=>({...l, stage:0})), tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now() };
   if(storesOn()) rec.storeId = storeForOrder(draft.customer);   // order belongs to a store (customer's, else this device's, else plant)
+  if(draft.tableId){ rec.tableId = draft.tableId;   // ring the check to its table; nudge an empty table to "occupied"
+    DB.tables=DB.tables||{}; const cur=DB.tables[draft.tableId]; if(!cur || cur.state==="empty" || !cur.state){ DB.tables[draft.tableId]={ state:"ordered", since:Date.now(), seatedTs:(cur&&cur.seatedTs)||Date.now() }; } }
   rec.status = allComplete(rec) ? "READY" : "INPROGRESS";
   const dep = FLOW.endpoints.payment.deposit;
   if(draft.takeDeposit && dep){ rec.tenders.push({ type:"deposit", amount:+(recordTotal(rec)*dep.pct/100).toFixed(2) }); }
@@ -1592,7 +1616,7 @@ function renderPipeline(app, station){
   const recs=DB.records.filter(r=> r.status==="INPROGRESS" && linesAtStation(r, station.id).length);
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nothing waiting."; app.appendChild(e); }
   recs.forEach(r=>{ const mine=linesAtStation(r, station.id); const c=document.createElement("div"); c.className="card";
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     let hasFlags=false, reconOk=true;
     mine.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const next=l.path[l.stage+1];
       const flagHtml=(l.flags||[]).map(f=>{ hasFlags=true; return " <span class='pill flag'>⚠ "+f+"</span>"; }).join("");
@@ -1716,7 +1740,7 @@ function renderCheckout(app, station){
   const recs=DB.records.filter(r=> r.status==="READY"||r.status==="PAID");
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No orders ready to check out."; app.appendChild(e); }
   recs.forEach(r=>{ const c=document.createElement("div"); c.className="card"; const bal=recordBalance(r);
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
     // tip UI (money-math): presets on the service subtotal, attributed to the provider
     const tipCfg=FLOW.endpoints.payment.tip;

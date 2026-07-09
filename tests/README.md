@@ -59,6 +59,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `kudos.js` | shout-outs — a worker sends a teammate a kudos from the portal; the recipient sees it on their portal and is greeted with it at clock-in |
 | `report-headline.js` | the "how today went" verdict — the report leads with one plain-language line fusing sales, gross margin, and labor % (color-coded good/watch) |
 | `roundup.js` | round up for charity — checkout offers to round the total up to the next dollar for a named cause; the donation adds to the balance and the report tallies the community total |
+| `table-check.js` | restaurant table↔check linking — a floor shows a table picker on the register, a check tags its table (🍽 chip), the floor tile shows the open-check total + occupies the table, tapping a table lists its open checks |
 | `age-check.js` | age-restricted items (gas / convenience / liquor) — a 21+/18+ item blocks payment until a photo-ID check is confirmed; unrestricted orders ring straight through |
 
 ## Running
