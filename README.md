@@ -13,9 +13,9 @@
 ---
 
 > **Status: working product, active build.** The public home of customPOS — generalized from a real,
-> in-production single-file POS running a two-location wet cleaner. A landing page, a builder wizard, six
-> ready-to-run trade templates, a full-featured engine, a sync hub, and a payments seam are all live and
-> tested (**31 browser suites, zero console errors**). Star/watch to follow along.
+> in-production single-file POS running a two-location wet cleaner. A landing page, a builder wizard, a
+> [gallery of 24 ready-to-run trade templates](docs/TEMPLATES.md), a full-featured engine, a sync hub, and a
+> payments seam are all live and tested (**77 browser suites, zero console errors**). Star/watch to follow along.
 
 ## What this is
 
@@ -85,9 +85,11 @@ staff, commission, and a booking calendar). More business types to come.
     margin** (cost of goods → real profit), **top items by sales + margin**, **busy-hours** bars to staff the
     rush, and a **win-back list** that re-invites lapsed regulars in one tap.
 - ✅ **The builder** — [`builder.html`](builder.html): pick a trade, deep-configure clickable workstations & items,
-  **download your POS** plus a generated **`CLAUDE.md`**. Seven templates (retail, café, dry cleaner, repair,
-  salon, the real **Hamburger Barn**, and a **full-service restaurant** with a floor plan) each ship with their
-  trade's features already on. Live preview.
+  **download your POS** plus a generated **`CLAUDE.md`**. A [gallery of **24 starter templates**](docs/TEMPLATES.md)
+  — retail, café, dry cleaner, repair, salon, bar, dispensary, bakery, butcher (by-weight), pizzeria, florist,
+  laundromat, tattoo studio, the real **Hamburger Barn**, a **full-service restaurant** with a floor plan, and
+  more — each ships with its trade's features already on. Many were seeded by AI personas role-playing real
+  owners; **contributing a new one is the easiest way to help.** Live preview.
 - ✅ **Payments** — a processor-agnostic interface with a simulator that works out of the box; the certified
   CardConnect/CardPointe adapter ([docs/PAYMENTS-MODULE.md](docs/PAYMENTS-MODULE.md)) swaps in on your own server.
   Onboarding a new merchant is one command: [`tools/validate-cardconnect.js`](tools/validate-cardconnect.js) runs
