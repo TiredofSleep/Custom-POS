@@ -48,14 +48,19 @@ function serve() {
   await p.getByRole('button',{name:/Add these/}).click();
   await p.getByRole('button',{name:/Continue/}).click();
 
-  // G4 people: "I have a team" -> worker suite turns on; add a waged person; pool tips
+  // G4 people: "I have a team" -> worker suite turns on; set a manager role + require refund approval; pool tips
   await p.locator('button.trade').filter({ hasText: 'I have a team' }).click();
   const teamPanel = await T();
   const teamOk = /your team/i.test(teamPanel);
-  await p.getByRole('button',{name:/pool tips by hours/}).click();   // a payment answer that changes config (off → on)
+  await p.locator('.row2 select').first().selectOption('manager');   // give the first person a manager role
+  await p.getByRole('button',{name:/require a manager\/owner to approve refunds/}).click();
+  await p.getByRole('button',{name:/pool tips by hours/}).click();
   await p.getByRole('button',{name:/Continue/}).click();
 
-  // G5 payments: café already takes cash + cards; just continue
+  // G5 payments: make sure "text customers when ready" is on (the team suite already flips it on), then edit the ready message
+  if (await p.locator('input.nm').count() === 0) await p.getByRole('button',{name:/text customers when ready/}).click();
+  const cardHint = /records a card sale/i.test(await T());   // honest 'card records only' label (café has cards on)
+  await p.locator('input.nm').last().fill('Hi {name}, your order is ready at {biz}!');
   await p.getByRole('button',{name:/Continue/}).click();
 
   // G6 deployment: several computers, then build
@@ -70,12 +75,19 @@ function serve() {
     types: (window.__build.flow.stations||[]).map(s=>s.type),
     tipPool: !!(window.__build.flow.endpoints.payment.tipPool),
     card: (window.__build.flow.endpoints.payment.tenders||[]).includes('card'),
-    items: (window.__build.flow.catalog||[]).map(i=>i.name)
+    items: (window.__build.flow.catalog||[]).map(i=>i.name),
+    role: (window.__build.flow.staff&&window.__build.flow.staff[0]||{}).role,
+    refundApproval: !!(window.__build.flow.endpoints.approvals&&window.__build.flow.endpoints.approvals.refund),
+    notify: ((window.__build.flow.endpoints.notify||{}).template)||''
   }));
   const nameOk = built.name === "Rosa's Cafe";
   // the owner's own menu made it into the downloadable POS (edited item + pasted items)
   const menuBuilt = menuOk && built.items.includes('Rosa Latte') && built.items.includes('Croissant') && built.items.includes('Cold Brew');
   const workerSuite = ['timeclock','schedule','worker'].every(t => built.types.includes(t));
+  // the deeper People/Pay answers landed in the flow: a manager role, refund-approval gate, and the edited ready-text
+  const roleOk = built.role === 'manager';
+  const approvalOk = built.refundApproval === true;
+  const notifyOk = /your order is ready/i.test(built.notify);
   const injectOk = built.html.includes('window.CUSTOMPOS_FLOW') && built.html.includes('"type":"worker"');
   const appText = await p.locator('#app').innerText();
   const ready = /your pos is ready/i.test(appText);
@@ -98,10 +110,14 @@ function serve() {
   console.log("owner's own menu (edited + pasted) is in the build:", menuBuilt);
   console.log('worker suite baked in (timeclock+schedule+worker):', workerSuite);
   console.log('tips pooled + cards enabled from answers:', built.tipPool && built.card);
+  console.log('manager role set on first teammate:', roleOk);
+  console.log('refund-approval gate turned on:', approvalOk);
+  console.log('honest "card records a sale" hint shown:', cardHint);
+  console.log('edited ready-text carried into the build:', notifyOk);
   console.log('downloadable POS inlines the flow (worker station):', injectOk);
   console.log('lands on the ready-to-download screen:', ready);
   console.log('deployment answer produces run-it guidance on screen:', runGuidance);
   console.log('CLAUDE.md carries the run-it guidance:', mdGuidance);
   console.log('console errors:', errors.length?errors:'NONE');
-  process.exit(errors.length||!startedOk||!deepLinkOk||!menuBuilt||!teamOk||!nameOk||!workerSuite||!(built.tipPool&&built.card)||!injectOk||!ready||!runGuidance||!mdGuidance?1:0);
+  process.exit(errors.length||!startedOk||!deepLinkOk||!menuBuilt||!teamOk||!nameOk||!workerSuite||!(built.tipPool&&built.card)||!injectOk||!ready||!runGuidance||!mdGuidance||!roleOk||!approvalOk||!cardHint||!notifyOk?1:0);
 })().catch(e=>{ console.error('FATAL',e); process.exit(2); });
