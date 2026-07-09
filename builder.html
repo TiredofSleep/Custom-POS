@@ -453,7 +453,9 @@ function itemEditor(i){
     h('div',{class:'fld'},[
       h('span',{class:'flab'},['Performed by staff']), h('button',{class:it.performer?'on':'', onclick:()=>{ it.performer=!it.performer; if(!it.performer) delete it.performer; if(it.performer&&!cfg.performers) cfg.performers=["Alex","Sam"]; render(); }},[it.performer?'✓ pick a provider':'no']),
       h('span',{class:'flab'},['86 limit']), h('input',{class:'sm',type:'number',value:it.par!=null?it.par:'', placeholder:'∞', oninput:e=>{ const v=Number(e.target.value); if(e.target.value===''||v<=0) delete it.par; else it.par=v; }}),
-      h('span',{class:'flab'},['Taxable']), h('button',{class:(it.taxable!==false)?'on':'', onclick:()=>{ if(it.taxable===false) delete it.taxable; else it.taxable=false; render(); }},[(it.taxable!==false)?'✓ taxed':'tax-exempt'])
+      h('span',{class:'flab'},['Taxable']), h('button',{class:(it.taxable!==false)?'on':'', onclick:()=>{ if(it.taxable===false) delete it.taxable; else it.taxable=false; render(); }},[(it.taxable!==false)?'✓ taxed':'tax-exempt']),
+      h('span',{class:'flab'},['Age check']), h('button',{class:it.ageRestricted?'on':'', onclick:()=>{ if(it.ageRestricted) delete it.ageRestricted; else it.ageRestricted=21; render(); }},[it.ageRestricted?('✓ '+(it.ageRestricted===true?21:it.ageRestricted)+'+ ID'):'none']),
+      it.ageRestricted ? h('input',{class:'sm',type:'number',value:(it.ageRestricted===true?21:it.ageRestricted), title:'minimum age', oninput:e=>{ const v=Number(e.target.value)||21; it.ageRestricted=v; }}) : null
     ]),
     h('div',{class:'fld'},[
       h('span',{class:'flab'},['In stock']), h('input',{class:'sm',type:'number',value:it.stock!=null?it.stock:'', placeholder:'∞', oninput:e=>{ const v=e.target.value; if(v==='') delete it.stock; else it.stock=Number(v)||0; }}),

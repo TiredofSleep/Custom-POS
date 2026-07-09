@@ -54,11 +54,12 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `top-items.js` | top items — the report ranks sold items by revenue with per-item margin (when costs are known), so owners can see winners vs losers |
 | `busy-hours.js` | sales by hour — the report buckets net sales into hour bars and flags the busiest hour, so staffing can match demand |
 | `rest-break.js` | rest-break reminder — after a stretch with no break at all (restEveryHrs), the on-shift screen nudges a short breather; taking a break clears it |
-| `guided.js` | the guided setup interview — Shape → Name → People → Pay → Run, "I have a team" bakes in the worker suite (time-clock + scheduling + portal) and pooled tips, then builds a downloadable POS with the flow inlined; the `?guided` deep-link opens it directly |
+| `guided.js` | the guided setup interview — Shape → Name → **Menu (your own items, edit + paste-a-list)** → People → Pay → Run; "I have a team" bakes in the worker suite (time-clock + scheduling + portal) and pooled tips, and the owner's own catalog ships in the downloaded POS; the `?guided` deep-link opens it directly |
 | `worker-signin.js` | worker portal stay-signed-in — PIN login persists per device (survives reload), log out clears it, and unchecking "keep me signed in" makes it session-only |
 | `kudos.js` | shout-outs — a worker sends a teammate a kudos from the portal; the recipient sees it on their portal and is greeted with it at clock-in |
 | `report-headline.js` | the "how today went" verdict — the report leads with one plain-language line fusing sales, gross margin, and labor % (color-coded good/watch) |
 | `roundup.js` | round up for charity — checkout offers to round the total up to the next dollar for a named cause; the donation adds to the balance and the report tallies the community total |
+| `age-check.js` | age-restricted items (gas / convenience / liquor) — a 21+/18+ item blocks payment until a photo-ID check is confirmed; unrestricted orders ring straight through |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
