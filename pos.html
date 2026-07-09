@@ -112,7 +112,7 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.70";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.71";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
@@ -303,8 +303,15 @@ function assembledAt(r){ if(!storesOn() || !r.storeId) return ""; const p=plantS
 function lineSubtotal(r){ return r.lines.reduce((s,l)=> s + l.price*l.qty, 0); }
 function recordDiscount(r){ return Math.min(r.discount||0, lineSubtotal(r)); }
 function taxIncluded(){ return !!(FLOW.endpoints.tax && FLOW.endpoints.tax.included); }
-function recordTax(r){                                   // per-line taxable; rate from config; discount prorated
-  const rate=(FLOW.endpoints.tax&&FLOW.endpoints.tax.rate)||0; if(!rate) return 0;
+/* Tax rate for an order. Default is the shop's own (origin) rate. When FLOW.endpoints.tax.zones is configured
+   (destination-based sales tax — e.g. a delivery into another town/jurisdiction), an order tagged with a
+   taxZone is taxed at that zone's rate instead. General: delivery, a truck that parks in different towns, a
+   caterer billing the event's address. Backward-compatible — no zones ⇒ the flat rate, exactly as before. */
+function orderTaxRate(r){ const t=FLOW.endpoints.tax; if(!t) return 0;
+  if(r && r.taxZone && Array.isArray(t.zones)){ const z=t.zones.find(z=>z.name===r.taxZone); if(z) return +z.rate||0; }
+  return +t.rate||0; }
+function recordTax(r){                                   // per-line taxable; rate from the order's zone (else shop rate); discount prorated
+  const rate=orderTaxRate(r); if(!rate) return 0;
   const sub=lineSubtotal(r); if(sub<=0) return 0;
   const taxable=r.lines.filter(l=>l.taxable!==false && l.category!=="giftcard").reduce((s,l)=>s+l.price*l.qty,0);
   const eff=taxable*(sub-recordDiscount(r))/sub;                       // taxable base after prorated discount
@@ -1826,6 +1833,18 @@ function renderCheckout(app, station){
   recs.forEach(r=>{ const c=document.createElement("div"); c.className="card"; const bal=recordBalance(r);
     c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
+    // tax area (destination sales tax): for delivery, tax at the delivery address's rate, not the shop's.
+    // Shown only when tax zones are configured; "Shop" = the base (origin) rate.
+    if(FLOW.endpoints.tax && Array.isArray(FLOW.endpoints.tax.zones) && FLOW.endpoints.tax.zones.length && r.status==="READY"){
+      const wrap=document.createElement("div"); wrap.className="mgroup"; wrap.innerHTML="<div class='lbl'>Tax area <span class='muted'>(delivery destination)</span></div>";
+      const sel=document.createElement("select"); sel.style.cssText="padding:6px;min-width:180px";
+      const base=+(FLOW.endpoints.tax.rate||0);
+      const mkOpt=(val,label)=>{ const o=document.createElement("option"); o.value=val; o.textContent=label; if((r.taxZone||"")===val) o.selected=true; sel.appendChild(o); };
+      mkOpt("", "Here at the shop — "+(base*100).toFixed(2)+"%");
+      FLOW.endpoints.tax.zones.forEach(z=>mkOpt(z.name, z.name+" — "+((+z.rate||0)*100).toFixed(2)+"%"));
+      sel.onchange=()=>{ const v=sel.value; if(v) r.taxZone=v; else delete r.taxZone; logActivity("money", "tax area set to "+(v||"shop")+" ("+(orderTaxRate(r)*100).toFixed(2)+"%)", r.number); saveDB(DB); render(); };
+      wrap.appendChild(sel); c.appendChild(wrap);
+    }
     // tip UI (money-math): presets on the service subtotal, attributed to the provider
     const tipCfg=FLOW.endpoints.payment.tip;
     if(tipCfg && r.status==="READY"){
@@ -1883,7 +1902,7 @@ function renderCheckout(app, station){
     const totLine=(lab,val)=>{ const d=document.createElement("div"); d.className="line"; d.innerHTML="<span class='muted'>"+lab+"</span><span class='spacer'></span><span>"+val+"</span>"; c.appendChild(d); };
     if(disc||tax){ totLine("Subtotal", money(sub)); }
     if(disc){ totLine("Discount", "−"+money(disc)); }
-    if(tax){ totLine(taxIncluded()?"Tax (incl.)":"Tax", money(tax)); }
+    if(tax){ const hasZones=FLOW.endpoints.tax&&Array.isArray(FLOW.endpoints.tax.zones)&&FLOW.endpoints.tax.zones.length; const suffix=hasZones?(" ("+(orderTaxRate(r)*100).toFixed(2)+"%"+(r.taxZone?" · "+r.taxZone:"")+")"):""; totLine((taxIncluded()?"Tax (incl.)":"Tax")+suffix, money(tax)); }
     const t=document.createElement("div"); t.className="line"; t.innerHTML="<b>Balance</b><span class='spacer'></span><b>"+money(bal)+"</b>"; c.appendChild(t);
     if(r.status==="READY"&&bal>0.0001){ const paid=recordPaid(r);
       // age-restricted gate: if the order has 21+/18+ items, block payment until the ID is checked
