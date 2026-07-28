@@ -91,8 +91,10 @@ staff, commission, and a booking calendar). More business types to come.
   laundromat, tattoo studio, the real **Hamburger Barn**, a **full-service restaurant** with a floor plan, and
   more — each ships with its trade's features already on. Many were seeded by AI personas role-playing real
   owners; **contributing a new one is the easiest way to help.** Live preview.
-- ✅ **Payments** — a processor-agnostic interface with a simulator that works out of the box; the certified
-  CardConnect/CardPointe adapter ([docs/PAYMENTS-MODULE.md](docs/PAYMENTS-MODULE.md)) swaps in on your own server.
+- ✅ **Payments** — a processor-agnostic interface. Out of the box, with no processor connected, a card sale is
+  **recorded** on the order (books and drawer stay right) — it never fakes an approval or a card number. The
+  certified CardConnect/CardPointe adapter ([docs/PAYMENTS-MODULE.md](docs/PAYMENTS-MODULE.md)) swaps in on your
+  own server to actually charge cards.
   Onboarding a new merchant is one command: [`tools/validate-cardconnect.js`](tools/validate-cardconnect.js) runs
   the full Fiserv Integration-Validation transaction gauntlet against your UAT credentials and prints every
   retref mapped to the form's boxes (credentials come from env vars — no secrets in the repo).

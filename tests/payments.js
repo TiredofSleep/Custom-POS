@@ -17,8 +17,8 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   const hasCardButton = await p.getByRole('button',{name:/Pay by card \$22\.00/}).isVisible();
   await p.getByRole('button',{name:/Pay by card/}).click();
   const afterCard = await T();
-  // approved -> the record shows a card tender with brand + last4 (browser never saw a PAN)
-  const cardTenderShown = /💳 (Visa|Mastercard|Amex) ••\d{4}/.test(afterCard);
+  // no processor connected -> the sale is RECORDED as a card tender (honest: no fake approval, no invented PAN)
+  const cardTenderShown = /💳 Card/.test(afterCard);
   await B('Done');
   const closed = /completed today/.test(await T());
 
@@ -26,7 +26,7 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   console.log('after card:', afterCard.replace(/\n+/g,' | '));
   console.log('\n=== RESULTS ===');
   console.log('card tender offered where enabled:', hasCardButton);
-  console.log('processor-agnostic charge approves + returns brand/last4:', cardTenderShown);
+  console.log('card sale is recorded as a card tender (no fake PAN):', cardTenderShown);
   console.log('card-paid order completes:', closed);
   console.log('console errors:', errors.length?errors:'NONE');
   process.exit(errors.length||!hasCardButton||!cardTenderShown||!closed?1:0);

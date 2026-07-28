@@ -251,7 +251,8 @@ The module can be built against this blueprint with confidence.
 
 ## 8. Build order (suggested, for Phase 5)
 
-1. Ship a **simulator adapter** (no processor) so the POS works out of the box and the builder can demo checkout.
+1. Ship a **record-only adapter** (no processor) so the POS works out of the box — a card sale is *recorded* on
+   the order, never fake-approved and never given an invented card number.
 2. Add the **CardConnect adapter** above behind the engine interface.
 3. Wire the **hosted tokenizer iframe** for card-not-present, and **terminal connect + authCard** for
    card-present.
