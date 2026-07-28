@@ -112,11 +112,11 @@
    ==========================================================================*/
 
 /* ===================================== THE FLOWS ===================================== */
-const CUSTOMPOS_VERSION = "0.74";   // engine version (the builder stamps this into downloads)
+const CUSTOMPOS_VERSION = "0.75";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
   counter: {
     label:"Counter shop", topology:"linear",
-    branding:{ name:"Demo Counter", brandColor:"#1f6feb" },
+    branding:{ name:"Corner Store", brandColor:"#1f6feb" },
     endpoints:{ customer:{persist:false}, payment:{tenders:["cash"], closeGate:"balanceLE0"} },
     timer:{ mode:"aging", warnSec:300, badSec:600, label:"prep" },   // ticket ages green->yellow->red
     capacity:{ perOrderMins:4, max:3 },                              // live wait + cap on orders in the queue
@@ -138,7 +138,7 @@ let FLOWS = {
   },
   cleaners: {
     label:"Cleaners", topology:"hub-and-spoke",
-    branding:{ name:"Demo Cleaners", brandColor:"#2ea043" },
+    branding:{ name:"Sunrise Cleaners", brandColor:"#2ea043" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card","account"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}},
       notify:{ template:"Hi {name}, your order #{number} at {biz} is ready for pickup." } },
     timer:{ mode:"due", promiseSec:172800, warnSec:86400, label:"promise" },   // back-scheduled ready-by date
@@ -163,7 +163,7 @@ let FLOWS = {
   },
   repair: {   // THIRD trade — added as pure config, no engine changes: approval/waiver gate, split path, aging, deposit
     label:"Repair shop", topology:"hub-and-spoke",
-    branding:{ name:"Demo Repair", brandColor:"#e3893c" },
+    branding:{ name:"Fix-It Repair", brandColor:"#e3893c" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", points:["deposit-balance"], deposit:{pct:50}} },
     timer:{ mode:"aging", warnSec:600, badSec:1200, label:"in shop" },
     catalog:[
@@ -184,7 +184,7 @@ let FLOWS = {
   },
   salon: {   // FOURTH trade — services + per-provider commission + tips + retail, config-only
     label:"Salon", topology:"hub-and-spoke",
-    branding:{ name:"Demo Salon", brandColor:"#b06fdb" },
+    branding:{ name:"Studio Salon", brandColor:"#b06fdb" },
     endpoints:{ customer:{persist:true}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}},
       loyalty:{ earnPerDollar:1, redeemPoints:20, redeemValue:5 } },   // earn 1 pt/$1; 20 pts = $5 off
     performers:["Alex","Sam","Jordan"],
@@ -364,27 +364,26 @@ function returnLines(r, lineIds){
   saveDB(DB); render();
 }
 
-/* Processor-agnostic PAYMENTS interface (matches docs/PAYMENTS-MODULE.md). A simulator adapter ships by
-   default so a downloaded POS takes card payments out of the box; the certified CardConnect adapter swaps in
-   on the business's own server. The browser only ever sees a token + last4 + brand — never a card number. */
+/* Processor-agnostic PAYMENTS interface (matches docs/PAYMENTS-MODULE.md). By default — with no processor
+   connected — the "record" adapter simply RECORDS a card sale on the order (so the books and the drawer are
+   right); it does not contact any processor and does not invent an approval or a card number. Connect the
+   certified CardConnect adapter on your own server to actually charge cards; it swaps in by setting
+   endpoints.payment.provider. The browser only ever sees a token + last4 + brand — never a card number. */
 const PAYMENTS = {
-  sim: {
-    label:"Simulator",
-    charge(amountCents){
-      const cents=Math.round(amountCents);
-      if(cents%100===13) return { status:"declined", message:"declined (demo: any $_.13 declines)" };  // demo decline path
-      const brands=["Visa","Mastercard","Amex"];
-      return { status:"approved", ref:"SIM"+cents, auth:"OK", token:"tok_sim", brand:brands[cents%3], last4:String(cents).slice(-4).padStart(4,"0") };
-    },
-    refund(ref, amountCents){ return { status:"refunded", ref:(ref||"SIM")+"-R", amount:Math.round(amountCents) }; }
+  record: {
+    label:"Record only (no processor connected)",
+    charge(amountCents){ return { status:"approved", recorded:true, ref:"" }; },     // records the sale as card-tendered; nothing is charged
+    refund(ref, amountCents){ return { status:"refunded", recorded:true, ref:"" }; }  // records the reversal
   }
 };
-function payAdapter(){ const pr=(FLOW.endpoints.payment&&FLOW.endpoints.payment.provider)||"sim"; return PAYMENTS[pr]||PAYMENTS.sim; }
+function payAdapter(){ const pr=(FLOW.endpoints.payment&&FLOW.endpoints.payment.provider)||"record"; return PAYMENTS[pr]||PAYMENTS.record; }
+function cardLabel(t){ return t && t.brand ? ("💳 "+t.brand+" ••"+t.last4) : "💳 Card"; }   // real processor gives brand/last4; record-only just says "Card"
 
-/* NOTIFY — the same processor-agnostic shape as payments. A sim adapter records the message so a downloaded POS
-   works offline; a hub adapter (Twilio etc.) does the real send server-side. The browser never holds an API key. */
-const NOTIFY = { sim: { label:"Simulator", send(to, body){ return { status:"sent", to, body }; } } };
-function notifyAdapter(){ const pr=(FLOW.endpoints.notify&&FLOW.endpoints.notify.provider)||"sim"; return NOTIFY[pr]||NOTIFY.sim; }
+/* NOTIFY — the same processor-agnostic shape as payments. With no hub connected the "record" adapter records
+   the message so the POS works offline; a hub adapter (Twilio etc.) does the real send server-side. The
+   browser never holds an API key. */
+const NOTIFY = { record: { label:"Record only (connect a hub to send)", send(to, body){ return { status:"sent", to, body }; } } };
+function notifyAdapter(){ const pr=(FLOW.endpoints.notify&&FLOW.endpoints.notify.provider)||"record"; return NOTIFY[pr]||NOTIFY.record; }
 function composeNotify(r){
   const t=(FLOW.endpoints.notify&&FLOW.endpoints.notify.template)||"Hi {name}, your order #{number} at {biz} is ready.";
   return t.replace(/\{name\}/g, (r.customer&&r.customer.name)||"there").replace(/\{number\}/g, r.number).replace(/\{biz\}/g, FLOW.branding.name).replace(/\{status\}/g, STATUS_LABEL[r.status]||r.status).replace(/\{balance\}/g, money(Math.max(0,recordBalance(r))));
@@ -1409,13 +1408,15 @@ function renderTracker(app, station){
 }
 
 function renderPicker(app){
-  const multi = Object.keys(FLOWS).length>1;   // demo mode shows a business selector; a downloaded POS does not
-  const fs=document.createElement("div"); fs.innerHTML = multi ? "<h2>Demo business</h2>" : "<h2>"+FLOW.branding.name+"</h2>";
+  const multi = Object.keys(FLOWS).length>1;   // the try-it sandbox shows sample businesses; a downloaded POS injects one flow and shows none
+  const fs=document.createElement("div"); fs.innerHTML = multi ? "<h2>Try a sample business</h2>" : "<h2>"+FLOW.branding.name+"</h2>";
   if(multi){
     const bar=document.createElement("div"); bar.className="flowsel";
     Object.keys(FLOWS).forEach(id=>{ const b=document.createElement("button"); if(id===flowId()) b.className="sel";
       b.innerHTML=FLOWS[id].label+" <small class='muted'>("+FLOWS[id].topology+")</small>"; b.onclick=()=>setFlow(id); bar.appendChild(b); });
     fs.appendChild(bar);
+    const note=document.createElement("p"); note.className="muted"; note.style.cssText="margin:8px 0 0;font-size:13px"; note.innerHTML="These are real, working example shops — ring a sale, take payment, run the reports. When you’re ready, <a href='builder.html?guided'>build your own</a> and download it.";
+    fs.appendChild(note);
   }
   const mods=document.createElement("p"); mods.className="muted"; mods.style.margin="-8px 0 14px";
   mods.innerHTML="Modules enabled by your stations: <b>"+enabledModules(FLOW).map(m=>MODULES[m].label).join(" · ")+"</b>";
@@ -1861,7 +1862,7 @@ function receiptPanel(r){
   const rows=r.lines.map(l=>"<div class='line'><span>"+l.qty+"× "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.serialized&&l.tag?" <small class='muted'>["+(l.tagLabel||"Tag")+" "+l.tag+"]</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span></div>").join("");
   const hr="<hr style='border:none;border-top:1px dashed var(--line)'>";
   const totals=(disc||tax?line("Subtotal",money(sub)):"")+(disc?line("Discount","−"+money(disc)):"")+(tax?line(taxIncluded()?"Tax (incl.)":"Tax",money(tax)):"")+(tip?line("Tip",money(tip)):"")+line("Total",money(tot),true);
-  const tenders=(r.tenders||[]).map(t=>line(t.type==="card"?("💳 "+t.brand+" ••"+t.last4):t.type[0].toUpperCase()+t.type.slice(1), money(t.amount))).join("");
+  const tenders=(r.tenders||[]).map(t=>line(t.type==="card"?cardLabel(t):t.type[0].toUpperCase()+t.type.slice(1), money(t.amount))).join("");
   const wrap=document.createElement("div"); wrap.className="card"; wrap.style.borderColor="var(--brand)"; wrap.id="receipt";
   wrap.innerHTML="<div class='center'><b>"+FLOW.branding.name+"</b><div class='muted'>Order #"+r.number+" · "+r.createdAt+"</div></div>"+hr+rows+hr+totals+(tenders?hr+tenders:"")+"<p class='center muted' style='margin-top:8px'>Thank you!</p>";
   const pr=document.createElement("button"); pr.className="primary"; pr.textContent="Print"; pr.onclick=()=>window.print(); wrap.appendChild(pr);
@@ -1938,7 +1939,7 @@ function renderCheckout(app, station){
       if((cust.gift||0)>0 && !r.giftUsed){ const amt=Math.min(cust.gift, bal); const b=document.createElement("button"); b.textContent="Pay with gift card "+money(amt); b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"gift",amount:amt}); r.giftUsed=amt; logActivity("money", "gift card "+money(amt), r.number); saveDB(DB); render(); }; c.appendChild(b); }
       if(loy && (cust.points||0)>=loy.redeemPoints && !r.redeemPts){ const b=document.createElement("button"); b.textContent="Redeem "+loy.redeemPoints+" pts (−"+money(loy.redeemValue)+")"; b.style.margin="8px 8px 0 0"; b.onclick=()=>{ r.tenders.push({type:"loyalty",amount:loy.redeemValue}); r.redeemPts=loy.redeemPoints; logActivity("money", "redeemed "+loy.redeemPoints+" pts (−"+money(loy.redeemValue)+")", r.number); saveDB(DB); render(); }; c.appendChild(b); }
     }
-    (r.tenders||[]).filter(t=>t.type==="card").forEach(t=>{ const cl=document.createElement("div"); cl.className="line"; cl.innerHTML="<span class='muted'>💳 "+t.brand+" ••"+t.last4+"</span><span class='spacer'></span><span>"+money(t.amount)+"</span>"; c.appendChild(cl); });
+    (r.tenders||[]).filter(t=>t.type==="card").forEach(t=>{ const cl=document.createElement("div"); cl.className="line"; cl.innerHTML="<span class='muted'>"+cardLabel(t)+"</span><span class='spacer'></span><span>"+money(t.amount)+"</span>"; c.appendChild(cl); });
     // totals: subtotal / discount / tax (shown when either applies)
     const sub=lineSubtotal(r), disc=recordDiscount(r), tax=recordTax(r);
     const totLine=(lab,val)=>{ const d=document.createElement("div"); d.className="line"; d.innerHTML="<span class='muted'>"+lab+"</span><span class='spacer'></span><span>"+val+"</span>"; c.appendChild(d); };
