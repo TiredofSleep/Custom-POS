@@ -15,7 +15,8 @@
 > **Status: working product, active build.** The public home of customPOS — generalized from a real,
 > in-production single-file POS running a two-location wet cleaner. A landing page, a builder wizard, a
 > [gallery of 24 ready-to-run trade templates](docs/TEMPLATES.md), a full-featured engine, a sync hub, and a
-> payments seam are all live and tested (**77 browser suites, zero console errors**). Star/watch to follow along.
+> payments seam are all live and tested (**81 browser suites, zero console errors**). Star/watch to follow along.
+> New here? [**The road here**](docs/HISTORY.md) is the honest history + a whole-platform snapshot.
 
 ## What this is
 
