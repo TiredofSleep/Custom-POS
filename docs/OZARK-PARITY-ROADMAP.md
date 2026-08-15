@@ -1,3 +1,14 @@
+> ### 📎 THE TARGET IS NOW IN THIS REPO — [`reference/ozark-pos/`](../reference/ozark-pos/)
+>
+> This roadmap closed on 2026-07-08 having proven the plant loop from config alone, and it was measured
+> against a reference nobody outside the origin project could read. The origin app is now here in full,
+> name-free and MIT, so **"generalized enough to build exactly that" can be checked instead of asserted.**
+>
+> ⚠️ It is a reference, NOT a source to copy from — see [OZARK-REFERENCE.md](OZARK-REFERENCE.md), which maps
+> it into this repo four layers and lists what this roadmap never saw, because everything below closed in
+> July and the origin app kept going: delta sync in four phases, the mirror, hub-side stamp sanitising, a
+> shape guard at the door, a desktop shell, and backups that prove themselves weekly.
+
 # Ozark-parity roadmap — "build a full dry cleaner from a blank slate"
 
 > ✅ **STATUS: COMPLETE (2026-07-08).** All stages shipped, each verified in-browser (0 console errors) and
