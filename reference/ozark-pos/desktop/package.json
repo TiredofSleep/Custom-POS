@@ -1,0 +1,52 @@
+{
+  "name": "ozark-pos-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Thin desktop shell for the Ozark POS. It owns the MACHINE (identity, printing, one instance, restarts); the hub still owns the app.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.ozarkcleaners.pos",
+    "productName": "Ozark POS",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "*.js",
+      "!test-*.js",
+      "icon.png",
+      "icon.ico",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../print-agent.js",
+        "to": "print-agent.js"
+      },
+      {
+        "from": "../print-text.ps1",
+        "to": "print-text.ps1"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ozark POS",
+      "artifactName": "Ozark-POS-Setup.exe",
+      "runAfterFinish": true
+    }
+  }
+}

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Track Your Order — Ozark Cleaners</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/jpeg" href="ozark-mark.jpg">
+<style>
+:root{--blue:#1f5fa8;--blue-d:#16457a;--ink:#16243a;--muted:#5c6b7e;--line:#e4e9f0;--soft:#f3f7fc;--gold:#e6a92e;--ok:#2e8b57}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);background:var(--soft)}
+.top{background:linear-gradient(135deg,#1f5fa8,#16457a);color:#fff;padding:22px 16px;text-align:center}
+.top img{height:54px;width:54px;border-radius:13px;object-fit:cover;background:#fff;padding:3px;vertical-align:middle}
+.top h1{font-size:22px;margin:12px 0 2px}
+.top p{margin:0;opacity:.9;font-size:14px}
+.wrap{max-width:680px;margin:0 auto;padding:18px 16px 60px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 4px 16px rgba(22,69,122,.05)}
+label{display:block;font-weight:700;font-size:14px;margin:10px 0 4px}
+input{width:100%;padding:13px;font-size:16px;border:1.5px solid var(--line);border-radius:10px}
+input:focus{outline:none;border-color:var(--blue)}
+.btn{width:100%;margin-top:14px;background:var(--gold);color:#3a2a00;border:0;border-radius:999px;padding:14px;font-size:16px;font-weight:800;cursor:pointer}
+.btn:active{transform:translateY(1px)}
+.muted{color:var(--muted)}
+.ordhead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.ordnum{font-weight:800;font-size:18px;color:var(--blue-d)}
+.badge{display:inline-block;border-radius:999px;padding:4px 12px;font-size:13px;font-weight:800;background:var(--soft);color:var(--blue-d)}
+.badge.ready{background:#e3f5ea;color:var(--ok)}
+.badge.picked{background:#eef1f5;color:var(--muted)}
+.meta{color:var(--muted);font-size:13px;margin:4px 0 0}
+.item{border-top:1px solid var(--line);padding:12px 0}
+.item:last-child{padding-bottom:0}
+.item .nm{font-weight:700}
+.item .price{float:right;color:var(--ink)}
+.item .d{color:var(--muted);font-size:14px;margin-top:2px}
+.cond{margin-top:6px;font-size:13px}
+.cond .pill{display:inline-block;background:#fff7e6;border:1px solid #f0d9a8;border-radius:8px;padding:3px 8px;margin:3px 6px 0 0}
+.cond .pill.no{background:#fdecec;border-color:#f3c4c4;color:#b23}
+.photos{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.photos img{height:72px;width:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer}
+.total{border-top:2px solid var(--line);margin-top:10px;padding-top:8px;display:flex;justify-content:space-between;font-weight:800}
+.note{font-size:13px;color:var(--muted);margin-top:6px}
+#msg{text-align:center;padding:18px;color:var(--muted)}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.lightbox img{max-width:100%;max-height:100%;border-radius:10px}
+.foot{text-align:center;color:var(--muted);font-size:13px;margin-top:18px}
+.foot a{color:var(--blue);text-decoration:none;font-weight:700}
+</style>
+</head>
+<body>
+<div class="top">
+  <img src="ozark-mark.jpg" alt="Ozark Cleaners">
+  <h1>Track Your Order</h1>
+  <p>See your items, status, and what's ready.</p>
+</div>
+<div class="wrap">
+  <div class="card">
+    <form id="f" onsubmit="return lookup(event)">
+      <label for="nm">Your name</label>
+      <input id="nm" autocomplete="name" placeholder="First or last name" required>
+      <label for="ph">Phone number</label>
+      <input id="ph" inputmode="tel" autocomplete="tel" placeholder="(501) 555-0123" required>
+      <button class="btn" type="submit">Find my order</button>
+    </form>
+  </div>
+  <div id="results"></div>
+  <div id="msg"></div>
+  <div class="foot">Questions? Call <a href="tel:+18705550032">(870) 555-0032</a> (Arkadelphia) or <a href="tel:+15015550030">(501) 555-0030</a> (Hot Springs).</div>
+</div>
+<div class="lightbox" id="lb" onclick="this.style.display='none'"><img id="lbimg" alt=""></div>
+<script>
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function money(n){ return '$'+(Number(n)||0).toFixed(2); }
+function dt(ms){ if(!ms) return ''; try{ return new Date(ms).toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'}); }catch(e){ return ''; } }
+function show(src){ document.getElementById('lbimg').src=src; document.getElementById('lb').style.display='flex'; }
+function lookup(ev){ ev.preventDefault();
+  var nm=document.getElementById('nm').value.trim(), ph=document.getElementById('ph').value.trim();
+  var R=document.getElementById('results'), M=document.getElementById('msg');
+  R.innerHTML=''; M.textContent='Looking up your order...';
+  fetch('/api/track?name='+encodeURIComponent(nm)+'&phone='+encodeURIComponent(ph))
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      if(!j.found || !j.orders || !j.orders.length){ M.innerHTML='We couldn\'t find an order under that name and phone. Double-check the spelling, or give us a call.'; return; }
+      M.textContent='';
+      var h='<p class="muted" style="margin:4px 2px 12px">Hi '+esc(j.name)+' — here\'s what we have:</p>';
+      j.orders.forEach(function(o){
+        var sl=esc(o.statusLabel||''); var cls = /ready/i.test(sl)?'ready':(/picked/i.test(sl)?'picked':'');
+        h+='<div class="card"><div class="ordhead"><div><span class="ordnum">#'+esc(o.number)+'</span><div class="meta">'+esc(o.store)+(o.droppedOff?' &middot; dropped off '+dt(o.droppedOff):'')+(o.promise?' &middot; ready by '+esc(o.promise):'')+'</div></div><span class="badge '+cls+'">'+sl+'</span></div>';
+        (o.items||[]).forEach(function(it){
+          h+='<div class="item"><div><span class="nm">'+esc(it.item)+'</span><span class="price">'+money(it.price)+'</span></div>';
+          var d=[it.desc,it.note].filter(Boolean).join(' &middot; '); if(d) h+='<div class="d">'+esc(d)+'</div>';
+          if(it.condition&&it.condition.length){ h+='<div class="cond">'; it.condition.forEach(function(s){ h+='<span class="pill'+(s.notRemoved?' no':'')+'">'+(s.notRemoved?'could not fully remove: ':'noted: ')+esc(s.note)+'</span>'; }); h+='</div>'; }
+          if(it.photos&&it.photos.length){ h+='<div class="photos">'; it.photos.forEach(function(p){ h+='<img src="'+esc(p)+'" onclick="show(this.src)" alt="item photo">'; }); h+='</div>'; }
+          h+='</div>';
+        });
+        h+='<div class="total"><span>Total</span><span>'+money(o.total)+'</span></div>';
+        if(/ready/i.test(sl)) h+='<div class="note">Ready for pickup! Come on by.</div>';
+        else if(!/picked/i.test(sl)) h+='<div class="note">We\'ll text you when it\'s ready.</div>';
+        h+='</div>';
+      });
+      R.innerHTML=h;
+    })
+    .catch(function(){ M.textContent='Something went wrong. Please try again in a moment.'; });
+  return false;
+}
+</script>
+</body>
+</html>
