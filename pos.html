@@ -259,7 +259,19 @@ function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{reco
 const SYNC = {
   url(){ try{ const q=new URL(location.href).searchParams.get("hub"); return q || (typeof window!=="undefined"&&window.CUSTOMPOS_HUB) || localStorage.getItem("custompos_hub") || ""; }catch(e){ return ""; } },
   get on(){ return !!this.url(); }, applying:false, rev:0,   // rev = the last hub revision this device holds
-  push(){ if(!this.on) return; try{ fetch(this.url().replace(/\/$/,"")+"/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({db:loadDB()})}).then(r=>r.json()).then(j=>this.applyRemote(j.db, j.rev)).catch(()=>{}); }catch(e){} },
+  // DELTA PUSH (Stage B2): send only the records/customers whose content differs from what the hub last
+  // confirmed it holds (`_pushed` = the hub's known copy, refreshed from every hub response). Ringing one
+  // order uploads one record, not the whole shop; an idle save uploads nothing (skips the request entirely).
+  // Safe because the hub upserts and absence never deletes — a partial push can't drop what it omits.
+  _pushed:{}, _pushedSeq:0, _sig(r){ return JSON.stringify(r); },
+  push(){ if(!this.on) return;
+    const db=loadDB();
+    const recs =(db.records  ||[]).filter(r=>this._pushed["r:"+r.id]   !==this._sig(r));
+    const custs=(db.customers||[]).filter(c=>this._pushed["c:"+c.phone]!==this._sig(c));
+    const seqMoved=(db.seq||0)>(this._pushedSeq||0);
+    if(!recs.length && !custs.length && !seqMoved) return;   // nothing moved since the hub last confirmed
+    const payload={ records:recs, customers:custs, seq:db.seq||0 };
+    try{ fetch(this.url().replace(/\/$/,"")+"/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({db:payload})}).then(r=>r.json()).then(j=>this.applyRemote(j.db, j.rev)).catch(()=>{}); }catch(e){} },
   // DELTA PULL (Stage B1): ask only for what moved since the rev we hold. A fresh device (rev 0) gets the
   // whole set; a caught-up device gets a few KB. The hub answers {db:{records,customers,seq}, rev, delta?}.
   pull(){ if(!this.on) return; try{ fetch(this.url().replace(/\/$/,"")+"/api/db?since="+(this.rev||0)).then(r=>r.json()).then(j=>this.applyRemote(j.db, j.rev)).catch(()=>{}); }catch(e){} },
@@ -272,6 +284,10 @@ const SYNC = {
     local.records   = syncMergeArr(local.records||[],   db.records||[],   "id",    true);
     local.customers = syncMergeArr(local.customers||[], db.customers||[], "phone", false);
     local.seq = Math.max(local.seq||0, db.seq||0);
+    // remember exactly what the hub reported it holds, so the next push sends only genuinely-newer local edits
+    (db.records  ||[]).forEach(r=>{ this._pushed["r:"+r.id]   =this._sig(r); });
+    (db.customers||[]).forEach(c=>{ this._pushed["c:"+c.phone]=this._sig(c); });
+    this._pushedSeq=Math.max(this._pushedSeq||0, db.seq||0);
     if(typeof rev==="number") this.rev = Math.max(this.rev||0, rev);
     this.applying=true; try{ localStorage.setItem(dkey(), JSON.stringify(local)); }catch(e){} this.applying=false;
     DB=loadDB(); render(); }
