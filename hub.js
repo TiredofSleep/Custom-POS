@@ -240,6 +240,13 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url === '/api/health') { res.setHeader('Content-Type','application/json'); return res.end(JSON.stringify({ ok:true, rev:DB.rev||0, records:(DB.records||[]).length })); }
+  if (url === '/api/crash' && req.method === 'POST') {           // D4 — crash reports land OUTSIDE the synced DB
+    let body=''; req.on('data', d=>{ body+=d; if(body.length>256e3) req.destroy(); });
+    req.on('end', () => { try { const c=JSON.parse(body||'{}'); fs.mkdirSync(DATA_DIR,{recursive:true});
+        fs.appendFileSync(path.join(DATA_DIR,'crash-log.jsonl'), JSON.stringify({ ...c, seenAt:Date.now() })+'\n'); }catch(e){}
+      res.setHeader('Content-Type','application/json'); res.end('{"ok":true}'); });
+    return;
+  }
   if (url.startsWith('/api/blob/') && req.method === 'GET') {          // serve an externalized image by its cpblob ref
     const name = path.basename(decodeURIComponent(url.slice('/api/blob/'.length)));   // basename -> no path traversal
     if (!/^[0-9a-f]{64}\.[a-z0-9]{1,8}$/.test(name)) { res.statusCode = 400; return res.end('bad blob ref'); }

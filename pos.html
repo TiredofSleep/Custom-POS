@@ -90,6 +90,39 @@
 <main id="app"></main>
 
 <script>
+/* ===== CRASH REPORTER (Stage D4) — installed FIRST so a fault during startup (the one you most need to see)
+   is captured, not lost. A dead station is silent otherwise: a shell whose page threw on load shows a blank
+   screen and the driver just says "it's broken." We capture window.onerror + unhandledrejection, DEDUPE by
+   fault signature (a render that throws 400× on a poll is ONE fault, not 400), CAP per page-load, and batch to
+   a hub endpoint OUTSIDE the synced DB (a crash log must never ride the merge — it would sync a fault to every
+   station). A re-entrancy guard (finally-cleared) means the reporter can never crash inside its own handler. */
+var CRASH = (function(){
+  var seen = {}, queue = [], sent = 0, CAP = 25, reporting = false;
+  function sig(e){ return [ (e && e.message) || e, (e && e.source) || '', (e && e.line) || '', (e && e.col) || '' ].join('|'); }
+  function hubUrl(){ try{ var q=new URL(location.href).searchParams.get('hub'); return q || (typeof window!=='undefined'&&window.CUSTOMPOS_HUB) || localStorage.getItem('custompos_hub') || ''; }catch(_){ return ''; } }
+  function record(e){
+    if (reporting) return;                       // never re-enter (a throw inside here would loop)
+    reporting = true;
+    try {
+      var s = sig(e);
+      if (seen[s]) { seen[s].n++; return; }       // same fault again -> just count it, don't re-queue
+      if (sent >= CAP) return;                     // a storm is one event, not a flood of reports
+      seen[s] = { n:1 };
+      var rec = { sig:s, message:(e&&e.message)||String(e), source:(e&&e.source)||'', line:(e&&e.line)||0, col:(e&&e.col)||0,
+                  stack:(e&&e.error&&e.error.stack)||'', ts:Date.now(), ua:(navigator&&navigator.userAgent)||'', url:location.href };
+      queue.push(rec); sent++;
+      var hub = hubUrl();
+      if (hub) { try { fetch(hub.replace(/\/$/,'')+'/api/crash', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(rec), keepalive:true }).catch(function(){}); } catch(_){} }
+    } catch(_) { /* the reporter must never throw */ }
+    finally { reporting = false; }               // ALWAYS clear the guard, even if record() threw
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('error', function(ev){ record({ message:ev.message, source:ev.filename, line:ev.lineno, col:ev.colno, error:ev.error }); });
+    window.addEventListener('unhandledrejection', function(ev){ var r=ev&&ev.reason; record({ message:'unhandledrejection: '+((r&&r.message)||r), error:r }); });
+  }
+  return { record:record, queue:function(){ return queue.slice(); }, count:function(){ return sent; }, distinct:function(){ return Object.keys(seen).length; },
+           _reset:function(){ seen={}; queue=[]; sent=0; reporting=false; } };
+})();
 /* ============================================================================
    customPOS ENGINE — MAP (search these banners to jump between sections)
    ----------------------------------------------------------------------------
