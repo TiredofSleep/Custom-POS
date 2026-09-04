@@ -160,10 +160,48 @@ function stampSanitize(incoming, now){
   return incoming;
 }
 
+/* C3 — BLOB GUARD at the door. A signature or garment photo pasted into a record as an inline `data:image`
+   base64 URI bloats every sync forever — it rides in the record on each push, each pull, each backup, each log
+   line. Externalize it HERE: write the bytes to content-addressed storage (named by their SHA-256, so the SAME
+   image is ONE file no matter how many records or devices carry it) and replace the field with a short `cpblob:`
+   reference. Converted, never rejected — the picture is preserved and served from /api/blob, the synced DB just
+   stops carrying megabytes of base64. */
+const crypto = require('crypto');
+const BLOB_DIR = path.join(DATA_DIR, 'blobs');
+const DATA_IMG = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/;
+function blobStore(dataUri){
+  const m = DATA_IMG.exec(dataUri); if (!m) return null;
+  const buf = Buffer.from(m[2].replace(/\s+/g,''), 'base64');
+  const hash = crypto.createHash('sha256').update(buf).digest('hex');
+  const ext = (m[1].split('/')[1] || 'bin').replace(/[^a-z0-9]/gi,'').slice(0,8);
+  const file = path.join(BLOB_DIR, hash + '.' + ext);
+  try { fs.mkdirSync(BLOB_DIR, { recursive:true }); if (!fs.existsSync(file)) fs.writeFileSync(file, buf); } catch (e) {}
+  return 'cpblob:' + hash + '.' + ext;                 // content-addressed: identical bytes -> identical ref -> one file
+}
+function walkBlobs(node, count){
+  if (Array.isArray(node)){
+    for (let i=0;i<node.length;i++){ const v=node[i];
+      if (typeof v==='string' && v.slice(0,11)==='data:image/'){ const ref=blobStore(v); if(ref){ node[i]=ref; count(); } }
+      else if (v && typeof v==='object') walkBlobs(v, count); }
+  } else if (node && typeof node==='object'){
+    for (const k in node){ if(!Object.prototype.hasOwnProperty.call(node,k)) continue; const v=node[k];
+      if (typeof v==='string' && v.slice(0,11)==='data:image/'){ const ref=blobStore(v); if(ref){ node[k]=ref; count(); } }
+      else if (v && typeof v==='object') walkBlobs(v, count); }
+  }
+}
+function blobGuard(incoming){
+  if (!incoming || typeof incoming !== 'object') return incoming;
+  let n=0; const c=()=>n++;
+  walkBlobs(incoming.records, c); walkBlobs(incoming.customers, c);
+  if (n) console.error('blobGuard: externalized '+n+' inline image(s) to content-addressed storage');
+  return incoming;
+}
+
 // merge + record durably. The server calls this; `merge` stays pure so tests can drive it without side effects.
 function commit(store, incoming){
   incoming = shapeGuard(incoming);          // repair shape at the door, before the merge ever sees it
   incoming = stampSanitize(incoming);       // clamp future stamps / drop future tombstones, also at the door
+  incoming = blobGuard(incoming);           // externalize inline images so the synced DB never carries base64
   const before = store.rev || 0;
   store = merge(store, incoming);
   const after = store.rev || 0;
@@ -202,6 +240,16 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url === '/api/health') { res.setHeader('Content-Type','application/json'); return res.end(JSON.stringify({ ok:true, rev:DB.rev||0, records:(DB.records||[]).length })); }
+  if (url.startsWith('/api/blob/') && req.method === 'GET') {          // serve an externalized image by its cpblob ref
+    const name = path.basename(decodeURIComponent(url.slice('/api/blob/'.length)));   // basename -> no path traversal
+    if (!/^[0-9a-f]{64}\.[a-z0-9]{1,8}$/.test(name)) { res.statusCode = 400; return res.end('bad blob ref'); }
+    return fs.readFile(path.join(BLOB_DIR, name), (e, buf) => {
+      if (e) { res.statusCode = 404; return res.end('not found'); }
+      res.setHeader('Content-Type', TYPES['.'+name.split('.').pop()] || 'application/octet-stream');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');   // content-addressed -> never changes
+      res.end(buf);
+    });
+  }
   if (url === '/favicon.ico') { res.statusCode = 204; return res.end(); }
 
   // static files
@@ -217,4 +265,4 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`customPOS hub on http://localhost:${PORT}  (data: ${DATA})`));
 }
-module.exports = { server, merge, mergeArr, commit, shapeGuard, stampSanitize, deltaSince, stampNewer, stampScale, hlcNow, LOG, ckptPath, DATA_DIR };
+module.exports = { server, merge, mergeArr, commit, shapeGuard, stampSanitize, blobGuard, deltaSince, stampNewer, stampScale, hlcNow, LOG, ckptPath, DATA_DIR, BLOB_DIR };
