@@ -21,9 +21,10 @@
 ---
 
 ## Stage A — The sync contract (the foundation; everything stands on it)
-- [ ] **A1 · One clock + one comparison.** `hlcNow()` hybrid logical clock (`ms*1000+counter`); `stampNewer(a,b)` the single winner-picking function. Handle two-clocks-on-one-number-line: promote a bare-ms stamp at read time so a hybrid stamp doesn't beat a ms stamp by 1000×. *Test:* a 6-day-old ms stamp must NOT beat today's hybrid stamp; a genuinely newer edit wins; a tie goes to the newcomer consistently in app AND hub.
-- [ ] **A2 · Tombstones — absence is never a delete.** A delete writes a tombstone `{c,k,t}`; the merge keeps any record merely omitted from a payload; only a tombstone removes; tombstones propagate cross-device and are permanent. Engine merge + hub merge. *Test:* a stale push that omits records does not wipe them; a real delete (tombstone) propagates and stays deleted.
-- [ ] **A3 · One-way status law, server-side too.** Orders only advance through their lifecycle; the hub enforces it on merge, not just the client. *Test:* a stale device cannot roll a PAID/RACKED order backward through the hub.
+- [x] **A1 · One clock + one comparison — HUB DONE** (`hub.js`: `hlcNow`/`stampScale`/`stampNewer`, exported; `tests/sync-contract.js` incl. the mixed-scale negative control). ↳ *engine wiring pending:* stamp with `hlcNow()` instead of `Date.now()`.
+- [x] **A2 · Tombstones — absence is never a delete — HUB DONE** (the store is the merge base; a `deleted:true` record competes by `stampNewer`; omitted records kept; customers now stamp-guarded). ↳ *engine wiring pending:* delete → write a tombstone; filter `deleted` on read.
+- [x] **A3 · One-way status law, server-side too — HUB DONE** (`ORDER_RANK` floor in `mergeArr(advanceOnly)`: a lying stamp can't roll PAID→INPROGRESS; a refund still advances). Shipped `f235e7d` + this commit.
+- [ ] **A-engine · wire the engine to the contract** — `hlcNow()` stamping, delete-as-tombstone, filter `deleted` on read, so the contract is live end-to-end in a downloaded POS (currently the hub enforces it; the engine doesn't yet delete-as-tombstone).
 
 ## Stage B — Delta sync (stop shipping the whole DB)
 - [ ] **B1 · `deltaSince(rev)`** — the hub serves only records changed since a revision; devices pull deltas. *Test:* a device on rev N receives only what moved, not the whole DB; a fresh device still bootstraps fully.

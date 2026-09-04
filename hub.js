@@ -55,19 +55,30 @@ function stampNewer(a, b){ return stampScale(a) >= stampScale(b); }           //
 let _hlc = 0;
 function hlcNow(){ _hlc = Math.max(Date.now() * 1000, _hlc + 1); return _hlc; }  // monotonic; survives a wall-clock step-back
 
+// Law 3 — orders only ADVANCE. An order's lifecycle runs one way; a backward status is never legitimate, so
+// even a stamp that lies (the 8/03 mass-restamp that flipped 10 PAID orders to unpaid) cannot roll it back.
+// The stamp still picks WHOSE fields win; this floor only forbids the status itself from going below what's
+// already known. Records with no ranked status (customers, drafts) are untouched.
+const ORDER_RANK = { INPROGRESS:1, READY:2, PAID:3, CLOSED:4, REFUNDED:5 };
+
 // upsert incoming into a COPY of the base keyed by `key`; the base is authoritative for what's present
-// (absence never deletes); a record — real or tombstone — replaces only when stampNewer says so.
-function mergeArr(base, incoming, key){
+// (absence never deletes); a record — real or tombstone — replaces only when stampNewer says so. When
+// `advanceOnly` is set, a winning record's status can never fall below the status the base already held.
+function mergeArr(base, incoming, key, advanceOnly){
   const by = new Map((base || []).map(r => [r[key], r]));
   (incoming || []).forEach(r => {
     const prev = by.get(r[key]);
-    if (!prev || stampNewer(r.upd, prev.upd)) by.set(r[key], r);
+    let win = (!prev || stampNewer(r.upd, prev.upd)) ? r : prev;
+    if (advanceOnly && prev && ORDER_RANK[prev.status] > (ORDER_RANK[win.status] || 0)) {
+      win = { ...win, status: prev.status };   // one-way law: a stale stamp cannot roll an order backward
+    }
+    by.set(r[key], win);
   });
   return [...by.values()];
 }
 function merge(store, incoming){
   if (!incoming) return store;
-  store.records   = mergeArr(store.records   || [], incoming.records   || [], 'id');
+  store.records   = mergeArr(store.records   || [], incoming.records   || [], 'id', true);
   store.customers = mergeArr(store.customers || [], incoming.customers || [], 'phone');
   store.seq = Math.max(store.seq || 0, incoming.seq || 0);
   return store;
