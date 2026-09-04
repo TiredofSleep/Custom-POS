@@ -36,6 +36,16 @@ let s = { records:[], customers:[{phone:'111',name:'New',upd:200}], seq:0 };
 merge(s, { customers:[{phone:'111',name:'Stale',upd:150}] });        // a stale customer edit
 assert('a stale customer edit cannot clobber a newer one', s.customers.find(c=>c.phone==='111').name==='New');
 
+// ---- Law 3: orders only ADVANCE (the 8/03 rollback that flipped 10 PAID orders to unpaid) ----
+let o = { records:[{id:'O1',status:'PAID',total:20,upd:100}], customers:[], seq:1 };
+merge(o, { records:[{id:'O1',status:'INPROGRESS',total:20,upd:999}], seq:1 });   // a LYING newer stamp
+assert('a stale stamp cannot roll a PAID order back to INPROGRESS', o.records[0].status==='PAID');
+merge(o, { records:[{id:'O1',status:'REFUNDED',total:20,upd:1000}], seq:1 });    // a legit refund
+assert('a refund still ADVANCES past PAID (the law is a floor, not a freeze)', o.records[0].status==='REFUNDED');
+let o2 = { records:[{id:'O2',status:'INPROGRESS',upd:100}], customers:[], seq:1 };
+merge(o2, { records:[{id:'O2',status:'READY',upd:200}], seq:1 });                 // ordinary forward step
+assert('an ordinary forward step (INPROGRESS -> READY) is unaffected', o2.records[0].status==='READY');
+
 // ---- the clock itself ----
 assert('hlcNow is monotonic even called in a tight loop', (()=>{ let a=hlcNow(),b=hlcNow(),c=hlcNow(); return b>a && c>b; })());
 
