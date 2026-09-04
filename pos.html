@@ -263,11 +263,20 @@ const SYNC = {
   pull(){ if(!this.on) return; try{ fetch(this.url().replace(/\/$/,"")+"/api/db").then(r=>r.json()).then(j=>this.adopt(j.db)).catch(()=>{}); }catch(e){} },
   adopt(db){ if(!db) return; this.applying=true; try{ localStorage.setItem(dkey(), JSON.stringify(db)); }catch(e){} this.applying=false; render(); }
 };
+/* SYNC CLOCK — the same monotonic hybrid clock + comparison the hub uses (hub.js). ⚠️ Keep these three
+   IDENTICAL in both places; tests/engine-clock.js fails if they drift. A station's wall clock can be wrong
+   (a dead CMOS battery is a real shop scenario): hlcNow() never goes backward, so an edit made on a slow
+   clock still supersedes the copy it replaces, and stampScale/stampNewer rank a bare-ms and a hybrid stamp
+   on one number line without the 1000x error. */
+let _hlc=0;
+function hlcNow(){ _hlc=Math.max(Date.now()*1000, _hlc+1); return _hlc; }
+function stampScale(t){ t=+t||0; return t<1e15 ? t*1000 : t; }
+function stampNewer(a,b){ return stampScale(a)>=stampScale(b); }
 function saveDB(db){
   // stamp a modification time on any record whose content changed, so hub merge keeps the newer copy
   try{ const prev=JSON.parse(localStorage.getItem(dkey())||"{}"); const norm=r=>JSON.stringify({...r, upd:0});
     const was=new Map((prev.records||[]).map(r=>[r.id, norm(r)]));
-    (db.records||[]).forEach(r=>{ if(was.get(r.id)!==norm(r)) r.upd=Date.now(); });
+    (db.records||[]).forEach(r=>{ if(was.get(r.id)!==norm(r)) r.upd=hlcNow(); });
   }catch(e){}
   localStorage.setItem(dkey(), JSON.stringify(db)); if(SYNC.on && !SYNC.applying) SYNC.push();
 }
