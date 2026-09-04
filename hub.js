@@ -36,20 +36,39 @@ const TYPES = { '.html':'text/html', '.js':'text/javascript', '.md':'text/markdo
 function load(){ try { return JSON.parse(fs.readFileSync(DATA, 'utf8')); } catch (e) { return { records:[], seq:0, customers:[] }; } }
 function save(db){ try { fs.mkdirSync(path.dirname(DATA), { recursive:true }); fs.writeFileSync(DATA, JSON.stringify(db)); } catch (e) {} }
 
-// union merge: incoming records upsert by id (version-aware last-write-wins); seq = max; customers upsert by phone
+/* ===== SYNC CONTRACT v1 — generalized from the Ozark reference (docs/PHASE-2-SUBSTRATE.md, Stage A) =====
+   The three laws a multi-station POS (a cleaner with a counter, a plant and a van) cannot run without:
+
+   1. ONE comparison, scale-aware. `upd` can hold TWO clock scales on one number line — a legacy bare-
+      millisecond stamp (~1.7e12) and a hybrid logical stamp (~1.7e15, ms*1000+counter). A bare `>=` lets a
+      six-day-old write beat today's by a factor of 1000. `stampScale` promotes a bare-ms stamp; `stampNewer`
+      is the ONLY winner-picker, and a tie goes to the newcomer — BOTH sides symmetric (a strict rule is the
+      rollback bug the reference calls out).
+   2. ABSENCE IS NEVER A DELETE. A record merely missing from a push is KEPT — the store is the base of the
+      merge, incoming only upserts. Only a TOMBSTONE (`deleted:true`, itself a stamped record) removes, so it
+      wins or loses by the same rule: a newer real edit re-creates, a newer tombstone deletes. Tombstones are
+      never physically dropped — that is what makes a delete propagate instead of resurrecting on the next pull.
+   3. (next unit — Stage A3) orders only ADVANCE: the one-way status law, enforced on the hub too. */
+const HLC_SCALE = 1e15;
+function stampScale(t){ t = +t || 0; return t < HLC_SCALE ? t * 1000 : t; }   // bare-ms -> hybrid magnitude
+function stampNewer(a, b){ return stampScale(a) >= stampScale(b); }           // ties -> the newcomer (a)
+let _hlc = 0;
+function hlcNow(){ _hlc = Math.max(Date.now() * 1000, _hlc + 1); return _hlc; }  // monotonic; survives a wall-clock step-back
+
+// upsert incoming into a COPY of the base keyed by `key`; the base is authoritative for what's present
+// (absence never deletes); a record — real or tombstone — replaces only when stampNewer says so.
+function mergeArr(base, incoming, key){
+  const by = new Map((base || []).map(r => [r[key], r]));
+  (incoming || []).forEach(r => {
+    const prev = by.get(r[key]);
+    if (!prev || stampNewer(r.upd, prev.upd)) by.set(r[key], r);
+  });
+  return [...by.values()];
+}
 function merge(store, incoming){
   if (!incoming) return store;
-  store.records = store.records || []; store.customers = store.customers || [];
-  const byId = new Map(store.records.map(r => [r.id, r]));
-  (incoming.records || []).forEach(r => {
-    const cur = byId.get(r.id);
-    // keep the newer copy by modification stamp; ties / missing stamps keep the incoming write
-    if (!cur || (r.upd || 0) >= (cur.upd || 0)) byId.set(r.id, r);
-  });
-  store.records = [...byId.values()];
-  const byPhone = new Map(store.customers.map(c => [c.phone, c]));
-  (incoming.customers || []).forEach(c => byPhone.set(c.phone, c));
-  store.customers = [...byPhone.values()];
+  store.records   = mergeArr(store.records   || [], incoming.records   || [], 'id');
+  store.customers = mergeArr(store.customers || [], incoming.customers || [], 'phone');
   store.seq = Math.max(store.seq || 0, incoming.seq || 0);
   return store;
 }
@@ -93,4 +112,4 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`customPOS hub on http://localhost:${PORT}  (data: ${DATA})`));
 }
-module.exports = { server, merge };
+module.exports = { server, merge, mergeArr, stampNewer, stampScale, hlcNow };
