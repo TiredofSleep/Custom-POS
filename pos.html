@@ -258,10 +258,23 @@ function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{reco
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
   url(){ try{ const q=new URL(location.href).searchParams.get("hub"); return q || (typeof window!=="undefined"&&window.CUSTOMPOS_HUB) || localStorage.getItem("custompos_hub") || ""; }catch(e){ return ""; } },
-  get on(){ return !!this.url(); }, applying:false,
-  push(){ if(!this.on) return; try{ fetch(this.url().replace(/\/$/,"")+"/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({db:loadDB()})}).then(r=>r.json()).then(j=>this.adopt(j.db)).catch(()=>{}); }catch(e){} },
-  pull(){ if(!this.on) return; try{ fetch(this.url().replace(/\/$/,"")+"/api/db").then(r=>r.json()).then(j=>this.adopt(j.db)).catch(()=>{}); }catch(e){} },
-  adopt(db){ if(!db) return; this.applying=true; try{ localStorage.setItem(dkey(), JSON.stringify(db)); }catch(e){} this.applying=false; render(); }
+  get on(){ return !!this.url(); }, applying:false, rev:0,   // rev = the last hub revision this device holds
+  push(){ if(!this.on) return; try{ fetch(this.url().replace(/\/$/,"")+"/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({db:loadDB()})}).then(r=>r.json()).then(j=>this.applyRemote(j.db, j.rev)).catch(()=>{}); }catch(e){} },
+  // DELTA PULL (Stage B1): ask only for what moved since the rev we hold. A fresh device (rev 0) gets the
+  // whole set; a caught-up device gets a few KB. The hub answers {db:{records,customers,seq}, rev, delta?}.
+  pull(){ if(!this.on) return; try{ fetch(this.url().replace(/\/$/,"")+"/api/db?since="+(this.rev||0)).then(r=>r.json()).then(j=>this.applyRemote(j.db, j.rev)).catch(()=>{}); }catch(e){} },
+  // Merge the hub's records/customers INTO the local DB (never replace it wholesale). Two reasons: (1) a delta
+  // carries only what changed, so a merge is the only correct way to fold it in; (2) the hub syncs only
+  // records+customers, so replacing would wipe this device's local-only collections (punches, bookings…).
+  // stampNewer picks the winner and the one-way status law holds, exactly as on the hub — a slow local clock
+  // still can't be clobbered by a stale remote copy, and an order never rolls backward.
+  applyRemote(db, rev){ if(!db) return; const local=loadDB();
+    local.records   = syncMergeArr(local.records||[],   db.records||[],   "id",    true);
+    local.customers = syncMergeArr(local.customers||[], db.customers||[], "phone", false);
+    local.seq = Math.max(local.seq||0, db.seq||0);
+    if(typeof rev==="number") this.rev = Math.max(this.rev||0, rev);
+    this.applying=true; try{ localStorage.setItem(dkey(), JSON.stringify(local)); }catch(e){} this.applying=false;
+    DB=loadDB(); render(); }
 };
 /* SYNC CLOCK — the same monotonic hybrid clock + comparison the hub uses (hub.js). ⚠️ Keep these three
    IDENTICAL in both places; tests/engine-clock.js fails if they drift. A station's wall clock can be wrong
@@ -272,6 +285,20 @@ let _hlc=0;
 function hlcNow(){ _hlc=Math.max(Date.now()*1000, _hlc+1); return _hlc; }
 function stampScale(t){ t=+t||0; return t<1e15 ? t*1000 : t; }
 function stampNewer(a,b){ return stampScale(a)>=stampScale(b); }
+// One-way status law (mirrors hub.js ORDER_RANK): a stale stamp can pick whose fields win, but it can never
+// roll an order's status below what this device already knows — a race the hub also refuses server-side.
+const ORDER_RANK={ INPROGRESS:1, READY:2, PAID:3, CLOSED:4, REFUNDED:5 };
+// The client half of the hub's mergeArr: fold an incoming (delta or full) set into the base keyed by `key`.
+// The base is authoritative for what's PRESENT (absence never deletes — a delta only ever upserts); a record
+// replaces its stored copy only when stampNewer says so; with advanceOnly, a winner's status can't fall.
+function syncMergeArr(base, incoming, key, advanceOnly){
+  const by=new Map((base||[]).map(r=>[r[key], r]));
+  (incoming||[]).forEach(r=>{ const prev=by.get(r[key]);
+    let win=(!prev || stampNewer(r.upd, prev.upd)) ? r : prev;
+    if(advanceOnly && prev && ORDER_RANK[prev.status] > (ORDER_RANK[win.status]||0)) win={...win, status:prev.status};
+    by.set(r[key], win); });
+  return [...by.values()];
+}
 function saveDB(db){
   // stamp a modification time on any record whose content changed, so hub merge keeps the newer copy
   try{ const prev=JSON.parse(localStorage.getItem(dkey())||"{}"); const norm=r=>JSON.stringify({...r, upd:0});
