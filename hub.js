@@ -135,9 +135,35 @@ function shapeGuard(incoming){
   return incoming;
 }
 
+/* C2 — STAMP SANITIZE at the door. A device with a fast clock stamps its edits in the future; because
+   `stampNewer` picks the higher stamp, that edit would win against every HONEST later edit until the wall
+   clock catches up — a future stamp is a poison pill. Clamp a future stamp to now: the WORK is real, only the
+   `when` is a lie, so we keep the edit and correct the clock. The one exception is a future-dated TOMBSTONE —
+   a delete stamped ahead of now would outrank a real record and erase it — so a future tombstone is DROPPED,
+   not clamped; the source still holds it and re-offers it once the clock is honest. */
+const HONEST_SKEW = Number(process.env.CLOCK_SKEW_MS || 5*60*1000) * 1000;   // allowed future skew, hybrid scale
+function stampSanitize(incoming, now){
+  if (!incoming || typeof incoming !== 'object') return incoming;
+  now = now || Date.now() * 1000;                    // hybrid scale (ms*1000), same number line as `upd`
+  const limit = now + HONEST_SKEW;
+  let clamped = 0, dropped = 0;
+  const clean = list => (list || []).filter(r => {
+    if (r && stampScale(r.upd) > limit){
+      if (r.deleted){ dropped++; return false; }     // a future-dated delete would outrank real work — drop it
+      r.upd = now; clamped++;                         // a future real edit: keep the work, correct the clock
+    }
+    return true;
+  });
+  incoming.records   = clean(incoming.records);
+  incoming.customers = clean(incoming.customers);
+  if (clamped || dropped) console.error('stampSanitize: clamped '+clamped+' future stamp(s), dropped '+dropped+' future tombstone(s)');
+  return incoming;
+}
+
 // merge + record durably. The server calls this; `merge` stays pure so tests can drive it without side effects.
 function commit(store, incoming){
   incoming = shapeGuard(incoming);          // repair shape at the door, before the merge ever sees it
+  incoming = stampSanitize(incoming);       // clamp future stamps / drop future tombstones, also at the door
   const before = store.rev || 0;
   store = merge(store, incoming);
   const after = store.rev || 0;
@@ -191,4 +217,4 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`customPOS hub on http://localhost:${PORT}  (data: ${DATA})`));
 }
-module.exports = { server, merge, mergeArr, commit, shapeGuard, deltaSince, stampNewer, stampScale, hlcNow, LOG, ckptPath, DATA_DIR };
+module.exports = { server, merge, mergeArr, commit, shapeGuard, stampSanitize, deltaSince, stampNewer, stampScale, hlcNow, LOG, ckptPath, DATA_DIR };
