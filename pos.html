@@ -499,11 +499,25 @@ function returnLines(r, lineIds){
 const PAYMENTS = {
   record: {
     label:"Record only (no processor connected)",
-    charge(amountCents){ return { status:"approved", recorded:true, ref:"" }; },     // records the sale as card-tendered; nothing is charged
+    charge(amountCents, idemKey){ return { status:"approved", recorded:true, ref:"" }; },   // idemKey forwarded to a real processor; nothing is charged here
     refund(ref, amountCents){ return { status:"refunded", recorded:true, ref:"" }; }  // records the reversal
   }
 };
 function payAdapter(){ const pr=(FLOW.endpoints.payment&&FLOW.endpoints.payment.provider)||"record"; return PAYMENTS[pr]||PAYMENTS.record; }
+function cardTenders(r){ return (r.tenders||[]).filter(t=>t.type==="card" && !t.refund); }
+/* IDEMPOTENT CARD CHARGE (Stage E3). A double-tapped Pay button or a retried request must never charge twice.
+   The guard asks the APPEND-ONLY tender ledger, never a boolean flag (a flag gets rolled back by a merge and
+   double-charges anyway): if a card tender already carries this idempotency key, this is a retry — return the
+   existing tender WITHOUT charging again. The key is also forwarded to the processor, so the real seam dedups
+   on its side too. The record is the source of truth. */
+function chargeCardOnce(r, payAmt, idemKey){
+  const dup=(r.tenders||[]).find(t=>t.idem===idemKey && !t.refund);
+  if(dup) return { status:"approved", dedup:true, tender:dup };
+  const res=payAdapter().charge(Math.round(payAmt*100), idemKey);
+  if(res && res.status==="approved"){ const tender={ type:"card", amount:payAmt, last4:res.last4, brand:res.brand, ref:res.ref, idem:idemKey };
+    (r.tenders=r.tenders||[]).push(tender); return { status:"approved", tender:tender }; }
+  return res || { status:"error" };
+}
 function cardLabel(t){ return t && t.brand ? ("💳 "+t.brand+" ••"+t.last4) : "💳 Card"; }   // real processor gives brand/last4; record-only just says "Card"
 
 /* NOTIFY — the same processor-agnostic shape as payments. With no hub connected the "record" adapter records
@@ -2105,7 +2119,8 @@ function renderCheckout(app, station){
       const mc=document.createElement("button"); mc.textContent="＄ Make change"; mc.style.margin="10px 0 0 8px"; mc.onclick=()=>{ cashPad={ recId:r.id, received:payAmt }; render(); }; c.appendChild(mc);
       if((FLOW.endpoints.payment.tenders||[]).includes("card")){
         const cb=document.createElement("button"); cb.textContent=(r.splitWays?"Share by card ":"Pay by card ")+money(payAmt); cb.style.margin="10px 0 0 8px";
-        cb.onclick=()=>{ const res=payAdapter().charge(Math.round(payAmt*100)); if(res.status==="approved"){ r.tenders.push({type:"card",amount:payAmt,last4:res.last4,brand:res.brand,ref:res.ref}); logActivity("money", "card "+money(payAmt)+(res.brand?" ("+res.brand+" ••"+res.last4+")":""), r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { logActivity("money", "card declined "+money(payAmt), r.number); flash("Card "+(res.message||"declined")); } };
+        const idemKey=r.id+":card:"+Math.round(payAmt*100)+":"+cardTenders(r).length;   // stable across a double-tap of THIS button
+        cb.onclick=()=>{ const res=chargeCardOnce(r, payAmt, idemKey); if(res.status==="approved"){ if(!res.dedup){ const t=res.tender; logActivity("money", "card "+money(payAmt)+(t&&t.brand?" ("+t.brand+" ••"+t.last4+")":""), r.number); } if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { logActivity("money", "card declined "+money(payAmt), r.number); flash("Card "+(res.message||"declined")); } };
         c.appendChild(cb);
       }
       // house account: put it on the customer's tab (A/R) — settles the order now, they pay it later
