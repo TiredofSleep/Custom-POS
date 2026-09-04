@@ -61,10 +61,17 @@ function hlcNow(){ _hlc = Math.max(Date.now() * 1000, _hlc + 1); return _hlc; } 
 // already known. Records with no ranked status (customers, drafts) are untouched.
 const ORDER_RANK = { INPROGRESS:1, READY:2, PAID:3, CLOSED:4, REFUNDED:5 };
 
+// Stage B — DELTA SYNC. The hub owns a monotonic `rev`; every record that actually changes in a push is
+// stamped `_rev = <this push's rev>`, so a device can pull only what moved since the rev it last held
+// (Ozark: 229KB -> 5KB a sync). `bare` compares content ignoring `_rev`, so an idempotent re-push doesn't
+// churn the rev or re-broadcast the whole database.
+const bare = o => { if (!o) return ''; const { _rev, ...rest } = o; return JSON.stringify(rest); };
+
 // upsert incoming into a COPY of the base keyed by `key`; the base is authoritative for what's present
 // (absence never deletes); a record — real or tombstone — replaces only when stampNewer says so. When
 // `advanceOnly` is set, a winning record's status can never fall below the status the base already held.
-function mergeArr(base, incoming, key, advanceOnly){
+// `ctx` carries this push's rev and gets `changed` set when a real add/change lands (so it gets stamped).
+function mergeArr(base, incoming, key, advanceOnly, ctx){
   const by = new Map((base || []).map(r => [r[key], r]));
   (incoming || []).forEach(r => {
     const prev = by.get(r[key]);
@@ -72,16 +79,27 @@ function mergeArr(base, incoming, key, advanceOnly){
     if (advanceOnly && prev && ORDER_RANK[prev.status] > (ORDER_RANK[win.status] || 0)) {
       win = { ...win, status: prev.status };   // one-way law: a stale stamp cannot roll an order backward
     }
+    if (prev && bare(win) === bare(prev)) win = prev;                         // no real change -> keep stored copy + its _rev
+    else if (ctx) { win = { ...win, _rev: ctx.rev }; ctx.changed = true; }    // a real add/change -> stamp this push's rev
     by.set(r[key], win);
   });
   return [...by.values()];
 }
 function merge(store, incoming){
   if (!incoming) return store;
-  store.records   = mergeArr(store.records   || [], incoming.records   || [], 'id', true);
-  store.customers = mergeArr(store.customers || [], incoming.customers || [], 'phone');
+  const ctx = { rev: (store.rev || 0) + 1, changed: false };
+  store.records   = mergeArr(store.records   || [], incoming.records   || [], 'id', true, ctx);
+  store.customers = mergeArr(store.customers || [], incoming.customers || [], 'phone', false, ctx);
   store.seq = Math.max(store.seq || 0, incoming.seq || 0);
+  if (ctx.changed) store.rev = ctx.rev;
   return store;
+}
+// only what changed after revision `since` — what a device pulls each tick instead of the whole DB
+function deltaSince(store, since){
+  since = +since || 0;
+  return { records:   (store.records   || []).filter(r => (r._rev || 0) > since),
+           customers: (store.customers || []).filter(c => (c._rev || 0) > since),
+           seq: store.seq || 0 };
 }
 
 let DB = load();
@@ -95,7 +113,11 @@ const server = http.createServer((req, res) => {
 
   if (url === '/api/db' && req.method === 'GET') {
     res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ db: DB }));
+    let since = null; try { since = new URL(req.url, 'http://x').searchParams.get('since'); } catch (e) {}
+    if (since !== null && /^\d+$/.test(since)) {                        // delta pull: only what moved since `since`
+      return res.end(JSON.stringify({ db: deltaSince(DB, +since), rev: DB.rev || 0, delta: true }));
+    }
+    return res.end(JSON.stringify({ db: DB, rev: DB.rev || 0 }));       // full pull (a fresh device)
   }
   if (url === '/api/db' && req.method === 'POST') {
     let body = '';
@@ -103,11 +125,11 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try { const j = JSON.parse(body || '{}'); DB = merge(DB, j.db); save(DB); } catch (e) {}
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ db: DB }));
+      res.end(JSON.stringify({ db: DB, rev: DB.rev || 0 }));
     });
     return;
   }
-  if (url === '/api/health') { res.setHeader('Content-Type','application/json'); return res.end(JSON.stringify({ ok:true, records:(DB.records||[]).length })); }
+  if (url === '/api/health') { res.setHeader('Content-Type','application/json'); return res.end(JSON.stringify({ ok:true, rev:DB.rev||0, records:(DB.records||[]).length })); }
   if (url === '/favicon.ico') { res.statusCode = 204; return res.end(); }
 
   // static files
@@ -123,4 +145,4 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`customPOS hub on http://localhost:${PORT}  (data: ${DATA})`));
 }
-module.exports = { server, merge, mergeArr, stampNewer, stampScale, hlcNow };
+module.exports = { server, merge, mergeArr, deltaSince, stampNewer, stampScale, hlcNow };
