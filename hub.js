@@ -212,6 +212,24 @@ function commit(store, incoming){
   return store;
 }
 
+/* D1 — THE MIRROR. Delta sync trusts `rev`; but a dropped push or a bug can leave two stations silently out of
+   agreement with the rev counters still looking fine. The fingerprint is the safety net: each station hashes
+   its keyed collections (order-independent — sorted by key) and the hub NAMES which ones disagree, then a heal
+   is a full re-pull of the named collection. The block below MUST be byte-identical to the one in pos.html —
+   a fingerprint that means one thing on the station and another on the hub would report drift where there is
+   none (or hide it); tests/mirror-fingerprint.js extracts both copies and fails if they differ by one byte. */
+/*<<FP>>*/
+function fpHash(s){var h=5381;for(var i=0;i<s.length;i++){h=((h*33)^s.charCodeAt(i))>>>0;}return h;}
+function fingerprint(list,key){var a=(list||[]).map(function(r){return String(r&&r[key])+':'+fpHash(JSON.stringify(r));});a.sort();return{n:a.length,hash:fpHash(a.join('|'))};}
+/*<</FP>>*/
+// compare a station's fingerprints to the hub's; return the names of the collections that disagree
+function verifyFingerprints(store, fps){
+  const mine = { records: fingerprint(store.records, 'id'), customers: fingerprint(store.customers, 'phone') };
+  const disagree = [];
+  ['records','customers'].forEach(c => { const a = fps && fps[c], b = mine[c]; if (!a || a.n !== b.n || a.hash !== b.hash) disagree.push(c); });
+  return { disagree, hub: mine, rev: store.rev || 0 };
+}
+
 let DB = load();
 
 function cors(res){ res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS'); }
@@ -240,6 +258,13 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url === '/api/health') { res.setHeader('Content-Type','application/json'); return res.end(JSON.stringify({ ok:true, rev:DB.rev||0, records:(DB.records||[]).length })); }
+  if (url === '/api/verify' && req.method === 'POST') {          // D1 — the mirror: name the drifted collections
+    let body=''; req.on('data', d=>{ body+=d; if(body.length>1e6) req.destroy(); });
+    req.on('end', () => { let out={ disagree:[], rev:DB.rev||0 };
+      try { const j=JSON.parse(body||'{}'); out=verifyFingerprints(DB, j.fp); }catch(e){}
+      res.setHeader('Content-Type','application/json'); res.end(JSON.stringify(out)); });
+    return;
+  }
   if (url === '/api/crash' && req.method === 'POST') {           // D4 — crash reports land OUTSIDE the synced DB
     let body=''; req.on('data', d=>{ body+=d; if(body.length>256e3) req.destroy(); });
     req.on('end', () => { try { const c=JSON.parse(body||'{}'); fs.mkdirSync(DATA_DIR,{recursive:true});
@@ -272,4 +297,4 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`customPOS hub on http://localhost:${PORT}  (data: ${DATA})`));
 }
-module.exports = { server, merge, mergeArr, commit, shapeGuard, stampSanitize, blobGuard, deltaSince, stampNewer, stampScale, hlcNow, LOG, ckptPath, DATA_DIR, BLOB_DIR };
+module.exports = { server, merge, mergeArr, commit, shapeGuard, stampSanitize, blobGuard, fingerprint, verifyFingerprints, deltaSince, stampNewer, stampScale, hlcNow, LOG, ckptPath, DATA_DIR, BLOB_DIR };

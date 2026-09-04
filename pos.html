@@ -352,7 +352,14 @@ const SYNC = {
     this._pushedSeq=Math.max(this._pushedSeq||0, db.seq||0);
     if(typeof rev==="number") this.rev = Math.max(this.rev||0, rev);
     this.applying=true; try{ persistDB(local); }catch(e){} this.applying=false;
-    DB=loadDB(); render(); }
+    DB=loadDB(); render(); },
+  // THE MIRROR (D1): fingerprint the local collections, ask the hub which disagree, and HEAL a named one by
+  // forcing a full re-pull (reset rev/_pushed so the next pull is `?since=0` and the merge reconciles both ways).
+  verify(){ if(!this.on) return Promise.resolve(null); const db=loadDB();
+    const fp={ records:fingerprint(db.records,"id"), customers:fingerprint(db.customers,"phone") };
+    try{ return fetch(this.url().replace(/\/$/,"")+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fp})}).then(r=>r.json()).then(j=>{
+      if(j && j.disagree && j.disagree.length){ this.rev=0; this._pushed={}; this._pushedSeq=0; this.pull(); }   // heal
+      return j; }).catch(()=>null); }catch(e){ return Promise.resolve(null); } }
 };
 /* SYNC CLOCK — the same monotonic hybrid clock + comparison the hub uses (hub.js). ⚠️ Keep these three
    IDENTICAL in both places; tests/engine-clock.js fails if they drift. A station's wall clock can be wrong
@@ -377,6 +384,12 @@ function syncMergeArr(base, incoming, key, advanceOnly){
     by.set(r[key], win); });
   return [...by.values()];
 }
+// D1 — THE MIRROR. This fingerprint block MUST be byte-identical to the one in hub.js (a fingerprint that means
+// something different on each side would invent drift or hide it); tests/mirror-fingerprint.js gates the bytes.
+/*<<FP>>*/
+function fpHash(s){var h=5381;for(var i=0;i<s.length;i++){h=((h*33)^s.charCodeAt(i))>>>0;}return h;}
+function fingerprint(list,key){var a=(list||[]).map(function(r){return String(r&&r[key])+':'+fpHash(JSON.stringify(r));});a.sort();return{n:a.length,hash:fpHash(a.join('|'))};}
+/*<</FP>>*/
 function saveDB(db){
   // stamp a modification time on any record whose content changed, so hub merge keeps the newer copy
   try{ const prev=JSON.parse(localStorage.getItem(dkey())||"{}"); const norm=r=>JSON.stringify({...r, upd:0});
