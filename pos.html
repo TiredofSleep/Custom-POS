@@ -253,7 +253,36 @@ let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
 function wkey(){ return "custompos_worker_"+flowId(); }   // worker portal: who's signed in on THIS device (personal-device stay-signed-in)
-function loadDB(){ try { const d=JSON.parse(localStorage.getItem(dkey()))||{records:[],seq:0,customers:[]}; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; d.kudos=d.kudos||[]; d.ageLog=d.ageLog||[]; d.activity=d.activity||[]; return d; } catch(e){ return {records:[],seq:0,customers:[],punches:[],received:{},bookings:[],quotes:[],adjustLog:[],tables:{},turns:[],shifts:[],schedule:{},timeoff:[],incidents:[],kudos:[],ageLog:[],activity:[]}; } }
+function dbDefaults(d){ d=d||{}; d.records=d.records||[]; d.seq=d.seq||0; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; d.kudos=d.kudos||[]; d.ageLog=d.ageLog||[]; d.activity=d.activity||[]; return d; }
+/* PER-COLLECTION MIRROR (Stage B3) — every save also writes each collection under its OWN key (dkey()+"::"+col).
+   Two payoffs, both generalized from Ozark's worst failure (a station that opens on an EMPTY shop): (1) a torn
+   write corrupts one collection's key, not the whole shop; (2) when the main blob is corrupt/missing, loadDB
+   REBUILDS from the mirror instead of returning empty. The main blob stays the canonical store (written every
+   save — backward compatible, and the source that heals a corrupt mirror), so the normal read path is unchanged
+   and a mirror is consulted ONLY when the blob itself fails to parse. */
+// A DISTINCT prefix so a mirror key never collides with the blob's own key family — anything that enumerates
+// `custompos_*` keys (a backup/export, a flow switch, a test locating the blob) must not trip over the mirror.
+function mirrorPrefix(){ return "cpmirror::"+dkey()+"::"; }
+function rebuildFromMirror(){
+  try{ if(localStorage.getItem(mirrorPrefix()+"records")===null) return null;   // no mirror -> a genuinely empty shop
+    const out={}, pfx=mirrorPrefix();
+    for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i);
+      if(k && k.indexOf(pfx)===0){ try{ out[k.slice(pfx.length)]=JSON.parse(localStorage.getItem(k)); }catch(e){} } }
+    return Array.isArray(out.records) ? out : null;   // records must be sane or it isn't a shop worth healing to
+  }catch(e){ return null; }
+}
+function loadDB(){
+  let d=null; try{ d=JSON.parse(localStorage.getItem(dkey())); }catch(e){ d=null; }
+  if(!d || typeof d!=="object" || !Array.isArray(d.records)) d=rebuildFromMirror();   // heal a corrupt/missing blob
+  return dbDefaults(d);
+}
+function persistDB(db){
+  try{ localStorage.setItem(dkey(), JSON.stringify(db)); }catch(e){}     // canonical whole-DB blob (compat + heal source)
+  try{ const pfx=mirrorPrefix();                                          // mirror: rewrite only the parts that moved
+    for(const col in db){ if(!Object.prototype.hasOwnProperty.call(db,col)) continue;
+      const cs=JSON.stringify(db[col]); if(localStorage.getItem(pfx+col)!==cs) localStorage.setItem(pfx+col, cs); }
+  }catch(e){}
+}
 /* OPTIONAL multi-device sync — OFF unless a hub is configured (?hub=… / window.CUSTOMPOS_HUB / localStorage).
    When on, every save pushes to the hub and a poller pulls the merged DB, so separate devices share one POS. */
 const SYNC = {
@@ -289,7 +318,7 @@ const SYNC = {
     (db.customers||[]).forEach(c=>{ this._pushed["c:"+c.phone]=this._sig(c); });
     this._pushedSeq=Math.max(this._pushedSeq||0, db.seq||0);
     if(typeof rev==="number") this.rev = Math.max(this.rev||0, rev);
-    this.applying=true; try{ localStorage.setItem(dkey(), JSON.stringify(local)); }catch(e){} this.applying=false;
+    this.applying=true; try{ persistDB(local); }catch(e){} this.applying=false;
     DB=loadDB(); render(); }
 };
 /* SYNC CLOCK — the same monotonic hybrid clock + comparison the hub uses (hub.js). ⚠️ Keep these three
@@ -321,7 +350,7 @@ function saveDB(db){
     const was=new Map((prev.records||[]).map(r=>[r.id, norm(r)]));
     (db.records||[]).forEach(r=>{ if(was.get(r.id)!==norm(r)) r.upd=hlcNow(); });
   }catch(e){}
-  localStorage.setItem(dkey(), JSON.stringify(db)); if(SYNC.on && !SYNC.applying) SYNC.push();
+  persistDB(db); if(SYNC.on && !SYNC.applying) SYNC.push();
 }
 let DB = loadDB();
 
@@ -532,7 +561,7 @@ function importCustomersCSV(text){ const rows=(text||"").split(/\r?\n/).map(r=>r
     const cust=byPhone.get(phone)||{phone}; cust.name=c[0]||cust.name; if(c[2]!==undefined&&c[2]!=="") cust.points=Number(c[2])||0; if(c[3]!==undefined&&c[3]!=="") cust.gift=Number(c[3])||0; if(c[4]!==undefined&&c[4]!=="") cust.balance=Number(c[4])||0; byPhone.set(phone,cust); n++; });
   d.customers=[...byPhone.values()]; saveDB(d); return n; }
 function slug(){ return (FLOW.branding.name||"custompos").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
-function restoreBackup(text){ const obj=JSON.parse(text); const db=obj&&obj.data?obj.data:obj; if(!db||!Array.isArray(db.records)) throw new Error("not a customPOS backup"); localStorage.setItem(dkey(), JSON.stringify(db)); }
+function restoreBackup(text){ const obj=JSON.parse(text); const db=obj&&obj.data?obj.data:obj; if(!db||!Array.isArray(db.records)) throw new Error("not a customPOS backup"); persistDB(db); }
 // install-as-app: brand the manifest + theme with the business so "Add to Home Screen" shows the shop's name/color
 let __installReady=false;
 function setupInstall(){
