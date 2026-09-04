@@ -114,8 +114,30 @@ const CHECKPOINT_EVERY = Number(process.env.CHECKPOINT_EVERY || 50);
 function ckptPath(rev){ return path.join(DATA_DIR, 'checkpoint-' + rev + '.json'); }
 function appendLog(rev, delta){ try{ fs.mkdirSync(DATA_DIR, { recursive:true }); fs.appendFileSync(LOG, JSON.stringify({ rev, ts: Date.now(), delta }) + '\n'); }catch(e){} }
 function writeCheckpoint(store){ try{ fs.mkdirSync(DATA_DIR, { recursive:true }); fs.writeFileSync(ckptPath(store.rev || 0), JSON.stringify(store)); }catch(e){} }
+/* C1 — SHAPE GUARD at the door. An incoming record can arrive missing a required array (a truncated push, an
+   old client, a hand-rolled integration): later `r.lines.map(...)` then throws and a screen dies. Fill it HERE,
+   once, on the way in — and NEVER inside the merge, where touching a record that didn't really change would
+   restamp it and roll other fields back (the 8/03 mass-restamp class). Repair is the norm; a FLOOD of repairs
+   is a different event (a corrupt bulk push), so cap it and refuse the whole push loudly rather than quietly
+   "repairing" thousands of records into place. */
+const REQUIRED_ARRAYS = { records: ['lines'] };   // a record must carry its line-items array
+const SHAPE_REPAIR_CAP = 500;
+function shapeGuard(incoming){
+  if (!incoming || typeof incoming !== 'object') return incoming;
+  let repaired = 0; const notes = [];
+  (incoming.records || []).forEach(r => {
+    (REQUIRED_ARRAYS.records || []).forEach(f => {
+      if (r && !Array.isArray(r[f])) { r[f] = []; repaired++; if (notes.length < 10) notes.push((r.id!=null?r.id:'?')+'.'+f); }
+    });
+  });
+  if (repaired > SHAPE_REPAIR_CAP) throw new Error('shapeGuard: '+repaired+' records missing a required array — refusing a malformed bulk push (cap '+SHAPE_REPAIR_CAP+')');
+  if (repaired) console.error('shapeGuard repaired '+repaired+' record(s) at the door: '+notes.join(', ')+(repaired>notes.length?'…':''));
+  return incoming;
+}
+
 // merge + record durably. The server calls this; `merge` stays pure so tests can drive it without side effects.
 function commit(store, incoming){
+  incoming = shapeGuard(incoming);          // repair shape at the door, before the merge ever sees it
   const before = store.rev || 0;
   store = merge(store, incoming);
   const after = store.rev || 0;
@@ -169,4 +191,4 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`customPOS hub on http://localhost:${PORT}  (data: ${DATA})`));
 }
-module.exports = { server, merge, mergeArr, commit, deltaSince, stampNewer, stampScale, hlcNow, LOG, ckptPath, DATA_DIR };
+module.exports = { server, merge, mergeArr, commit, shapeGuard, deltaSince, stampNewer, stampScale, hlcNow, LOG, ckptPath, DATA_DIR };
