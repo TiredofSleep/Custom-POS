@@ -102,6 +102,30 @@ function deltaSince(store, since){
            seq: store.seq || 0 };
 }
 
+/* B4 — APPEND-ONLY DELTA LOG + CHECKPOINTS. Every changing merge appends one line to a durable log: the
+   EXACT delta for the new rev, built with `deltaSince` so the log and the wire can never drift (a device that
+   pulls rev N and a replay that rebuilds rev N read the same bytes). A full checkpoint is written every
+   CHECKPOINT_EVERY revs so a rebuild need not replay from rev 1. `hub-replay.js` rebuilds any revision from the
+   nearest checkpoint + the log, and REFUSES on a hole (naming the missing rev) rather than silently skipping —
+   a rebuild that quietly drops a rev is the "error that renders as good news" the reference warns against. */
+const DATA_DIR = path.dirname(DATA);
+const LOG = path.join(DATA_DIR, 'delta-log.jsonl');
+const CHECKPOINT_EVERY = Number(process.env.CHECKPOINT_EVERY || 50);
+function ckptPath(rev){ return path.join(DATA_DIR, 'checkpoint-' + rev + '.json'); }
+function appendLog(rev, delta){ try{ fs.mkdirSync(DATA_DIR, { recursive:true }); fs.appendFileSync(LOG, JSON.stringify({ rev, ts: Date.now(), delta }) + '\n'); }catch(e){} }
+function writeCheckpoint(store){ try{ fs.mkdirSync(DATA_DIR, { recursive:true }); fs.writeFileSync(ckptPath(store.rev || 0), JSON.stringify(store)); }catch(e){} }
+// merge + record durably. The server calls this; `merge` stays pure so tests can drive it without side effects.
+function commit(store, incoming){
+  const before = store.rev || 0;
+  store = merge(store, incoming);
+  const after = store.rev || 0;
+  if (after > before){                                   // something actually moved -> log this rev's delta
+    appendLog(after, deltaSince(store, before));         // deltaSince(before) == exactly what got rev `after`
+    if (after % CHECKPOINT_EVERY === 0) writeCheckpoint(store);
+  }
+  return store;
+}
+
 let DB = load();
 
 function cors(res){ res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS'); }
@@ -123,7 +147,7 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', d => { body += d; if (body.length > 60e6) req.destroy(); });
     req.on('end', () => {
-      try { const j = JSON.parse(body || '{}'); DB = merge(DB, j.db); save(DB); } catch (e) {}
+      try { const j = JSON.parse(body || '{}'); DB = commit(DB, j.db); save(DB); } catch (e) {}
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ db: DB, rev: DB.rev || 0 }));
     });
@@ -145,4 +169,4 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`customPOS hub on http://localhost:${PORT}  (data: ${DATA})`));
 }
-module.exports = { server, merge, mergeArr, deltaSince, stampNewer, stampScale, hlcNow };
+module.exports = { server, merge, mergeArr, commit, deltaSince, stampNewer, stampScale, hlcNow, LOG, ckptPath, DATA_DIR };
