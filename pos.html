@@ -286,7 +286,7 @@ let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
 function wkey(){ return "custompos_worker_"+flowId(); }   // worker portal: who's signed in on THIS device (personal-device stay-signed-in)
-function dbDefaults(d){ d=d||{}; d.records=d.records||[]; d.seq=d.seq||0; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; d.kudos=d.kudos||[]; d.ageLog=d.ageLog||[]; d.activity=d.activity||[]; return d; }
+function dbDefaults(d){ d=d||{}; d.records=d.records||[]; d.seq=d.seq||0; d.customers=d.customers||[]; d.punches=d.punches||[]; d.received=d.received||{}; d.bookings=d.bookings||[]; d.quotes=d.quotes||[]; d.adjustLog=d.adjustLog||[]; d.tables=d.tables||{}; d.turns=d.turns||[]; d.shifts=d.shifts||[]; d.schedule=d.schedule||{}; d.timeoff=d.timeoff||[]; d.incidents=d.incidents||[]; d.kudos=d.kudos||[]; d.ageLog=d.ageLog||[]; d.activity=d.activity||[]; d.expenses=d.expenses||[]; return d; }
 /* PER-COLLECTION MIRROR (Stage B3) — every save also writes each collection under its OWN key (dkey()+"::"+col).
    Two payoffs, both generalized from Ozark's worst failure (a station that opens on an EMPTY shop): (1) a torn
    write corrupts one collection's key, not the whole shop; (2) when the main blob is corrupt/missing, loadDB
@@ -696,6 +696,26 @@ function withApproval(action, label, fn){
   logActivity("admin", action+" approved — "+(label||"")+" (by "+who.name+")");
   render();
 }
+/* EXPENSES — the other half of the money story. Sales, cost-of-goods and labor were already captured; this
+   adds the overhead an owner actually pays (supplies, rent, utilities…) so the report goes all the way to NET
+   profit instead of stopping at gross margin. Append-only + void (never a hard delete, per the house rule),
+   and every entry lands on the activity log like any other money edit. NOTE: entered on the office/report
+   station; syncing the expense ledger across stations is a follow-up (the hub syncs orders + customers today). */
+const EXPENSE_CATS=["supplies","rent","utilities","equipment","fees","other"];
+function expenseCats(){ return (FLOW.expenses&&FLOW.expenses.categories)||EXPENSE_CATS; }
+function dayExpenses(day){ return (DB.expenses||[]).filter(e=>!e.void && e.day===day); }
+function dayExpenseTotal(day){ return dayExpenses(day).reduce((s,e)=>s+(+e.amount||0),0); }
+function addExpense(amount, category, vendor, note){
+  amount=+amount; if(!(amount>0)) return false;
+  DB=loadDB(); DB.expenses=DB.expenses||[];
+  DB.expenses.push({ id:"E"+Date.now(), ts:Date.now(), day:todayStr(), category:category||"other", vendor:(vendor||"").trim(), note:(note||"").trim(), amount:+amount.toFixed(2), emp:(typeof actingStaff==="function"?actingStaff():"") });
+  logActivity("money", "expense · "+(category||"other")+((vendor||"").trim()?" · "+vendor.trim():""), null, amount);
+  saveDB(DB); return true;
+}
+function voidExpense(id){ DB=loadDB(); const e=(DB.expenses||[]).find(x=>x.id===id); if(e && !e.void){ e.void=true; logActivity("money", "voided expense · "+(e.category||"other"), null, e.amount); saveDB(DB); } }
+// labor cost for a day, from the punch clock × each person's wage (the same basis the day verdict uses)
+function dayLaborCost(){ let c=0; (DB.punches||[]).forEach(pn=>{ c += (workedMs(pn)/3600000)*((pn.wage!=null?pn.wage:staffWage(pn.staffId))||0); }); return c; }
+
 function renderReport(app, station){
   const day = reportDay || todayStr(); const isToday = day===todayStr();
   app.innerHTML="<h2>"+station.label+" — "+(isToday?"today":day)+"</h2>";
@@ -741,14 +761,15 @@ function renderReport(app, station){
   const collected=Object.keys(byTender).filter(k=>k!=="account").reduce((s,k)=>s+byTender[k],0);
   // ---- "how today went": one plain-language verdict fusing sales, margin, and labor — the first thing an owner sees ----
   if(isToday && (orders||refunds)){
-    let laborCost=0; (DB.punches||[]).forEach(pn=>{ laborCost += (workedMs(pn)/3600000)*((pn.wage!=null?pn.wage:staffWage(pn.staffId))||0); });
+    const laborCost=dayLaborCost();
     const haveCost=FLOW.catalog.some(i=>+i.cost>0); const marginPct = (haveCost&&net>0)? (net-cogs)/net*100 : null;
     const laborPct = (laborCost>0&&net>0)? laborCost/net*100 : null;
+    const opEx=dayExpenseTotal(day); const netProfit = net - (haveCost?cogs:0) - laborCost - opEx;   // full picture: down to net
     const target=(FLOW.labor&&FLOW.labor.targetLaborPct)||30;
-    const concerns=[]; if(laborPct!=null && laborPct>target+10) concerns.push("labor is running high"); if(marginPct!=null && marginPct<20) concerns.push("margins are thin"); if(refunds>collected*0.15 && refunds>0) concerns.push("lots of refunds");
+    const concerns=[]; if(laborPct!=null && laborPct>target+10) concerns.push("labor is running high"); if(marginPct!=null && marginPct<20) concerns.push("margins are thin"); if(refunds>collected*0.15 && refunds>0) concerns.push("lots of refunds"); if(netProfit<0 && (opEx>0||laborCost>0)) concerns.push("spending outran sales");
     const good = !concerns.length && net>0;
     const verdict = net<=0 ? "Quiet so far today." : good ? "Solid day." : "Worth a look — "+concerns.join(", ")+".";
-    const bits=[money(collected)+" in"]; if(marginPct!=null) bits.push(marginPct.toFixed(0)+"% margin"); if(laborPct!=null) bits.push("labor "+laborPct.toFixed(0)+"% of sales");
+    const bits=[money(collected)+" in"]; if(marginPct!=null) bits.push(marginPct.toFixed(0)+"% margin"); if(laborPct!=null) bits.push("labor "+laborPct.toFixed(0)+"% of sales"); if(opEx>0||laborCost>0) bits.push((netProfit>=0?"+":"−")+money(Math.abs(netProfit))+" net");
     const hd=document.createElement("div"); hd.className="card"; hd.style.cssText="border-left:4px solid "+(net<=0?"var(--line)":good?"var(--good,#2ea043)":"var(--warn,#c99a12)")+";padding-left:14px";
     hd.innerHTML="<div style='font-size:18px;font-weight:700'>"+verdict+"</div><div class='muted' style='margin-top:2px'>"+bits.join(" · ")+"</div>";
     app.appendChild(hd);
@@ -771,6 +792,46 @@ function renderReport(app, station){
       +"<div class='line'><span>Margin</span><span class='spacer'></span><span"+(margin<0?" style='color:var(--bad);font-weight:600'":"")+">"+margin.toFixed(0)+"%</span></div>"
       +"<div class='muted' style='margin-top:2px'>"+(margin<0?"You're selling below cost today — check pricing or waste.":"What's left to cover rent, labor, and everything else.")+"</div>";
     app.appendChild(pc);
+  }
+  // ---- expenses: the overhead behind the counter (supplies, rent, utilities…), so the picture reaches NET profit ----
+  const exList=dayExpenses(day), exTotal=dayExpenseTotal(day); const byExCat={}; exList.forEach(e=>{ byExCat[e.category||"other"]=(byExCat[e.category||"other"]||0)+(+e.amount||0); });
+  const ex=document.createElement("div"); ex.className="card";
+  const exHead=document.createElement("div"); exHead.innerHTML="<div class='row'><b>Expenses</b><span class='spacer'></span><span class='muted'>"+(isToday?"today":day)+"</span></div>"; ex.appendChild(exHead);
+  if(isToday){   // entry form (built as DOM so its Add handler survives — never rebuild the card via innerHTML+= after this)
+    const form=document.createElement("div"); form.className="row"; form.style.cssText="gap:6px;flex-wrap:wrap;margin:4px 0 8px";
+    const amt=document.createElement("input"); amt.type="number"; amt.placeholder="$ amount"; amt.style.width="100px";
+    const cat=document.createElement("select"); expenseCats().forEach(c=>{ const o=document.createElement("option"); o.value=c; o.textContent=c[0].toUpperCase()+c.slice(1); cat.appendChild(o); });
+    const ven=document.createElement("input"); ven.type="text"; ven.placeholder="vendor / note"; ven.style.minWidth="140px";
+    const add=document.createElement("button"); add.className="primary"; add.textContent="Add"; add.onclick=()=>{ if(addExpense(amt.value, cat.value, ven.value, "")) render(); else flash("Enter an amount"); };
+    [amt,cat,ven,add].forEach(el=>form.appendChild(el)); ex.appendChild(form);
+  }
+  if(exList.length){
+    const sumBox=document.createElement("div"); let sh="";
+    Object.keys(byExCat).sort((a,b)=>byExCat[b]-byExCat[a]).forEach(k=>{ sh+=L(k[0].toUpperCase()+k.slice(1),"−"+money(byExCat[k])); });
+    sh+=L("Total expenses","−"+money(exTotal), true); sumBox.innerHTML=sh; ex.appendChild(sumBox);
+    const det=document.createElement("div"); det.style.marginTop="6px";
+    exList.slice().sort((a,b)=>b.ts-a.ts).forEach(e=>{ const row=document.createElement("div"); row.className="line"; row.style.fontSize="13px";
+      row.innerHTML="<span class='muted'>"+(e.category||"other")+(e.vendor?" · "+e.vendor:"")+"</span><span class='spacer'></span><span>"+money(e.amount)+"</span>";
+      if(isToday){ const v=document.createElement("button"); v.textContent="void"; v.className="link"; v.style.marginLeft="8px"; v.onclick=()=>{ voidExpense(e.id); render(); }; row.appendChild(v); }
+      det.appendChild(row); });
+    ex.appendChild(det);
+  } else { const none=document.createElement("div"); none.className="muted"; none.textContent="No expenses recorded"+(isToday?" yet — add supplies, rent, utilities as you pay them.":" that day."); ex.appendChild(none); }
+  app.appendChild(ex);
+  // ---- bottom line: the whole money story in one card — revenue all the way down to net profit (an estimate) ----
+  if(net>0 || exTotal>0){
+    const laborCost=dayLaborCost(); const haveCost=FLOW.catalog.some(i=>+i.cost>0);
+    const gross=net-(haveCost?cogs:0); const netProfit=gross-laborCost-exTotal;
+    const col=netProfit>=0?"var(--good,#2ea043)":"var(--bad,#e5484d)";
+    const bl=document.createElement("div"); bl.className="card"; bl.style.cssText="border-left:4px solid "+col+";padding-left:14px";
+    bl.innerHTML="<div class='row'><b>Bottom line</b><span class='spacer'></span><span class='muted'>"+(isToday?"today":day)+" · estimate</span></div>"
+      +L("Net sales", money(net))
+      +(haveCost?L("Cost of goods","−"+money(cogs)):"")
+      +L("Gross profit", money(gross))
+      +(laborCost>0?L("Labor","−"+money(laborCost)):"")
+      +(exTotal>0?L("Operating expenses","−"+money(exTotal)):"")
+      +"<div class='line' style='border-top:1px solid var(--line);margin-top:4px;padding-top:6px'><b>Net profit</b><span class='spacer'></span><b style='color:"+col+"'>"+(netProfit<0?"−"+money(-netProfit):money(netProfit))+"</b></div>"
+      +"<div class='muted' style='margin-top:2px'>"+(netProfit>=0?"What the business kept after goods, labor and overhead.":"Spent more than it made "+(isToday?"today":"that day")+" — check labor and expenses.")+(laborCost>0?"":" Clock staff in with wages set to include labor.")+"</div>";
+    app.appendChild(bl);
   }
   if(Object.keys(byTender).length){ const tc=document.createElement("div"); tc.className="card"; tc.innerHTML="<div class='row'><b>By tender</b></div>"+Object.keys(byTender).map(k=>L(k[0].toUpperCase()+k.slice(1), money(byTender[k]))).join(""); app.appendChild(tc); }
   if(Object.keys(byCat).length){ const cc=document.createElement("div"); cc.className="card"; cc.innerHTML="<div class='row'><b>By category</b></div>"+Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]).map(k=>L(k, money(byCat[k]))).join(""); app.appendChild(cc); }
