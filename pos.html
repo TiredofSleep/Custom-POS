@@ -364,7 +364,8 @@ function stageOf(r, pub){
 /* ============================================================================ ENGINE */
 // A downloaded/built POS injects its single flow before this script runs — then there is no demo picker.
 if(typeof window!=="undefined" && window.CUSTOMPOS_FLOW){ const f=window.CUSTOMPOS_FLOW; FLOWS = {}; FLOWS[f.flowId||"business"] = f; }
-function flowId(){ const s=localStorage.getItem("custompos_flow"); return (s&&FLOWS[s]) ? s : Object.keys(FLOWS)[0]; }
+function flowId(){ try{ const u=new URL(location.href).searchParams.get("flow"); if(u&&FLOWS[u]) return u; }catch(e){}   // ?flow=cleaners → a shareable, trade-specific demo link
+  const s=localStorage.getItem("custompos_flow"); return (s&&FLOWS[s]) ? s : Object.keys(FLOWS)[0]; }
 let FLOW = FLOWS[flowId()];
 function dkey(){ return "custompos_demo_"+flowId(); }
 function skey(){ return "custompos_station_"+flowId(); }
@@ -1754,6 +1755,26 @@ function renderTracker(app, station){
 }
 
 function renderPicker(app){
+  // FIRST-RUN — invite the shop to make it theirs (logo + brand color) right away. Non-blocking + skippable.
+  if(localStorage.getItem("custompos_firstrun_done")!=="1"){
+    const fr=document.createElement("div"); fr.className="card"; fr.style.cssText="border:1px solid var(--brand)";
+    const h=document.createElement("div"); h.style.cssText="font-weight:700;font-size:16px"; h.textContent="👋 Make it yours"; fr.appendChild(h);
+    const sub=document.createElement("div"); sub.className="muted"; sub.style.cssText="font-size:13.5px;margin:3px 0 10px"; sub.textContent="Add your logo and brand color so it looks like your shop. Optional — skip and set it later in the Office."; fr.appendChild(sub);
+    const rowc=document.createElement("div"); rowc.className="row"; rowc.style.cssText="gap:10px;flex-wrap:wrap";
+    const clab=document.createElement("span"); clab.className="flab"; clab.textContent="Brand color"; const color=document.createElement("input"); color.type="color"; color.value=FLOW.branding.brandColor||"#1f6feb"; rowc.appendChild(clab); rowc.appendChild(color);
+    let logoData=FLOW.branding.logo||null;
+    const llab=document.createElement("span"); llab.className="flab"; llab.style.marginLeft="8px"; llab.textContent="Logo";
+    const prev=document.createElement("img"); prev.style.cssText="height:30px;max-width:110px;border-radius:6px;object-fit:contain;border:1px solid var(--line)"+(logoData?"":";display:none"); if(logoData) prev.src=logoData;
+    const file=document.createElement("input"); file.type="file"; file.accept="image/*";
+    file.onchange=()=>{ const f=file.files&&file.files[0]; if(!f) return; if(f.size>600000){ flash("Logo under ~500KB please"); file.value=""; return; } const rd=new FileReader(); rd.onload=()=>{ logoData=rd.result; prev.src=logoData; prev.style.display=""; }; rd.readAsDataURL(f); };
+    rowc.appendChild(llab); rowc.appendChild(prev); rowc.appendChild(file); fr.appendChild(rowc);
+    const btns=document.createElement("div"); btns.className="row"; btns.style.marginTop="12px";
+    const apply=document.createElement("button"); apply.className="primary"; apply.textContent="Apply & continue";
+    apply.onclick=()=>{ saveSettings({ brandColor:color.value, logo:logoData }); try{localStorage.setItem("custompos_firstrun_done","1");}catch(e){} render(); };
+    const skip=document.createElement("button"); skip.textContent="Skip for now"; skip.onclick=()=>{ try{localStorage.setItem("custompos_firstrun_done","1");}catch(e){} render(); };
+    btns.appendChild(apply); btns.appendChild(skip); fr.appendChild(btns);
+    app.appendChild(fr);
+  }
   const multi = Object.keys(FLOWS).length>1;   // the try-it sandbox shows sample businesses; a downloaded POS injects one flow and shows none
   const fs=document.createElement("div"); fs.innerHTML = multi ? "<h2>Try a sample business</h2>" : "<h2>"+FLOW.branding.name+"</h2>";
   if(multi){
