@@ -799,7 +799,7 @@ function renderReport(app, station){
   const exHead=document.createElement("div"); exHead.innerHTML="<div class='row'><b>Expenses</b><span class='spacer'></span><span class='muted'>"+(isToday?"today":day)+"</span></div>"; ex.appendChild(exHead);
   if(isToday){   // entry form (built as DOM so its Add handler survives — never rebuild the card via innerHTML+= after this)
     const form=document.createElement("div"); form.className="row"; form.style.cssText="gap:6px;flex-wrap:wrap;margin:4px 0 8px";
-    const amt=document.createElement("input"); amt.type="number"; amt.placeholder="$ amount"; amt.style.width="100px";
+    const amt=document.createElement("input"); amt.type="number"; amt.placeholder="$ amount"; amt.style.width="120px";
     const cat=document.createElement("select"); expenseCats().forEach(c=>{ const o=document.createElement("option"); o.value=c; o.textContent=c[0].toUpperCase()+c.slice(1); cat.appendChild(o); });
     const ven=document.createElement("input"); ven.type="text"; ven.placeholder="vendor / note"; ven.style.minWidth="140px";
     const add=document.createElement("button"); add.className="primary"; add.textContent="Add"; add.onclick=()=>{ if(addExpense(amt.value, cat.value, ven.value, "")) render(); else flash("Enter an amount"); };

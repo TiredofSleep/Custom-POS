@@ -10,6 +10,16 @@
   <a href="https://github.com/TiredofSleep/Custom-POS/actions/workflows/ci.yml"><img src="https://github.com/TiredofSleep/Custom-POS/actions/workflows/ci.yml/badge.svg" alt="tests"></a>
 </p>
 
+<p align="center">
+  <img src="press/02-dashboard.png" alt="customPOS owner dashboard — a day's sales, expenses and net profit" width="760">
+  <br><sub><em>The back-office dashboard: a full day's money story — sales, cost of goods, labor, expenses, and the real bottom line.</em></sub>
+</p>
+
+<p align="center">
+  <img src="press/01-register.png" alt="customPOS front-counter register ringing an order" width="620">
+  <br><sub><em>The front-counter register — the same one file, configured for a dry cleaner.</em></sub>
+</p>
+
 ---
 
 > **Status: working product, active build.** The public home of customPOS — generalized from a real,
