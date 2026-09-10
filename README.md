@@ -16,8 +16,8 @@
 </p>
 
 <p align="center">
-  <img src="press/01-register.png" alt="customPOS front-counter register ringing an order" width="620">
-  <br><sub><em>The front-counter register — the same one file, configured for a dry cleaner.</em></sub>
+  <img src="press/05-pro-dark.png" alt="customPOS front-counter register — a full restaurant menu, themed to the shop's brand" width="720">
+  <br><sub><em>The front counter — a real restaurant menu, the whole accent themed to the shop's own brand color, one self-contained file.</em></sub>
 </p>
 
 ---
