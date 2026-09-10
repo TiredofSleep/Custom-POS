@@ -51,6 +51,7 @@ assert('the fingerprint block is BYTE-IDENTICAL in pos.html and hub.js', engBloc
 
   // (4) HEAL: a device that has silently drifted (rev still current, so delta pull sends nothing) reconciles via verify()
   const A = await b.newContext(); const pa = await A.newPage();
+  await pa.addInitScript(()=>{try{if(!localStorage.getItem("custompos_flow"))localStorage.setItem("custompos_flow","counter");}catch(e){}});
   await pa.goto(`${base}/pos.html?hub=${base}`);
   await pa.getByRole('button',{name:/^Order Counter/}).first().click();
   await pa.getByText('Coffee',{exact:false}).first().click();
@@ -59,6 +60,7 @@ assert('the fingerprint block is BYTE-IDENTICAL in pos.html and hub.js', engBloc
 
   const B = await b.newContext(); const pb = await B.newPage();
   pb.on('pageerror', e => errors.push('B pageerror: '+e.message));
+  await pb.addInitScript(()=>{try{if(!localStorage.getItem("custompos_flow"))localStorage.setItem("custompos_flow","counter");}catch(e){}});
   await pb.goto(`${base}/pos.html?hub=${base}`);
   const DKEY = await pb.evaluate(() => dkey());
   await pb.waitForFunction((k)=>{ try{ return (JSON.parse(localStorage.getItem(k)||'{}').records||[]).length>0; }catch(e){ return false; } }, DKEY, {timeout:8000});

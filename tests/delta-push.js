@@ -38,6 +38,7 @@ function assert(name, cond){ console.log((cond?'✓':'✗')+' '+name); if(!cond)
     } } catch (e) {}
   });
 
+  await pa.addInitScript(()=>{try{if(!localStorage.getItem("custompos_flow"))localStorage.setItem("custompos_flow","counter");}catch(e){}});
   await pa.goto(url);
   await pa.getByRole('button',{name:/^Order Counter/}).first().click();
   await pa.getByText('Coffee',{exact:false}).first().click();

@@ -7,6 +7,7 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   const ctx = await b.newContext(); const p = await ctx.newPage();
   p.on('console', m => { if (m.type()==='error') errors.push(m.text()); });
   p.on('pageerror', e => errors.push('pageerror: '+e.message));
+  await p.addInitScript(()=>{try{if(!localStorage.getItem("custompos_flow"))localStorage.setItem("custompos_flow","counter");}catch(e){}});
   await p.goto(url);
   const pick = async n => p.getByText(n,{exact:false}).first().click();
   const changeTo = async n => { await p.getByText('change station').click(); await pick(n); };
@@ -29,8 +30,9 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   const muffinBtn = p.getByRole('button',{name:/^Muffin/});
   const muffin86 = (await muffinBtn.isDisabled()) && /86/.test(await T());
 
-  // Bar sees the configured Latte, money-blind
-  await changeTo('Bar');
+  // Bar sees the configured Latte, money-blind (exact match — avoid substring-matching the "Hamburger Barn" flow)
+  await p.getByText('change station').click();
+  await p.getByRole('button',{name:/^Bar/}).click();   // ^-anchored: matches the "Bar" station, not the "Hamburger Barn" flow
   const bar = await T();
   const barSeesMods = /Latte/.test(bar) && /Large/.test(bar) && /Oat milk/.test(bar) && !/\$\d/.test(bar);
 

@@ -20,6 +20,7 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   const A = await b.newContext(); const pa = await A.newPage();
   pa.on('console', m => { if (m.type()==='error') errors.push('A: '+m.text()); });
   pa.on('pageerror', e => errors.push('A pageerror: '+e.message));
+  await pa.addInitScript(()=>{try{if(!localStorage.getItem("custompos_flow"))localStorage.setItem("custompos_flow","counter");}catch(e){}});
   await pa.goto(url);
   await pa.getByRole('button',{name:/^Order Counter/}).first().click();
   await pa.getByText('Coffee',{exact:false}).first().click();
@@ -35,6 +36,7 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   const B = await b.newContext(); const pb = await B.newPage();
   pb.on('console', m => { if (m.type()==='error') errors.push('B: '+m.text()); });
   pb.on('pageerror', e => errors.push('B pageerror: '+e.message));
+  await pb.addInitScript(()=>{try{if(!localStorage.getItem("custompos_flow"))localStorage.setItem("custompos_flow","counter");}catch(e){}});
   await pb.goto(url);
   await pb.waitForFunction((k) => { try { return (JSON.parse(localStorage.getItem(k)||'{}').records||[]).length>0; } catch(e){ return false; } }, DKEY, { timeout: 8000 });
   await pb.getByRole('button',{name:/^Bar/}).first().click();
