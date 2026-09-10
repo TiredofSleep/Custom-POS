@@ -147,6 +147,62 @@ var CRASH = (function(){
 /* ===================================== THE FLOWS ===================================== */
 const CUSTOMPOS_VERSION = "0.75";   // engine version (the builder stamps this into downloads)
 let FLOWS = {
+  // ===== FLAGSHIP DEMO — a COMPLETE restaurant, not a sample. Real menu, sales tax, food costs, staff on the
+  // clock, a kitchen display, and a back office that runs the numbers down to net profit. This is what the
+  // engine is FOR — the same depth that runs a real shop, configured for a burger joint. =====
+  burgerbarn: {
+    label:"Hamburger Barn (restaurant)", topology:"hub-and-spoke",
+    branding:{ name:"Hamburger Barn", brandColor:"#a3312a" },
+    endpoints:{
+      customer:{persist:false},
+      payment:{ tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}, split:true },
+      tax:{ rate:0.0825, included:false }            // 8.25% sales tax, added at checkout (editable in the Office → Settings)
+    },
+    timer:{ mode:"aging", warnSec:360, badSec:720, label:"ticket" }, capacity:{ perOrderMins:6, max:15 }, kds:{ warnSec:360, badSec:720 },
+    labor:{ targetLaborPct:28 },
+    staff:[ {id:"e1",name:"Marcy",pin:"1111",wage:15}, {id:"e2",name:"Deshawn",pin:"2222",wage:16.5}, {id:"e3",name:"Tara",pin:"3333",wage:14} ],
+    welcome:{ message:"Fresh off the grill — have a great shift! 🍔", specials:["Push the Blue Plate Special","Upsell a shake"] },
+    catalog:[
+      // ---- BURGERS → grill (food cost ~30%) ----
+      {id:"bubba",name:"Bubba Burger",price:13,cost:4.10,category:"burger",path:["grill"],
+        modifiers:[{group:"Patty",required:true,options:[{name:"Single",price:0},{name:"Double",price:3}]}],
+        addons:[{name:"Bacon",price:1.5},{name:"Extra cheese",price:1},{name:"Jalapeños",price:0.5},{name:"Grilled onions",price:0.5}],
+        flags:["Allergy note"]},
+      {id:"mushswiss",name:"Mushroom Swiss Burger",price:12.5,cost:3.85,category:"burger",path:["grill"],addons:[{name:"Bacon",price:1.5}]},
+      {id:"gouda",name:"Gouda Burger",price:12.5,cost:3.80,category:"burger",path:["grill"]},
+      {id:"chipotle",name:"Chipotle Burger",price:12.5,cost:3.80,category:"burger",path:["grill"]},
+      {id:"cheeseburger",name:"Cheeseburger",price:9,cost:2.70,category:"burger",path:["grill"],
+        modifiers:[{group:"Cheese",required:true,options:[{name:"American",price:0},{name:"Swiss",price:0},{name:"Cheddar",price:0},{name:"Pepper Jack",price:0}]}]},
+      {id:"cfs",name:"Chicken Fried Steak",price:13,cost:4.30,category:"plate",path:["grill"]},
+      {id:"grillchick",name:"Grilled Chicken Sandwich",price:10,cost:3.10,category:"sandwich",path:["grill"]},
+      // ---- FRIED APPS & PLATES → fry ----
+      {id:"onionrings",name:"Onion Rings",price:6,cost:1.60,category:"app",path:["fry"]},
+      {id:"friedpickles",name:"Fried Pickles",price:6,cost:1.40,category:"app",path:["fry"]},
+      {id:"greenbeans",name:"Fried Green Beans",price:6,cost:1.55,category:"app",path:["fry"]},
+      {id:"cheesesticks",name:"Big Cheese Sticks",price:7,cost:2.10,category:"app",path:["fry"]},
+      {id:"friedmush",name:"Fried Mushrooms",price:6,cost:1.50,category:"app",path:["fry"]},
+      {id:"trio",name:"Big Teaser Trio",price:9,cost:2.90,category:"app",path:["fry"]},
+      {id:"catfish",name:"3-pc Catfish Plate",price:13,cost:4.50,category:"plate",path:["fry"]},
+      {id:"fries",name:"Fries",price:3,cost:0.80,category:"side",path:["fry"]},
+      // ---- SHAKES → shake bar ----
+      {id:"shake",name:"Milkshake",price:5,cost:1.30,category:"shake",path:["shakes"],
+        modifiers:[{group:"Flavor",required:true,options:[{name:"Vanilla",price:0},{name:"Chocolate",price:0},{name:"Strawberry",price:0}]}]},
+      // ---- DRINKS → handed over at the counter ----
+      {id:"drink",name:"Fountain Drink",price:2.5,cost:0.40,category:"drink",path:[]},
+      {id:"tea",name:"Sweet Tea",price:2.5,cost:0.35,category:"drink",path:[]},
+      // ---- daily special with an 86 count ----
+      {id:"special",name:"Blue Plate Special",price:10,cost:3.20,category:"plate",path:["grill"],par:10}
+    ],
+    stations:[
+      {id:"counter",type:"central",   label:"Front Counter",    view:{money:true}},
+      {id:"grill",  type:"production", label:"Grill",            view:{money:false}},
+      {id:"fry",    type:"production", label:"Fry Station",      view:{money:false}},
+      {id:"shakes", type:"production", label:"Shake Bar",        view:{money:false}},
+      {id:"kds",    type:"kds",        label:"Kitchen Display",  view:{money:false}},
+      {id:"clock",  type:"timeclock",  label:"Time Clock",       view:{}},
+      {id:"office", type:"report",     label:"Office",           view:{money:true}}
+    ]
+  },
   counter: {
     label:"Counter shop", topology:"linear",
     branding:{ name:"Corner Store", brandColor:"#1f6feb" },
@@ -400,7 +456,20 @@ function saveDB(db){
 }
 let DB = loadDB();
 
-function setFlow(id){ localStorage.setItem("custompos_flow", id); FLOW=FLOWS[id]; draft=null; pending=null; DB=loadDB(); render(); }
+/* ADMIN SETTINGS — a shop can change its own tax, tips, name and labor target from the Office without editing
+   config or re-downloading. Saved settings live in DB.settings and OVERLAY the flow's defaults at load (and
+   after every save), so the money math and header just read FLOW as before — no per-call lookup, and a reload
+   re-applies them. Per-flow (DB is per-flow), logged like any other change. */
+function applySettings(){ try{ const s=(loadDB().settings)||{};
+    if(s.bizName) FLOW.branding.name=s.bizName;
+    if(s.tax){ FLOW.endpoints.tax=Object.assign({}, FLOW.endpoints.tax||{}, s.tax); }
+    if(Array.isArray(s.tipPresets) && FLOW.endpoints.payment){ FLOW.endpoints.payment.tip=Object.assign({}, FLOW.endpoints.payment.tip||{}, {presets:s.tipPresets}); }
+    if(s.targetLaborPct!=null){ FLOW.labor=Object.assign({}, FLOW.labor||{}, {targetLaborPct:+s.targetLaborPct}); }
+  }catch(e){} }
+function saveSettings(patch){ DB=loadDB(); DB.settings=Object.assign({}, DB.settings||{}, patch); saveDB(DB); applySettings(); logActivity("admin", "settings updated · "+Object.keys(patch).join(", ")); }
+applySettings();
+
+function setFlow(id){ localStorage.setItem("custompos_flow", id); FLOW=FLOWS[id]; draft=null; pending=null; DB=loadDB(); applySettings(); render(); }
 function boundStation(){ const id=localStorage.getItem(skey()); return FLOW.stations.find(s=>s.id===id)||null; }
 function bindStation(id){ localStorage.setItem(skey(), id); render(); }
 function unbind(){ localStorage.removeItem(skey()); render(); }
@@ -726,6 +795,27 @@ function renderReport(app, station){
   if(!isToday){ const next=document.createElement("button"); next.textContent=shiftDay(day,1)+" →"; next.onclick=()=>{ reportDay=shiftDay(day,1); if(reportDay===todayStr()) reportDay=null; render(); }; nav.appendChild(next);
     const tb=document.createElement("button"); tb.textContent="Today"; tb.style.marginLeft="8px"; tb.onclick=()=>{ reportDay=null; render(); }; nav.appendChild(tb); }
   app.appendChild(nav);
+  // ---- ⚙️ Business settings — tax, tips, name, labor target, editable live (collapsed by default) ----
+  if(isToday && station.view && station.view.money){
+    const t=FLOW.endpoints.tax||{}; const tip=(FLOW.endpoints.payment&&FLOW.endpoints.payment.tip)||{};
+    const det=document.createElement("details"); det.className="card"; det.style.padding="0 14px";
+    const sm=document.createElement("summary"); sm.style.cssText="cursor:pointer;padding:12px 0;font-weight:600"; sm.textContent="⚙️ Business settings — tax, tips, name"; det.appendChild(sm);
+    const grid=document.createElement("div"); grid.style.cssText="padding:0 0 12px";
+    const field=(label,el)=>{ const w=document.createElement("div"); w.className="fld"; w.style.margin="6px 0"; const l=document.createElement("span"); l.className="flab"; l.textContent=label; l.style.cssText="display:inline-block;min-width:190px;color:var(--dim)"; w.appendChild(l); w.appendChild(el); grid.appendChild(w); return el; };
+    const biz=document.createElement("input"); biz.type="text"; biz.value=FLOW.branding.name||""; biz.style.width="200px"; field("Business name", biz);
+    const rate=document.createElement("input"); rate.type="number"; rate.step="0.01"; rate.value=((+t.rate||0)*100).toFixed(2); rate.style.width="90px"; field("Sales tax rate (%)", rate);
+    const incl=document.createElement("input"); incl.type="checkbox"; incl.checked=!!t.included; field("Tax included in prices", incl);
+    const tips=document.createElement("input"); tips.type="text"; tips.value=(tip.presets||[]).join(", "); tips.placeholder="15, 18, 20"; tips.style.width="120px"; field("Tip presets (%)", tips);
+    const lab=document.createElement("input"); lab.type="number"; lab.value=(FLOW.labor&&FLOW.labor.targetLaborPct)||""; lab.placeholder="28"; lab.style.width="90px"; field("Target labor (% of sales)", lab);
+    const save=document.createElement("button"); save.className="primary"; save.textContent="Save settings"; save.style.marginTop="8px";
+    save.onclick=()=>{ const presets=tips.value.split(",").map(x=>+x.trim()).filter(x=>x>0);
+      saveSettings({ bizName:(biz.value||"").trim()||FLOW.branding.name,
+                     tax:{ rate:Math.max(0,(+rate.value||0)/100), included:!!incl.checked },
+                     tipPresets:presets.length?presets:undefined,
+                     targetLaborPct: lab.value!==""?+lab.value:undefined });
+      flash("Settings saved"); render(); };
+    grid.appendChild(save); det.appendChild(grid); app.appendChild(det);
+  }
   const dayAll=DB.records.filter(r=>(r.status==="PAID"||r.status==="CLOSED"||r.status==="REFUNDED") && dayOf(r.ts)===day);
   // multi-store: scope the whole report to one store, with an all-stores roll-up when viewing "All"
   if(storesOn()){

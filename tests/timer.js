@@ -7,6 +7,7 @@ const EXE = process.env.CHROMIUM_EXE || '/opt/pw-browsers/chromium-1194/chrome-l
   const ctx = await b.newContext(); const p = await ctx.newPage();
   p.on('console', m => { if (m.type()==='error') errors.push(m.text()); });
   p.on('pageerror', e => errors.push('pageerror: '+e.message));
+  await p.addInitScript(()=>{try{if(!localStorage.getItem("custompos_flow"))localStorage.setItem("custompos_flow","counter");}catch(e){}});
   await p.goto(url);
   const pick = async n => p.getByRole('button',{name:new RegExp('^'+n)}).first().click();  // anchored: avoid module-line text
   const changeTo = async n => { await p.getByText('change station').click(); await pick(n); };

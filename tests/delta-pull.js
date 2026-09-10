@@ -30,6 +30,7 @@ function assert(name, cond){ console.log((cond?'✓':'✗')+' '+name); if(!cond)
   const A = await b.newContext(); const pa = await A.newPage();
   pa.on('console', m => { if (m.type()==='error') errors.push('A: '+m.text()); });
   pa.on('pageerror', e => errors.push('A pageerror: '+e.message));
+  await pa.addInitScript(()=>{try{if(!localStorage.getItem("custompos_flow"))localStorage.setItem("custompos_flow","counter");}catch(e){}});
   await pa.goto(url);
   await pa.getByRole('button',{name:/^Order Counter/}).first().click();
   await pa.getByText('Coffee',{exact:false}).first().click();
@@ -48,6 +49,7 @@ function assert(name, cond){ console.log((cond?'✓':'✗')+' '+name); if(!cond)
                    n: (j && j.db && j.db.records ? j.db.records.length : 0) });
     } catch (e) {}
   });
+  await pb.addInitScript(()=>{try{if(!localStorage.getItem("custompos_flow"))localStorage.setItem("custompos_flow","counter");}catch(e){}});
   await pb.goto(url);
   // B bootstraps: its FIRST pull is `?since=0` and pulls the one existing order
   await pb.waitForFunction((k) => { try { return (JSON.parse(localStorage.getItem(k)||'{}').records||[]).length>0; } catch(e){ return false; } }, DKEY, { timeout: 8000 });
