@@ -1125,7 +1125,9 @@ function renderReport(app, station){
   // ---- ID checks (audit): defensible record of every age-restricted sale that was verified ----
   { const idlog=(DB.ageLog||[]).filter(a=>a.day===todayStr());
     if(idlog.length){ const ic=document.createElement("div"); ic.className="card"; ic.innerHTML="<div class='row'><b>ID checks (audit)</b> <span class='pill'>"+idlog.length+" today</span></div>";
-      idlog.slice(-8).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+a.at+" · #"+a.number+" — verified "+a.req+"+</span><span class='spacer'></span><span class='muted'>"+(a.station||"")+"</span>"; ic.appendChild(row); }); app.appendChild(ic); } }
+      idlog.slice(-8).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line";
+        const res=a.result==="refused" ? ("<span style='color:var(--bad)'>REFUSED — under "+a.req+"</span>") : ("verified "+a.req+"+");
+        row.innerHTML="<span>"+a.at+" · #"+a.number+" — "+res+(a.age!=null?" (age "+a.age+")":"")+"</span><span class='spacer'></span><span class='muted'>"+(a.station||"")+"</span>"; ic.appendChild(row); }); app.appendChild(ic); } }
   // ---- commission (only when the trade pays commission) ----
   const pct=(FLOW.commission&&FLOW.commission.pct)||0;
   if(FLOW.performers){
