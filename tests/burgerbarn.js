@@ -14,8 +14,8 @@ function serve(){ return new Promise(r=>{ const s=http.createServer((rq,rs)=>{ i
   p.on('pageerror', e => errors.push('pageerror: '+e.message));
   await p.goto(`http://127.0.0.1:${port}/builder.html`);
 
-  // build the real Hamburger Barn template
-  await p.locator('button.trade').filter({ hasText: 'burger-joint' }).click();
+  // build the real Hamburger Barn template (its trade button is the only one labeled "Hamburger Barn")
+  await p.locator('button.trade').filter({ hasText: 'Hamburger Barn' }).click();
   await p.getByRole('button',{name:/Build it for me/}).click();
   await p.waitForFunction(() => window.__build && window.__build.html);
 
