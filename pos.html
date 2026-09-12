@@ -1890,14 +1890,33 @@ function renderIntake(app, station){
   const tiles=[];
   const addItem=item=>{ const it=priceItem(item); if(!it) return;
     return needsConfig(it) ? (pending={item:it, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(it, {}, [], [], null); };
+  // 🍔 Toast-style category tabs: a long menu (a real restaurant) is unusable as one flat wall of tiles, so we
+  // tab it by category. Generic to every vertical — categories come from the catalog in first-appearance order,
+  // labels from an optional FLOW.catLabels map (else the category title-cased). The dry cleaner's short menu
+  // stays a plain grid. Search + category filter combine through one applyFilter so they never fight.
+  let activeCat = draft.__cat || "__all";
+  const catLabel = c => (FLOW.catLabels && FLOW.catLabels[c]) || (c ? c.charAt(0).toUpperCase()+c.slice(1) : "Other");
+  const applyFilter=()=>{ const s=document.getElementById("catSearch"); const q=s?s.value.trim().toLowerCase():"";
+    tiles.forEach(({item,btn})=>{ const inCat=(activeCat==="__all")||((item.category||"other")===activeCat);
+      const hay=(item.name+" "+(item.category||"")+" "+(item.barcode||item.sku||"")).toLowerCase();
+      btn.style.display=(inCat && (!q||hay.includes(q)))?"":"none"; }); };
   if(FLOW.catalog.length>5 || FLOW.endpoints.scan){
     const search=document.createElement("input"); search.id="catSearch"; search.placeholder="Search or scan…"; search.autocomplete="off"; search.style.cssText="width:100%;margin-bottom:10px";
-    search.oninput=()=>{ const q=search.value.trim().toLowerCase(); tiles.forEach(({item,btn})=>{ const hay=(item.name+" "+(item.category||"")+" "+(item.barcode||item.sku||"")).toLowerCase(); btn.style.display=(!q||hay.includes(q))?"":"none"; }); };
+    search.oninput=applyFilter;
     search.onkeydown=e=>{ if(e.key!=="Enter") return; const q=search.value.trim().toLowerCase(); if(!q) return;
       const exact=tiles.find(({item})=>String(item.barcode||item.sku||"").toLowerCase()===q && !item.__out);
       const vis=tiles.find(({btn,item})=>btn.style.display!=="none" && !item.__out);
       const hit=exact||vis; if(hit){ addItem(hit.item); } else { flash("No match for “"+search.value.trim()+"”"); } };
     cat.appendChild(search);
+  }
+  const catsInOrder=[]; FLOW.catalog.forEach(it=>{ const c=it.category||"other"; if(catsInOrder.indexOf(c)<0) catsInOrder.push(c); });
+  if(FLOW.catalog.length>8 && catsInOrder.length>1){
+    const tabs=document.createElement("div"); tabs.className="opts cattabs"; tabs.style.cssText="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px";
+    const mk=(key,label)=>{ const t=document.createElement("button"); t.textContent=label; if(activeCat===key) t.className="sel";
+      t.onclick=()=>{ activeCat=key; draft.__cat=key; tabs.querySelectorAll("button").forEach(x=>x.classList.remove("sel")); t.classList.add("sel"); applyFilter(); };
+      tabs.appendChild(t); };
+    mk("__all","All"); catsInOrder.forEach(c=>mk(c,catLabel(c)));
+    cat.appendChild(tabs);
   }
   const grid=document.createElement("div"); grid.className="grid";
   FLOW.catalog.forEach(item=>{
@@ -1916,6 +1935,7 @@ function renderIntake(app, station){
     grid.appendChild(b);
   });
   cat.appendChild(grid); app.appendChild(cat);
+  applyFilter();   // honor the active category tab (and any typed search) on first paint
 
   if(pending) app.appendChild(configPanel(station));
 
