@@ -354,7 +354,7 @@ const TEMPLATES = {
       // ---- BURGERS → grill (all can "make it a combo") ----
       {id:"bubba",name:"Bubba Burger",price:13,category:"burger",path:["grill"],
         modifiers:[{group:"Patty",required:true,options:[{name:"Single",price:0},{name:"Double",price:3}]}],
-        addons:[{name:"Bacon",price:1.5},{name:"Extra cheese",price:1},{name:"Jalapeños",price:0.5},{name:"Grilled onions",price:0.5},{name:"Make it a combo — fries & drink",price:3.5}],
+        addons:[{name:"Bacon",price:1.5},{name:"Extra cheese",price:1,reveal:{group:"Which cheese",required:true,options:[{name:"American",price:0},{name:"Swiss",price:0},{name:"Cheddar",price:0},{name:"Pepper Jack",price:0}]}},{name:"Jalapeños",price:0.5},{name:"Grilled onions",price:0.5},{name:"Make it a combo — fries & drink",price:3.5}],
         flags:["Allergy note"]},
       {id:"bachick",name:"Bacon Hickory Burger",price:12.5,category:"burger",path:["grill"],addons:[{name:"Extra bacon",price:1.5},{name:"Make it a combo — fries & drink",price:3.5}]},
       {id:"chiliburg",name:"Chili Burger",price:11.5,category:"burger",path:["grill"],addons:[{name:"Extra cheese",price:1},{name:"Make it a combo — fries & drink",price:3.5}]},
