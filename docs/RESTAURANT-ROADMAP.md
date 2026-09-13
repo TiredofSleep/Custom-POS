@@ -42,8 +42,8 @@ plan — not spelled out feature by feature.*
 | Modifiers (required/optional), add-ons, price deltas | ✅ | e.g. Patty single/double, cheese, bacon |
 | Combos / upsell ("make it a combo") | ✅ | add-on combos |
 | Open price / by-weight | ✅ | `custom-price.js`, `by-weight.js` |
-| **Day-part menus** (breakfast till 11) | ❌ | |
-| **Time-based / happy-hour pricing** | ❌ | |
+| **Day-part menus** (breakfast till 11) | ✅ | item `avail` window hides it off-hours (`dayparts.js`) |
+| **Time-based / happy-hour pricing** | ✅ | item `happyPrice` + shop `happyHour` window (`dayparts.js`) |
 
 ## 4. Payments & checkout
 | Capability | Status | Notes |
@@ -122,9 +122,9 @@ Sequenced by daily value to a sit-down burger place like Hamburger Barn, and by 
 - **P2 — runs a real dining room**
   4. ✅ Server assignment + "my tables" — *shipped*
   5. ✅ Transfer / merge tables, move a guest — *shipped*
-  6. Day-part menus + happy-hour pricing — *next*
+  6. ✅ Day-part menus + happy-hour pricing — *shipped*
 - **P3 — reservations & the door**
-  7. Reservations + waitlist
+  7. Reservations + waitlist — *next*
 - **P4 — off-premise & self-serve**
   8. Pay-at-table / QR pay
   9. Online ordering / QR menu; 3rd-party delivery intake

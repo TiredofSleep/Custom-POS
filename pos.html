@@ -714,6 +714,16 @@ function adjustStock(item, qty, reason){
 }
 function isLowStock(item){ return tracksStock(item) && stockOnHand(item) <= (item.reorderAt!=null?item.reorderAt:0); }
 function isOutOfStock(item){ return tracksStock(item) && stockOnHand(item) <= 0; }
+// ⏰ TIME WINDOWS — day-part menus (breakfast till 11) + happy-hour pricing. A window is {days?:[0-6], from, to}
+// ("HH:MM"); days omitted = every day; from/to omitted = all day; from>to spans midnight. All read the live clock.
+function hmToMin(s){ const m=String(s||"").match(/^(\d{1,2}):(\d{2})$/); return m?(+m[1]*60 + +m[2]):null; }
+function withinWindow(win, at){ if(!win) return false; const now=at||new Date(); const day=now.getDay();
+  if(Array.isArray(win.days) && win.days.length && win.days.indexOf(day)<0) return false;
+  const f=hmToMin(win.from), t=hmToMin(win.to); if(f==null||t==null) return true;
+  const cur=now.getHours()*60+now.getMinutes(); return f<=t ? (cur>=f&&cur<t) : (cur>=f||cur<t); }
+function happyActive(at){ return withinWindow(FLOW.endpoints && FLOW.endpoints.happyHour, at); }   // shop-wide happy-hour window
+function itemAvailNow(item, at){ return !item || !item.avail || withinWindow(item.avail, at); }      // day-part availability
+function itemPriceNow(item, at){ return (item && item.happyPrice!=null && happyActive(at)) ? +item.happyPrice : (item?item.price:0); }  // happy-hour price when live
 function needsConfig(item){ return (item.modifiers&&item.modifiers.length) || (item.addons&&item.addons.length) || (item.flags&&item.flags.length) || item.performer; }
 
 /* ============================================================================ RENDER */
@@ -2018,12 +2028,16 @@ function renderIntake(app, station){
   }
   const grid=document.createElement("div"); grid.className="grid";
   FLOW.catalog.forEach(item=>{
-    const b=document.createElement("button"); b.className="tile"; const rem=remainingOf(item); const out=is86(item)||isOutOfStock(item);
+    const b=document.createElement("button"); b.className="tile"; const rem=remainingOf(item); const offHours=!itemAvailNow(item); const out=is86(item)||isOutOfStock(item)||offHours;
     item.__out=out;
     if(out) b.className="tile eightysix";
     const via=item.path.length?item.path.join(" → "):"no prep";
-    const priceLbl = item.customPrice ? "price at ring" : money(item.price)+(item.byWeight?" / "+(item.unit||"lb"):"");
+    const happy = item.happyPrice!=null && happyActive();
+    const priceLbl = item.customPrice ? "price at ring"
+      : (happy ? ("<s class='muted'>"+money(item.price)+"</s> "+money(item.happyPrice)+" <span class='pill'>⏰ happy hour</span>")
+               : money(item.price)+(item.byWeight?" / "+(item.unit||"lb"):""));
     let sub = station.view.money?priceLbl+" · "+via:via;
+    if(offHours) sub += " · <span class='pill x86'>"+(item.avail&&(item.avail.from||item.avail.to)?((item.avail.from||"")+"–"+(item.avail.to||"")):"off hours")+"</span>";
     if(item.par!=null) sub += is86(item) ? " · <span class='pill x86'>86</span>" : " · "+rem+" left";
     if(tracksStock(item)) sub += isOutOfStock(item) ? " · <span class='pill x86'>out of stock</span>" : " · "+stockOnHand(item)+" in stock"+(isLowStock(item)?" <span class='pill flag'>low</span>":"");
     b.innerHTML = item.name + "<small>"+sub+"</small>";
@@ -2167,6 +2181,8 @@ function priceItem(item){
     if(isNaN(n)||n<0){ flash("Enter a price"); return null; }
     return {...item, price:+n.toFixed(2)};
   }
+  // ⏰ happy-hour: ring the happy price when the window is live (a fixed-price item)
+  const now=itemPriceNow(item); if(now!==item.price) return {...item, price:now};
   return item;
 }
 function sendDraft(){
