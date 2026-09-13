@@ -18,8 +18,8 @@ plan — not spelled out feature by feature.*
 | Table states (open→seated→ordered→…) + turn timing + covers | ✅ | `floor.js`, `turns.js` |
 | Coursing — apps/drinks first, fire entrées, add dessert later | ✅ | `coursing.js` |
 | **Order by SEAT number** (seat 2's ribeye) | ✅ | seat picker at intake; seat rides the line → KDS/station/ticket/check (`seat-order.js`) |
-| Split the check | 🟡 | even 2/3/4-way (`split.js`) — **not by seat or by item** |
-| **Per-seat / per-item checks** | ❌ | each guest pays their own — the other half of the seat gap |
+| Split the check | ✅ | even 2/3/4-way **and by seat** (`split.js`, `split-seat.js`) |
+| **Per-seat checks** (each guest pays their own) | ✅ | "By seat" at payment; tenders tagged to the seat (`split-seat.js`) |
 | Transfer / merge tables, move a guest | ❌ | |
 | Server assignment (sections → a server, "my tables") | ❌ | staff exist (`worker.js`), but tables aren't owned |
 | Reservations + waitlist | ❌ | `booking.js` is appointment-style, not restaurant reso/waitlist |
@@ -117,8 +117,8 @@ Sequenced by daily value to a sit-down burger place like Hamburger Barn, and by 
 
 - **P1 — the heart of the server flow**
   1. ✅ Seat-numbered ordering (assign each line to a seat; seats show on the ticket & KDS) — *shipped*
-  2. Split & pay **by seat** (falls out of #1) and by item — *next*
-  3. Comps with reason + manager approval
+  2. ✅ Split & pay **by seat** — *shipped* (by-item split is a later refinement)
+  3. Comps with reason + manager approval — *next*
 - **P2 — runs a real dining room**
   4. Server assignment + "my tables"
   5. Transfer / merge tables, move a guest
