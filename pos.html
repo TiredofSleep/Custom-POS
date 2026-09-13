@@ -574,6 +574,17 @@ function ageFromDOB(s){ s=String(s||"").trim(); if(!s) return null;
   var now=new Date(), a=now.getFullYear()-y; if(now.getMonth()<m-1||(now.getMonth()===m-1&&now.getDate()<d)) a--; return a; }
 function recordPaid(r){ return (r.tenders||[]).reduce((s,t)=> s + t.amount, 0); }
 function recordBalance(r){ return +(recordTotal(r) - recordPaid(r)).toFixed(2); }
+// 👤 SPLIT BY SEAT — each guest pays their own. One bucket per seat (+ a "Shared" bucket for whole-table lines).
+// A seat's amount = its share of the line subtotal, scaled to the record total so tax/tip/discount ride along.
+function orderHasSeats(r){ return (r.lines||[]).some(l=>!l.returned && l.seat); }
+function seatBuckets(r){ const map={};
+  (r.lines||[]).forEach(l=>{ if(l.returned) return; const k=l.seat?("s"+l.seat):"shared";
+    (map[k]=map[k]||{ key:k, seat:l.seat||null, label:l.seat?("Seat "+l.seat):"Shared", sub:0 }).sub += l.price*l.qty; });
+  return Object.keys(map).sort((a,b)=>(map[a].seat||0)-(map[b].seat||0)).map(k=>map[k]); }
+function seatAmount(r, bucket){ const subTot=(r.lines||[]).filter(l=>!l.returned).reduce((s,l)=>s+l.price*l.qty,0)||1;
+  return +(recordTotal(r) * bucket.sub / subTot).toFixed(2); }
+function seatPaid(r, key){ return (r.tenders||[]).filter(t=>t.seatKey===key).reduce((s,t)=>s+t.amount,0); }
+function seatDue(r, bucket){ return +Math.max(0, seatAmount(r,bucket)-seatPaid(r,bucket.key)).toFixed(2); }
 function firstPerformer(r){ const l=r.lines.find(x=>x.performer); return l?l.performer:null; }
 // refund reverses every original tender back to itself (card → card, cash → cash) and marks the order REFUNDED
 function refundRecord(r){
@@ -2391,30 +2402,42 @@ function renderCheckout(app, station){
         row.appendChild(dob); row.appendChild(ok); gate.appendChild(row);
         c.appendChild(gate); app.appendChild(c); return;   // no tenders until a valid, of-age birthdate is entered
       }
-      // split the check evenly N ways (opt-in) — each tap takes one equal share until the balance clears
+      // split the check — evenly N ways, or BY SEAT (each guest pays their own) when the order was rung by seat
       if(FLOW.endpoints.payment.split){
-        const wrap=document.createElement("div"); wrap.className="mgroup"; wrap.innerHTML="<div class='lbl'>Split evenly</div>";
+        const wrap=document.createElement("div"); wrap.className="mgroup"; wrap.innerHTML="<div class='lbl'>Split the check</div>";
         const opts=document.createElement("div"); opts.className="opts";
-        [2,3,4].forEach(n=>{ const bb=document.createElement("button"); if(r.splitWays===n) bb.className="sel"; bb.textContent=n+" ways"; bb.onclick=()=>{ r.splitWays=n; r.splitShare=+(recordTotal(r)/n).toFixed(2); saveDB(DB); render(); }; opts.appendChild(bb); });
-        const no=document.createElement("button"); if(!r.splitWays) no.className="sel"; no.textContent="No split"; no.onclick=()=>{ delete r.splitWays; delete r.splitShare; saveDB(DB); render(); }; opts.appendChild(no);
+        if(orderHasSeats(r)){ const sb=document.createElement("button"); if(r.splitMode==="seat") sb.className="sel"; sb.textContent="👤 By seat";
+          sb.onclick=()=>{ r.splitMode="seat"; delete r.splitWays; delete r.splitShare; const first=seatBuckets(r).find(x=>seatDue(r,x)>0.0001); r.paySeat=first?first.key:null; saveDB(DB); render(); }; opts.appendChild(sb); }
+        [2,3,4].forEach(n=>{ const bb=document.createElement("button"); if(r.splitMode!=="seat"&&r.splitWays===n) bb.className="sel"; bb.textContent=n+" ways"; bb.onclick=()=>{ r.splitMode="even"; r.splitWays=n; r.splitShare=+(recordTotal(r)/n).toFixed(2); delete r.paySeat; saveDB(DB); render(); }; opts.appendChild(bb); });
+        const no=document.createElement("button"); if(!r.splitWays&&r.splitMode!=="seat") no.className="sel"; no.textContent="No split"; no.onclick=()=>{ delete r.splitWays; delete r.splitShare; delete r.splitMode; delete r.paySeat; saveDB(DB); render(); }; opts.appendChild(no);
         wrap.appendChild(opts); c.appendChild(wrap);
-        if(r.splitWays){ const paidShares=Math.round((recordTotal(r)-bal)/r.splitShare); const info=document.createElement("div"); info.className="muted"; info.style.margin="4px 0"; info.textContent=r.splitWays+" shares · "+money(r.splitShare)+" each · "+paidShares+" of "+r.splitWays+" paid"; c.appendChild(info); }
+        if(r.splitMode==="seat"){   // one row per seat: its amount, paid ✓ or a "pay this seat" selector
+          seatBuckets(r).forEach(bkt=>{ const due=seatDue(r,bkt), amt=seatAmount(r,bkt), done=due<=0.0001;
+            const row=document.createElement("div"); row.className="line";
+            row.innerHTML="<span>"+(done?"✓ ":"")+bkt.label+" — "+money(amt)+(done?"":" <span class='muted'>· "+money(due)+" due</span>")+"</span><span class='spacer'></span>";
+            if(!done){ const pick=document.createElement("button"); if(r.paySeat===bkt.key) pick.className="sel"; pick.textContent=r.paySeat===bkt.key?"paying":"pay this"; pick.onclick=()=>{ r.paySeat=bkt.key; saveDB(DB); render(); }; row.appendChild(pick); }
+            else { const t=document.createElement("span"); t.className="pill clock good"; t.textContent="paid"; row.appendChild(t); }
+            c.appendChild(row); });
+        } else if(r.splitWays){ const paidShares=Math.round((recordTotal(r)-bal)/r.splitShare); const info=document.createElement("div"); info.className="muted"; info.style.margin="4px 0"; info.textContent=r.splitWays+" shares · "+money(r.splitShare)+" each · "+paidShares+" of "+r.splitWays+" paid"; c.appendChild(info); }
       }
-      const payAmt = r.splitWays ? Math.min(r.splitShare, bal) : bal;
-      const label = r.splitWays ? "Take share " : (paid>0?"Take balance ":"Take payment ");
-      const b=document.createElement("button"); b.className="primary"; b.textContent=label+money(payAmt)+" cash"; b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:payAmt}); logActivity("money", "cash "+money(payAmt), r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; c.appendChild(b);
+      const paySeatBkt = (r.splitMode==="seat"&&r.paySeat) ? seatBuckets(r).find(x=>x.key===r.paySeat) : null;
+      const payAmt = paySeatBkt ? Math.min(seatDue(r,paySeatBkt), bal) : (r.splitWays ? Math.min(r.splitShare, bal) : bal);
+      const label = paySeatBkt ? (paySeatBkt.label+" ") : (r.splitWays ? "Take share " : (paid>0?"Take balance ":"Take payment "));
+      const seatTag = () => (r.splitMode==="seat" && r.paySeat) ? r.paySeat : undefined;   // tag a tender to its seat
+      const advanceSeat = () => { if(r.splitMode==="seat"){ const nx=seatBuckets(r).find(x=>seatDue(r,x)>0.0001); r.paySeat=nx?nx.key:null; } };
+      const b=document.createElement("button"); b.className="primary"; b.textContent=label+money(payAmt)+" cash"; b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:payAmt,seatKey:seatTag()}); logActivity("money", "cash "+money(payAmt), r.number); advanceSeat(); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; c.appendChild(b);
       // make change: enter what the customer handed over and see the change due (the cash-drawer moment)
       const mc=document.createElement("button"); mc.textContent="＄ Make change"; mc.style.margin="10px 0 0 8px"; mc.onclick=()=>{ cashPad={ recId:r.id, received:payAmt }; render(); }; c.appendChild(mc);
       if((FLOW.endpoints.payment.tenders||[]).includes("card")){
         const cb=document.createElement("button"); cb.textContent=(r.splitWays?"Share by card ":"Pay by card ")+money(payAmt); cb.style.margin="10px 0 0 8px";
         const idemKey=r.id+":card:"+Math.round(payAmt*100)+":"+cardTenders(r).length;   // stable across a double-tap of THIS button
-        cb.onclick=()=>{ const res=chargeCardOnce(r, payAmt, idemKey); if(res.status==="approved"){ if(!res.dedup){ const t=res.tender; logActivity("money", "card "+money(payAmt)+(t&&t.brand?" ("+t.brand+" ••"+t.last4+")":""), r.number); } if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { logActivity("money", "card declined "+money(payAmt), r.number); flash("Card "+(res.message||"declined")); } };
+        cb.onclick=()=>{ const res=chargeCardOnce(r, payAmt, idemKey); if(res.status==="approved"){ if(!res.dedup){ const t=res.tender; if(t) t.seatKey=seatTag(); logActivity("money", "card "+money(payAmt)+(t&&t.brand?" ("+t.brand+" ••"+t.last4+")":""), r.number); advanceSeat(); } if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { logActivity("money", "card declined "+money(payAmt), r.number); flash("Card "+(res.message||"declined")); } };
         c.appendChild(cb);
       }
       // house account: put it on the customer's tab (A/R) — settles the order now, they pay it later
       if((FLOW.endpoints.payment.tenders||[]).includes("account") && r.customer && r.customer.phone){
         const ab=document.createElement("button"); ab.textContent="Charge to account "+money(payAmt); ab.style.margin="10px 0 0 8px";
-        ab.onclick=()=>{ r.tenders.push({type:"account",amount:payAmt}); const cust=DB.customers.find(x=>x.phone===r.customer.phone); if(cust){ cust.balance=+((cust.balance||0)+payAmt).toFixed(2); } logActivity("money", "charged to account "+money(payAmt)+(r.customer?" · "+r.customer.name:""), r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); }; c.appendChild(ab);
+        ab.onclick=()=>{ r.tenders.push({type:"account",amount:payAmt,seatKey:seatTag()}); const cust=DB.customers.find(x=>x.phone===r.customer.phone); if(cust){ cust.balance=+((cust.balance||0)+payAmt).toFixed(2); } logActivity("money", "charged to account "+money(payAmt)+(r.customer?" · "+r.customer.name:""), r.number); advanceSeat(); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); }; c.appendChild(ab);
       }
       // cash change-making: enter amount tendered, see change due, then take the cash
       if(cashPad && cashPad.recId===r.id){
@@ -2427,7 +2450,7 @@ function renderCheckout(app, station){
         pad.appendChild(row);
         const cd=document.createElement("div"); cd.id="changeDue"; cd.style.cssText="font-size:18px;font-weight:700;margin:8px 0"; cd.textContent="Change due "+money(Math.max(0,(cashPad.received||0)-payAmt)); pad.appendChild(cd);
         const conf=document.createElement("button"); conf.id="cashConfirm"; conf.className="primary"; conf.textContent="✓ Take "+money(payAmt); conf.disabled=(cashPad.received||0)<payAmt-0.0001;
-        conf.onclick=()=>{ const recv=+(cashPad.received||payAmt).toFixed(2); const chg=+(recv-payAmt).toFixed(2); r.tenders.push({ type:"cash", amount:payAmt, tendered:recv, change:chg }); logActivity("money", "cash "+money(payAmt)+" (tendered "+money(recv)+", change "+money(chg)+")", r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; pad.appendChild(conf);
+        conf.onclick=()=>{ const recv=+(cashPad.received||payAmt).toFixed(2); const chg=+(recv-payAmt).toFixed(2); r.tenders.push({ type:"cash", amount:payAmt, tendered:recv, change:chg, seatKey:seatTag() }); logActivity("money", "cash "+money(payAmt)+" (tendered "+money(recv)+", change "+money(chg)+")", r.number); advanceSeat(); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; pad.appendChild(conf);
         const cx=document.createElement("button"); cx.textContent="Cancel"; cx.style.marginLeft="8px"; cx.onclick=()=>{ cashPad=null; render(); }; pad.appendChild(cx);
         c.appendChild(pad);
       }
