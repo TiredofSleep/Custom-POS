@@ -56,7 +56,7 @@ plan — not spelled out feature by feature.*
 | Gift cards + loyalty points | ✅ | `loyalty-giftcards.js` |
 | House accounts / A/R, deposits, round-up | ✅ | `house-account.js`, `deposit-*.js`, `roundup.js` |
 | Receipt — print & email | ✅ | `print.js`, `notify.js`, `tax-receipt.js` |
-| **Pay-at-table / QR pay** | ❌ | |
+| **Pay-at-table / QR pay** | 🟡 | needs a hosted pay page (hub) the guest's phone loads — not a single-file engine feature |
 
 ## 5. Order types
 | Capability | Status | Notes |
@@ -64,9 +64,9 @@ plan — not spelled out feature by feature.*
 | Dine-in | ✅ | |
 | Takeout / to-go | ✅ | |
 | Own delivery routes (driver, stops, confirm) | ✅ | `route.js` |
-| **3rd-party delivery (DoorDash/UberEats) intake** | ❌ | |
-| **Online ordering / QR menu** | ❌ | |
-| **Drive-thru mode** | ❌ | if the concept needs it |
+| **Drive-thru mode** | ✅ | order types (dine-in/to-go/drive-thru) on the ticket + KDS (`order-types.js`) |
+| **3rd-party delivery (DoorDash/UberEats) intake** | 🟡 | engine has the `channel` hook + chip; ingestion needs the hub + a merchant delivery account |
+| **Online ordering / QR menu** | 🟡 | needs a hosted customer-facing page (hub), not a single-file engine feature |
 
 ## 6. Staff & labor
 | Capability | Status | Notes |
@@ -126,9 +126,12 @@ Sequenced by daily value to a sit-down burger place like Hamburger Barn, and by 
 - **P3 — reservations & the door**
   7. ✅ Reservations + waitlist — *shipped*
 - **P4 — off-premise & self-serve**
-  8. Pay-at-table / QR pay
-  9. Online ordering / QR menu; 3rd-party delivery intake
-  10. Drive-thru (if needed)
+  10. ✅ Drive-thru (order types: dine-in / to-go / drive-thru) — *shipped*
+  8/9. Pay-at-table / QR pay · online ordering / QR menu · 3rd-party delivery intake — **need the hub + a
+       hosted customer-facing page + (for delivery) the merchant's own accounts.** These are honestly *not*
+       single-file engine features: the engine side is ready (an order `channel` hook + chip so an online or
+       delivery order displays and routes like any other), but the customer-facing web + processor + delivery
+       API are a hub/hosting/account project, sequenced after Burger Barn's on-premise flow proves out.
 
 Each item ships through the safety pipeline (draft → gates/tests → live preview → owner approval → deploy → rollback),
 with a test pinning the behavior — same as every change in this repo.
