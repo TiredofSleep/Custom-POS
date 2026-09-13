@@ -2457,7 +2457,13 @@ function docBagLabel(r, bagNo, count){
 function receiptPanel(r){
   const sub=lineSubtotal(r), disc=recordDiscount(r), tax=recordTax(r), tip=r.tip||0, tot=recordTotal(r);
   const line=(l,v,b)=>"<div class='line'>"+(b?"<b>":"<span class='muted'>")+l+(b?"</b>":"</span>")+"<span class='spacer'></span>"+(b?"<b>":"<span>")+v+(b?"</b>":"</span>")+"</div>";
-  const rows=r.lines.map(l=>"<div class='line'><span>"+l.qty+"× "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.serialized&&l.tag?" <small class='muted'>["+(l.tagLabel||"Tag")+" "+l.tag+"]</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span></div>").join("");
+  const lineRow=l=>"<div class='line'><span>"+l.qty+"× "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.serialized&&l.tag?" <small class='muted'>["+(l.tagLabel||"Tag")+" "+l.tag+"]</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span></div>";
+  // 👤 per-seat receipt: when the order was rung by seat, group the itemized lines under each seat with its subtotal
+  let rows;
+  if(orderHasSeats(r)){
+    rows=seatBuckets(r).map(bkt=>{ const its=r.lines.filter(l=>((l.seat?("s"+l.seat):"shared"))===bkt.key);
+      return "<div class='line'><b>"+bkt.label+"</b><span class='spacer'></span><b>"+money(bkt.sub)+"</b></div>"+its.map(lineRow).join(""); }).join("");
+  } else { rows=r.lines.map(lineRow).join(""); }
   const hr="<hr style='border:none;border-top:1px dashed var(--line)'>";
   const totals=(disc||tax?line("Subtotal",money(sub)):"")+(disc?line("Discount","−"+money(disc)):"")+(tax?line(taxIncluded()?"Tax (incl.)":"Tax",money(tax)):"")+(tip?line("Tip",money(tip)):"")+line("Total",money(tot),true);
   const tenders=(r.tenders||[]).map(t=>line(t.type==="card"?cardLabel(t):t.type[0].toUpperCase()+t.type.slice(1), money(t.amount))).join("");

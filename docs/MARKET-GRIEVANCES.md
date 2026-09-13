@@ -55,6 +55,15 @@ takes days."
 5. ⬜ **Delivery-driver report** — small; low priority for a dine-in burger joint (revisit if a delivery line matters).
 6. ✅ **Tip-out by role** — shipped: the close spells out each support role's cut of tips + what servers keep (`tip-out.js`).
 
+**Beyond the forum list (ideas generated + shipped):**
+- ✅ **Per-seat receipt** — a seated order's receipt groups items by seat with subtotals (`seat-receipt.js`).
+
+**Further ideas parked for owner steer (judgment calls better set by real Burger Barn shifts than by a forum):**
+- Manager-PIN override for the day-part gate (rare off-hours exception, logged) — *note the honesty tradeoff; owner's call.*
+- Void-with-reason on a sent-but-unpaid item (overlaps comp; loss-prevention angle).
+- Cash-tip declaration at close (payroll).
+- Delivery-driver report (only if a delivery line matters).
+
 These are recommendations, not commitments — the owner prioritizes (and real Burger Barn grievances outrank a
 forum). Each ships through the safety pipeline with a test, like everything here.
 
