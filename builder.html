@@ -346,7 +346,7 @@ const TEMPLATES = {
   // confirms in the builder — the shop knows its own prices. "Make it a combo" is the Toast-style fries+drink upsell.
   burgerbarn: { flowId:"burgerbarn", label:"Hamburger Barn (burger joint)", topology:"hub-and-spoke", blurb:"The real Hamburger Barn menu — grill · fry · shakes · salad line",
     branding:{ name:"Hamburger Barn", brandColor:"#a3312a" },
-    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}, split:true} },
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}, split:true}, orderTypes:["Dine-in","To-go","Drive-thru"] },
     timer:{ mode:"aging", warnSec:360, badSec:720, label:"ticket" }, capacity:{ perOrderMins:6, max:15 }, kds:{warnSec:360,badSec:720},
     // Toast-style category tabs on the ordering screen (order = first appearance below)
     catLabels:{ burger:"Burgers", chicken:"Chicken", sandwich:"Sandwiches", plate:"Plates", texmex:"Tex-Mex", app:"Appetizers", salad:"Salads", soup:"Soups & Potatoes", side:"Sides", shake:"Shakes", dessert:"Desserts", kids:"Kids", drink:"Drinks" },
@@ -444,7 +444,7 @@ const TEMPLATES = {
   bistro: { flowId:"bistro", label:"Full-service restaurant", topology:"hub-and-spoke", blurb:"Dine-in — tables, floor plan, kitchen & bar",
     branding:{ name:"My Bistro", brandColor:"#7a1f2b" },
     staff:[ {id:"own",name:"Owner",pin:"1111",role:"owner"}, {id:"mgr",name:"Manager",pin:"2222",role:"manager"}, {id:"srv1",name:"Riley",pin:"3333"}, {id:"srv2",name:"Sam",pin:"4444"} ],   // servers own tables; owner/manager approve comps
-    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[18,20,22]}, split:true}, approvals:{comp:true,refund:true}, happyHour:{from:"15:00", to:"18:00"}, coursing:true },   // happy hour 3–6pm
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[18,20,22]}, split:true}, approvals:{comp:true,refund:true}, happyHour:{from:"15:00", to:"18:00"}, orderTypes:["Dine-in","To-go"], coursing:true },   // happy hour 3–6pm
     courses:["Appetizers","Entrées","Desserts"],
     timer:{ mode:"aging", warnSec:600, badSec:1200, label:"ticket" }, kds:{warnSec:420,badSec:900},
     floor:{ label:"Dining Room", warnSec:900, sections:["Main","Patio","Bar"], tables:[

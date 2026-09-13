@@ -525,6 +525,10 @@ function storeChip(r){ if(!storesOn() || !r.storeId) return ""; const nm=storeNa
 function tableChip(r){ return r.tableId ? " <span class='pill' title='Table'>🍽 "+tableLabel(r.tableId)+"</span>" : ""; }
 // 👤 which seat a line belongs to (dine-in seat-by-seat ordering). Blank when the line isn't tied to a seat.
 function seatChip(l){ return (l&&l.seat) ? " <span class='pill' title='Seat'>👤 S"+l.seat+"</span>" : ""; }
+// 🚗 order type (dine-in / to-go / drive-thru) + channel (in-house vs an online/delivery order the hub handed in).
+function orderTypes(){ return (FLOW.endpoints && FLOW.endpoints.orderTypes) || null; }
+function orderTypeChip(r){ if(!r||!r.orderType) return ""; const ic=/drive/i.test(r.orderType)?"🚗":(/go|take/i.test(r.orderType)?"🥡":"🍽"); return " <span class='pill' title='Order type'>"+ic+" "+r.orderType+"</span>"; }
+function channelChip(r){ return (r&&r.channel&&r.channel!=="in-house") ? " <span class='pill' title='Channel' style='background:var(--brand);color:#fff'>🌐 "+r.channel+"</span>" : ""; }
 // 🎁 a comped line (free, reason-coded, optionally manager-approved). Shows the reason on hover.
 function compChip(l){ return (l&&l.comped) ? " <span class='pill' title='Comp: "+(l.comped.reason||"")+((l.comped.by)?" · "+l.comped.by:"")+"' style='background:var(--bad);color:#fff'>🎁 comp</span>" : ""; }
 function assembledAt(r){ if(!storesOn() || !r.storeId) return ""; const p=plantStore(); return (p && r.storeId!==p.id) ? "assembled at "+p.name : ""; }   // a drop-store order is done at the plant
@@ -1454,7 +1458,7 @@ function renderKDS(app, station){
   if(!live.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="All caught up — no tickets working."; app.appendChild(e); }
   live.forEach(r=>{ const c=document.createElement("div"); c.className="card";
     const fc=r.firedCourse||1;
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> "+kdsChip(r)+(coursingOn()?" <span class='pill'>"+courseLabel(fc)+"</span>":"")+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> "+kdsChip(r)+orderTypeChip(r)+channelChip(r)+(coursingOn()?" <span class='pill'>"+courseLabel(fc)+"</span>":"")+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     r.lines.filter(l=>courseReleased(r,l)).forEach(l=>{ const row=document.createElement("div"); row.className="line"; const where=lineComplete(l)?"ready":("at "+l.path[l.stage]);
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+"</span><span class='spacer'></span><span class='muted'>"+where+"</span>"; c.appendChild(row); });
     // held courses waiting to be fired
@@ -2016,6 +2020,15 @@ function renderCustomerBar(app, station){
 function renderIntake(app, station){
   if(!draft) draft = { lines:[] };
   renderCustomerBar(app, station);
+  // 🚗 order type — dine-in / to-go / drive-thru (when the flow configures them)
+  if(orderTypes() && orderTypes().length){
+    if(!draft.orderType) draft.orderType=orderTypes()[0];
+    const ot=document.createElement("div"); ot.className="card"; ot.style.cssText="padding:8px 10px;margin-bottom:10px";
+    const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="8px"; lbl.textContent="Order:"; ot.appendChild(lbl);
+    const opts=document.createElement("div"); opts.className="opts"; opts.style.display="inline-flex"; opts.style.flexWrap="wrap";
+    orderTypes().forEach(tp=>{ const b=document.createElement("button"); if(draft.orderType===tp) b.className="sel"; b.textContent=tp; b.onclick=()=>{ draft.orderType=tp; render(); }; opts.appendChild(b); });
+    ot.appendChild(opts); app.appendChild(ot);
+  }
   // table selector — when a floor is configured, ring this check to a table (restaurants)
   if(FLOW.floor && (FLOW.floor.tables||[]).length){
     const tb=document.createElement("div"); tb.className="card"; tb.style.cssText="padding:8px 10px;margin-bottom:10px";
@@ -2237,6 +2250,8 @@ function priceItem(item){
 function sendDraft(){
   DB=loadDB(); DB.seq++;
   const rec={ id:"R"+DB.seq, number:DB.seq, lines:draft.lines.map(l=>({...l, stage:0})), tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now() };
+  if(draft.orderType) rec.orderType=draft.orderType;   // 🚗 dine-in / to-go / drive-thru
+  if(draft.channel) rec.channel=draft.channel;         // 🌐 in-house vs an online/delivery order handed in by the hub
   if(storesOn()) rec.storeId = storeForOrder(draft.customer);   // order belongs to a store (customer's, else this device's, else plant)
   if(draft.tableId){ rec.tableId = draft.tableId;   // ring the check to its table; nudge an empty table to "occupied"
     DB.tables=DB.tables||{}; const cur=DB.tables[draft.tableId]; if(!cur || cur.state==="empty" || !cur.state){ DB.tables[draft.tableId]={ state:"ordered", since:Date.now(), seatedTs:(cur&&cur.seatedTs)||Date.now() }; } }
@@ -2300,7 +2315,7 @@ function renderPipeline(app, station){
   const recs=DB.records.filter(r=> r.status==="INPROGRESS" && linesAtStation(r, station.id).length);
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nothing waiting."; app.appendChild(e); }
   recs.forEach(r=>{ const mine=linesAtStation(r, station.id); const c=document.createElement("div"); c.className="card";
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+orderTypeChip(r)+channelChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     let hasFlags=false, reconOk=true;
     mine.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const next=l.path[l.stage+1];
       const flagHtml=(l.flags||[]).map(f=>{ hasFlags=true; return " <span class='pill flag'>⚠ "+f+"</span>"; }).join("");
@@ -2392,6 +2407,7 @@ function docTicket(r){
   const L=[]; L.push(((FLOW.branding&&FLOW.branding.name)||"Order").toUpperCase());
   if(storesOn()&&r.storeId){ L.push(storeName(r.storeId)); const aa=assembledAt(r); if(aa) L.push(aa); }
   L.push("Order #"+r.number+"   "+(r.createdAt||"")); if(r.customer) L.push((r.customer.name||"")+"   "+(r.customer.phone||""));
+  if(r.orderType||r.tableId||(r.channel&&r.channel!=="in-house")) L.push([r.orderType, r.tableId?("Table "+tableLabel(r.tableId)):"", (r.channel&&r.channel!=="in-house")?r.channel:""].filter(Boolean).join("   "));
   L.push("------------------------------"); (r.lines||[]).forEach(l=>L.push(docLineText(l)));
   L.push("------------------------------"); const dd=dueDateText(r); if(dd) L.push("Promised: "+dd);
   return L.join("\n");
@@ -2425,7 +2441,7 @@ function renderCheckout(app, station){
   const recs=DB.records.filter(r=> r.status==="READY"||r.status==="PAID");
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No orders ready to check out."; app.appendChild(e); }
   recs.forEach(r=>{ const c=document.createElement("div"); c.className="card"; const bal=recordBalance(r);
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+orderTypeChip(r)+channelChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
       const priceHtml=l.comped ? ("<s class='muted'>"+money((l.comped.wasPrice||0)*l.qty)+"</s> "+money(0)) : money(l.price*l.qty);
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+compChip(l)+"</span><span class='spacer'></span><span>"+priceHtml+"</span>";
