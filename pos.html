@@ -1488,6 +1488,21 @@ function setTableState(id, state){ DB=loadDB(); DB.tables=DB.tables||{}; DB.turn
   if(state===emptyId) delete DB.tables[id].server;                            // a cleared table is free again
   saveDB(DB); render();
 }
+// 🔀 TRANSFER / MERGE tables — move a table's open check(s) to another table. If the target is empty it's a
+// transfer (party moved); if it already has a check it's a merge (two tables become one party). The source is
+// then freed (its turn ends). Reuses setTableState so turn analytics and the server-clear stay consistent.
+function moveTable(fromId, toId){ if(!toId || fromId===toId) return;
+  DB=loadDB(); const moved=(DB.records||[]).filter(r=>r.tableId===fromId && r.status!=="CLOSED" && r.status!=="REFUNDED");
+  if(!moved.length){ flash("No open check on "+tableLabel(fromId)); return; }
+  moved.forEach(r=>{ r.tableId=toId; r._t=Date.now(); });
+  DB.tables=DB.tables||{}; const src=DB.tables[fromId]||{}, tgt=DB.tables[toId]||{};
+  const emptyId=floorStates()[0].id, occ=(floorStates()[1]||floorStates()[0]).id;
+  const wasOccupied=(tgt.state && tgt.state!==emptyId);
+  DB.tables[toId]=Object.assign({}, tgt, { state: wasOccupied?tgt.state:occ, since:Date.now(), seatedTs: tgt.seatedTs||src.seatedTs||Date.now(), server: tgt.server||src.server||null });
+  saveDB(DB);
+  logActivity("access", (wasOccupied?"merged ":"moved ")+tableLabel(fromId)+" → "+tableLabel(toId)+" ("+moved.length+" check"+(moved.length>1?"s":"")+")");
+  selTable=toId; setTableState(fromId, emptyId);   // free the source (logs its turn, clears its server, saves + renders)
+}
 function tableSeats(id){ const t=((FLOW.floor&&FLOW.floor.tables)||[]).find(x=>x.id===id); return (t&&+t.seats)||0; }
 function tableLabel(id){ const t=((FLOW.floor&&FLOW.floor.tables)||[]).find(x=>x.id===id); return (t&&(t.label||t.id))||id; }
 // a check belongs to a table (restaurants): open orders tagged with tableId, and their running balance
@@ -1556,6 +1571,12 @@ function renderFloor(app, station){
         const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="6px"; lbl.textContent="Server:"; sv.appendChild(lbl);
         serverStaff().forEach(s=>{ const b=document.createElement("button"); if(tableServer(t.id)===s.name) b.className="sel"; b.textContent=s.name; b.onclick=()=>assignServer(t.id, tableServer(t.id)===s.name?null:s.name); sv.appendChild(b); });
         c.appendChild(sv); }
+      // 🔀 transfer / merge this table's open check to another table
+      if(tableOpenOrders(t.id).length){ const mv=document.createElement("div"); mv.className="opts"; mv.style.marginTop="8px";
+        const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="6px"; lbl.textContent="Move check to:"; mv.appendChild(lbl);
+        (cfg.tables||[]).filter(x=>x.id!==t.id).forEach(x=>{ const occ=tableOpenOrders(x.id).length; const b=document.createElement("button");
+          b.textContent=(x.label||x.id)+(occ?" (merge)":""); b.title=occ?("Merge onto "+(x.label||x.id)):("Move to "+(x.label||x.id)); b.onclick=()=>moveTable(t.id, x.id); mv.appendChild(b); });
+        c.appendChild(mv); }
       app.appendChild(c);
     }
   }
@@ -2343,7 +2364,9 @@ function renderCheckout(app, station){
     r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
       const priceHtml=l.comped ? ("<s class='muted'>"+money((l.comped.wasPrice||0)*l.qty)+"</s> "+money(0)) : money(l.price*l.qty);
       row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+compChip(l)+"</span><span class='spacer'></span><span>"+priceHtml+"</span>";
-      if(r.status==="READY" && station.view.money && !l.returned){ const cbtn=document.createElement("button"); cbtn.textContent=l.comped?"un-comp":"comp"; cbtn.title=l.comped?"Undo the comp":"Comp this item (on the house)"; cbtn.style.cssText="padding:2px 8px;margin-left:6px"; cbtn.onclick=()=>compLine(r,l); row.appendChild(cbtn); }
+      if(r.status==="READY" && station.view.money && !l.returned){ const cbtn=document.createElement("button"); cbtn.textContent=l.comped?"un-comp":"comp"; cbtn.title=l.comped?"Undo the comp":"Comp this item (on the house)"; cbtn.style.cssText="padding:2px 8px;margin-left:6px"; cbtn.onclick=()=>compLine(r,l); row.appendChild(cbtn);
+        if(r.tableId || orderHasSeats(r)){ const sbtn=document.createElement("button"); sbtn.textContent="seat"; sbtn.title="Move this item to another seat"; sbtn.style.cssText="padding:2px 8px;margin-left:4px";
+          sbtn.onclick=()=>{ const v=prompt("Move "+l.name+" to which seat? (number, or blank for whole table)", l.seat||""); if(v===null) return; const n=parseInt(v,10); l.seat=(v.trim()===""?null:(n>0?n:l.seat)); saveDB(DB); logActivity("access","moved "+l.name+" → "+(l.seat?("seat "+l.seat):"whole table")+" on #"+r.number, r.number); render(); }; row.appendChild(sbtn); } }
       c.appendChild(row); });
     // tax area (destination sales tax): for delivery, tax at the delivery address's rate, not the shop's.
     // Shown only when tax zones are configured; "Shop" = the base (origin) rate.
