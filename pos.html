@@ -2165,10 +2165,18 @@ function renderIntake(app, station){
   }
 }
 
+// 🔀 conditional (nested) modifiers: a modifier option or an add-on can carry a `reveal` group that only appears
+// once it's chosen (e.g. "Add cheese" → "Which cheese?"). Groups expand across the list, so reveals can nest.
+function revealedGroups(item){
+  const out=[...(item.modifiers||[])];
+  (item.addons||[]).forEach(a=>{ if(a.reveal && pending.addons.some(x=>x.name===a.name) && out.indexOf(a.reveal)<0) out.push(a.reveal); });
+  for(let i=0;i<out.length;i++){ const chosen=pending.choices[out[i].group]; if(chosen && chosen.reveal && out.indexOf(chosen.reveal)<0) out.push(chosen.reveal); }
+  return out;
+}
 function configPanel(station){
   const item=pending.item; const c=document.createElement("div"); c.className="card"; c.style.borderColor="var(--brand)";
   c.innerHTML="<b>"+item.name+"</b>";
-  (item.modifiers||[]).forEach((g,gi)=>{
+  revealedGroups(item).forEach((g,gi)=>{
     const wrap=document.createElement("div"); wrap.className="mgroup";
     wrap.innerHTML="<div class='lbl'>"+g.group+(g.required?" (required)":"")+"</div>";
     const opts=document.createElement("div"); opts.className="opts";
@@ -2196,9 +2204,11 @@ function configPanel(station){
     (FLOW.performers||[]).forEach(name=>{ const b=document.createElement("button"); if(pending.performer===name) b.className="sel"; b.textContent=name; b.onclick=()=>{ pending.performer=name; render(); }; opts.appendChild(b); });
     wrap.appendChild(opts); c.appendChild(wrap);
   }
-  const reqMet=(item.modifiers||[]).every(g=>!g.required||pending.choices[g.group]) && (!item.performer || pending.performer);
+  const active=revealedGroups(item);
+  const reqMet=active.every(g=>!g.required||pending.choices[g.group]) && (!item.performer || pending.performer);
   const add=document.createElement("button"); add.className="primary"; add.textContent="Add to order"; add.disabled=!reqMet; add.style.marginRight="8px";
-  add.onclick=()=>{ addLine(item, pending.choices, pending.addons, pending.flags, pending.performer); pending=null; render(); };
+  add.onclick=()=>{ const choices={}; active.forEach(g=>{ if(pending.choices[g.group]) choices[g.group]=pending.choices[g.group]; });   // only choices for groups still shown (a deselected reveal drops its choice)
+    addLine(item, choices, pending.addons, pending.flags, pending.performer); pending=null; render(); };
   const cancel=document.createElement("button"); cancel.textContent="Cancel"; cancel.onclick=()=>{ pending=null; render(); };
   c.appendChild(add); c.appendChild(cancel);
   return c;
