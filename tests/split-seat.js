@@ -39,16 +39,15 @@ function serve(){ return new Promise(r=>{ const s=http.createServer((rq,rs)=>{ i
     const cB=re=>{const b=[...doc().querySelectorAll('button')].find(x=>re.test(x.textContent.trim()));if(b){b.click();return true;}return false;};
     const cT=re=>{const b=[...doc().querySelectorAll('.tile')].find(x=>re.test(x.textContent));if(b){b.click();return true;}return false;};
     const cLink=re=>{const b=[...doc().querySelectorAll('a')].find(x=>re.test(x.textContent.trim()));if(b){b.click();return true;}return false;};
-    try{ w.localStorage.clear(); }catch(e){}
     cB(/^Got it/); await wait(80); cB(/^Server Station/); await wait(150);
     cB(/^1$/); await wait(120);
     cB(/^Seat 1/); await wait(60); cT(/Calamari/); await wait(100);
     cB(/^Seat 2/); await wait(60); cT(/Ribeye/); await wait(80); cB(/^Rare|^Med rare|^Medium/); cB(/Add to order/); await wait(100);
     cB(/Whole table/); await wait(60); cT(/Bistro Burger/); await wait(120);
     cB(/Send order/); await wait(200);
-    // fire everything at the Kitchen Line
+    // fire everything at the Kitchen Line — bump until the order is READY
     cLink(/change station/); await wait(120); cB(/^Kitchen Line/); await wait(150);
-    for(let i=0;i<8;i++){ if(!cB(/Mark done here/)) break; await wait(120); }
+    for(let i=0;i<12;i++){ const rc=(w.loadDB().records||[]).slice(-1)[0]; if(rc&&rc.status==='READY') break; cB(/Mark done here/); await wait(150); }
     const readied=(w.loadDB().records||[]).slice(-1)[0].status;
     // back to server, open the ready order, split by seat, pay each bucket
     cLink(/change station/); await wait(120); cB(/^Server Station/); await wait(200);

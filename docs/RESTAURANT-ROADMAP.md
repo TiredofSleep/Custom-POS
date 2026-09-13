@@ -51,7 +51,7 @@ plan — not spelled out feature by feature.*
 | Cash w/ change, card | ✅ | `cash-change.js`, `payments.js`, `idempotent-charge.js` |
 | Tips + presets + **tip pooling** | ✅ | `tippool.js` |
 | Discounts / coupons | ✅ | `coupon.js` |
-| **Comps** (free item, reason-coded, manager-approved) | ❌ | distinct from a discount |
+| **Comps** (free item, reason-coded, manager-approved) | ✅ | per-line "comp"/"un-comp", reason + audit; approval opt-in (`comp.js`) |
 | Voids / returns with audit + manager approval | ✅ | `line-return.js`, `approvals.js` |
 | Gift cards + loyalty points | ✅ | `loyalty-giftcards.js` |
 | House accounts / A/R, deposits, round-up | ✅ | `house-account.js`, `deposit-*.js`, `roundup.js` |
@@ -118,9 +118,9 @@ Sequenced by daily value to a sit-down burger place like Hamburger Barn, and by 
 - **P1 — the heart of the server flow**
   1. ✅ Seat-numbered ordering (assign each line to a seat; seats show on the ticket & KDS) — *shipped*
   2. ✅ Split & pay **by seat** — *shipped* (by-item split is a later refinement)
-  3. Comps with reason + manager approval — *next*
+  3. ✅ Comps with reason (+ opt-in manager approval) — *shipped*
 - **P2 — runs a real dining room**
-  4. Server assignment + "my tables"
+  4. Server assignment + "my tables" — *next*
   5. Transfer / merge tables, move a guest
   6. Day-part menus + happy-hour pricing
 - **P3 — reservations & the door**
