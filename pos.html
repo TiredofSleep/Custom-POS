@@ -1520,9 +1520,58 @@ function tableOpenOrders(id){ return DB.records.filter(r=>r.tableId===id && r.st
 function tableOpenTotal(id){ return tableOpenOrders(id).reduce((s,r)=>s+recordBalance(r),0); }
 function turnsToday(){ return (DB.turns||[]).filter(x=>x.day===todayStr()); }
 function turnStats(){ const ts=turnsToday(); const n=ts.length; return { n, avgMs:n?ts.reduce((s,x)=>s+x.dur,0)/n:0, covers:ts.reduce((s,x)=>s+tableSeats(x.table),0) }; }
+/* 🕐 RESERVATIONS + WAITLIST — the host stand, run from the floor. Reservations are booked for a time today;
+   the waitlist holds walk-ins with a quoted wait. Both can be "seated" (optionally onto the selected table) or
+   cleared. Records are never hard-deleted — a reservation is cancelled, a waitlist party marked seated/left. */
+function todayReservations(){ return (DB.reservations||[]).filter(r=>r.day===todayStr() && r.status!=="cancelled").sort((a,b)=>String(a.time||"").localeCompare(String(b.time||""))); }
+function addReservation(name, party, time, phone){ name=(name||"").trim(); if(!name){ flash("Name for the reservation?"); return; }
+  DB=loadDB(); DB.reservations=DB.reservations||[]; DB.reservations.push({ id:"RSV"+Date.now(), name, phone:(phone||"").trim(), party:Math.max(1,+party||1), time:(time||"").trim(), day:todayStr(), status:"booked" });
+  logActivity("access","reservation · "+name+" ×"+(Math.max(1,+party||1))+((time||"").trim()?" @ "+time.trim():"")); saveDB(DB); render(); }
+function seatReservation(id, tableId){ DB=loadDB(); const r=(DB.reservations||[]).find(x=>x.id===id); if(!r) return; r.status="seated"; if(tableId) r.tableId=tableId; logActivity("access","seated reservation · "+r.name); saveDB(DB);
+  if(tableId) setTableState(tableId, (floorStates()[1]||floorStates()[0]).id); else render(); }   // save the seated status BEFORE setTableState (it reloads DB)
+function cancelReservation(id){ DB=loadDB(); const r=(DB.reservations||[]).find(x=>x.id===id); if(!r) return; r.status="cancelled"; logActivity("access","cancelled reservation · "+r.name); saveDB(DB); render(); }
+function activeWaitlist(){ return (DB.waitlist||[]).filter(w=>w.status==="waiting").sort((a,b)=>(a.addedTs||0)-(b.addedTs||0)); }
+function waitlistWait(w){ return Math.round((Date.now()-(w.addedTs||Date.now()))/60000); }
+function addWaitlist(name, party, quote, phone){ name=(name||"").trim(); if(!name){ flash("Name for the waitlist?"); return; }
+  DB=loadDB(); DB.waitlist=DB.waitlist||[]; DB.waitlist.push({ id:"WL"+Date.now(), name, phone:(phone||"").trim(), party:Math.max(1,+party||1), quote:Math.max(0,+quote||0), addedTs:Date.now(), status:"waiting" });
+  logActivity("access","waitlist + "+name+" ×"+(Math.max(1,+party||1))+((+quote||0)?" ~"+(+quote)+"m":"")); saveDB(DB); render(); }
+function seatWaitlist(id, tableId){ DB=loadDB(); const w=(DB.waitlist||[]).find(x=>x.id===id); if(!w) return; w.status="seated"; if(tableId) w.tableId=tableId; logActivity("access","seated waitlist · "+w.name); saveDB(DB);
+  if(tableId) setTableState(tableId, (floorStates()[1]||floorStates()[0]).id); else render(); }   // save before setTableState (it reloads DB)
+function leaveWaitlist(id){ DB=loadDB(); const w=(DB.waitlist||[]).find(x=>x.id===id); if(!w) return; w.status="left"; logActivity("access","waitlist left · "+w.name); saveDB(DB); render(); }
+// the host stand UI — a Reservations card and a Waitlist card, each with a quick add row + "Seat"/"clear".
+// "Seat" uses the currently-selected table when one is picked, so the host taps a table then seats the party.
+function renderHostStand(app){
+  const seatTarget = selTable ? (" → "+tableLabel(selTable)) : "";
+  const mkAdd=(fields, onAdd)=>{ const row=document.createElement("div"); row.className="opts"; row.style.cssText="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px";
+    const els={}; fields.forEach(f=>{ const i=document.createElement("input"); i.placeholder=f.ph; i.id=f.id; if(f.w) i.style.width=f.w; if(f.type) i.type=f.type; row.appendChild(i); els[f.id]=i; });
+    const add=document.createElement("button"); add.className="primary"; add.textContent="Add"; add.onclick=()=>{ onAdd(els); }; row.appendChild(add); return row; };
+  // Reservations
+  const rc=document.createElement("div"); rc.className="card"; rc.style.marginBottom="10px";
+  rc.innerHTML="<div class='row'><b>🕐 Reservations</b> <span class='pill'>"+todayReservations().filter(r=>r.status==="booked").length+" booked</span></div>";
+  todayReservations().forEach(r=>{ const row=document.createElement("div"); row.className="line";
+    row.innerHTML="<span>"+(r.status==="seated"?"✓ ":"")+"<b>"+(r.time||"—")+"</b> · "+r.name+" ×"+r.party+(r.phone?" <span class='muted'>"+r.phone+"</span>":"")+(r.status==="seated"?" <span class='pill clock good'>seated</span>":"")+"</span><span class='spacer'></span>";
+    if(r.status!=="seated"){ const s=document.createElement("button"); s.className="good"; s.textContent="Seat"+seatTarget; s.onclick=()=>seatReservation(r.id, selTable||null); row.appendChild(s);
+      const x=document.createElement("button"); x.textContent="✕"; x.title="Cancel"; x.style.marginLeft="4px"; x.onclick=()=>cancelReservation(r.id); row.appendChild(x); }
+    rc.appendChild(row); });
+  rc.appendChild(mkAdd([{id:"rsvName",ph:"name"},{id:"rsvParty",ph:"party",w:"64px",type:"number"},{id:"rsvTime",ph:"time e.g. 7:00",w:"110px"},{id:"rsvPhone",ph:"phone (optional)"}],
+    els=>{ addReservation(els.rsvName.value, els.rsvParty.value, els.rsvTime.value, els.rsvPhone.value); }));
+  app.appendChild(rc);
+  // Waitlist
+  const wc=document.createElement("div"); wc.className="card"; wc.style.marginBottom="10px";
+  wc.innerHTML="<div class='row'><b>📝 Waitlist</b> <span class='pill'>"+activeWaitlist().length+" waiting</span></div>";
+  activeWaitlist().forEach(w=>{ const row=document.createElement("div"); row.className="line"; const waited=waitlistWait(w);
+    row.innerHTML="<span><b>"+w.name+"</b> ×"+w.party+(w.quote?" · quoted "+w.quote+"m":"")+" <span class='muted'>· waiting "+waited+"m</span></span><span class='spacer'></span>";
+    const s=document.createElement("button"); s.className="good"; s.textContent="Seat"+seatTarget; s.onclick=()=>seatWaitlist(w.id, selTable||null); row.appendChild(s);
+    const x=document.createElement("button"); x.textContent="✕"; x.title="Left"; x.style.marginLeft="4px"; x.onclick=()=>leaveWaitlist(w.id); row.appendChild(x);
+    wc.appendChild(row); });
+  wc.appendChild(mkAdd([{id:"wlName",ph:"name"},{id:"wlParty",ph:"party",w:"64px",type:"number"},{id:"wlQuote",ph:"quote min",w:"90px",type:"number"},{id:"wlPhone",ph:"phone (optional)"}],
+    els=>{ addWaitlist(els.wlName.value, els.wlParty.value, els.wlQuote.value, els.wlPhone.value); }));
+  app.appendChild(wc);
+}
 function renderFloor(app, station){
   const cfg=FLOW.floor||{ tables:[] };
   app.innerHTML="<h2>"+station.label+"</h2>";
+  renderHostStand(app);   // 🕐 reservations + waitlist at the top of the host's floor screen
   const tables=(cfg.tables||[]).filter(t=> (!floorSection || (t.section||"")===floorSection) && (!floorServer || tableServer(t.id)===floorServer));
   const sections=cfg.sections || [...new Set((cfg.tables||[]).map(t=>t.section).filter(Boolean))];
   // section filter (server sees a section; manager sees all)
