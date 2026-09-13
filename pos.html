@@ -978,6 +978,15 @@ function renderReport(app, station){
     + L("Net sales", money(net)) + (disc?L("Discounts","−"+money(disc)):"") + (comps?L("Comps (on the house)","−"+money(comps)):"") + L("Tax collected", money(tax)) + (tips?L("Tips", money(tips)):"") + (refunds?L("Refunds","−"+money(refunds)):"")
     + L("Total collected", money(collected), true) + (onAccount?L("On account (A/R)", money(onAccount)):"");
   app.appendChild(sum);
+  // 💸 tip-out by role — the payroll pain point. When configured, show each support role's cut of today's tips
+  // (a % of tips) and what's left for the servers, so tip-out is spelled out at close instead of done by hand.
+  const tipOut=(FLOW.endpoints.payment.tip&&FLOW.endpoints.payment.tip.tipOut)||null;
+  if(tipOut && tipOut.length && tips>0.0001){
+    let out=0; const rows=tipOut.map(t=>{ const cut=+(tips*(+t.pct||0)/100).toFixed(2); out+=cut; return L("→ "+(t.role||"support")+" ("+(+t.pct||0)+"%)","−"+money(cut)); }).join("");
+    const toCard=document.createElement("div"); toCard.className="card";
+    toCard.innerHTML="<div class='row'><b>Tip-out</b> <span class='muted'>from "+money(tips)+" in tips</span></div>"+rows+L("Kept by servers", money(+(tips-out).toFixed(2)), true);
+    app.appendChild(toCard);
+  }
   // ---- community: charity round-ups collected today (only when the round-up option is on) ----
   if(FLOW.endpoints.payment.roundUp && roundUp>0){ const cause=(FLOW.endpoints.payment.roundUp.cause)||"a local cause";
     const cc=document.createElement("div"); cc.className="card"; cc.innerHTML="<div class='row'><b>Community ♥</b></div>"+L("Rounded up for "+cause, money(roundUp), true)+"<div class='muted' style='margin-top:2px'>Collected from customers who chose to round up — set it aside to donate.</div>";
