@@ -22,7 +22,7 @@ plan — not spelled out feature by feature.*
 | **Per-seat checks** (each guest pays their own) | ✅ | "By seat" at payment; tenders tagged to the seat (`split-seat.js`) |
 | Transfer / merge tables, move a guest | ✅ | move a check to another table (transfer/merge); per-line seat move (`table-transfer.js`) |
 | Server assignment (sections → a server, "my tables") | ✅ | assign a server to a table; "my tables" floor filter (`server-assign.js`) |
-| Reservations + waitlist | ❌ | `booking.js` is appointment-style, not restaurant reso/waitlist |
+| Reservations + waitlist | ✅ | host stand on the floor: book/seat/cancel + waitlist add/seat/clear (`reservations.js`) |
 
 ## 2. Kitchen / expo
 | Capability | Status | Notes |
@@ -124,7 +124,7 @@ Sequenced by daily value to a sit-down burger place like Hamburger Barn, and by 
   5. ✅ Transfer / merge tables, move a guest — *shipped*
   6. ✅ Day-part menus + happy-hour pricing — *shipped*
 - **P3 — reservations & the door**
-  7. Reservations + waitlist — *next*
+  7. ✅ Reservations + waitlist — *shipped*
 - **P4 — off-premise & self-serve**
   8. Pay-at-table / QR pay
   9. Online ordering / QR menu; 3rd-party delivery intake
