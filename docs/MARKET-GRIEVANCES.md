@@ -46,13 +46,14 @@ by seat, comps, server assignment, transfer/merge, day-parts/happy-hour, reserva
 and the moat: **say a grievance in plain English → it's changed**, which is the exact opposite of "escalation
 takes days."
 
-## New gaps worth building (prioritized from the research)
-1. **Nested / conditional modifiers** — the most-cited menu-build frustration.
-2. **One-screen daily close report** + clean tip / tip-out export (payroll pain).
-3. **Suggested add-on / upsell prompt** — wanted, and cheap on top of combos.
-4. **Wastage / waste-log** in inventory — the inventory depth operators miss.
-5. **Delivery-driver report** — small, concrete, repeatedly requested.
-6. **Tip-out by role + tip attribution on transfer** — bartender/server pain.
+## New gaps worth building (prioritized from the research) — progress
+1. ✅ **Nested / conditional modifiers** — shipped (`nested-modifiers.js`).
+2. ✅ **Daily close visibility** — the report already had net/tax/tips/tenders/drawer/COGS/**waste**; added a
+   **Comps** line so what's given away shows at close (`report-comps.js`).
+3. ✅ **Suggested add-on / upsell prompt** — shipped (`upsell.js`).
+4. ✅ **Wastage** — already tracked (`adjustStock` "Waste" reason → `adjustLog`, shown in the report); no rebuild needed.
+5. ⬜ **Delivery-driver report** — small; low priority for a dine-in burger joint (revisit if a delivery line matters).
+6. ⬜ **Tip-out by role + tip attribution on transfer** — bartender/server pain; a good next build.
 
 These are recommendations, not commitments — the owner prioritizes (and real Burger Barn grievances outrank a
 forum). Each ships through the safety pipeline with a test, like everything here.

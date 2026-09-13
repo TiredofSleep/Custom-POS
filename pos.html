@@ -940,7 +940,7 @@ function renderReport(app, station){
   const done = (storesOn() && reportStore) ? dayAll.filter(r=>r.storeId===reportStore) : dayAll;
   const L=(lab,val,bold)=>"<div class='line'>"+(bold?"<b>":"<span>")+lab+(bold?"</b>":"</span>")+"<span class='spacer'></span>"+(bold?"<b>":"<span>")+val+(bold?"</b>":"</span>")+"</div>";
   // ---- daily sales summary (refund-aware: a refunded order's sale nets out, its reversed tender nets its tenders) ----
-  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0, cogs=0, roundUp=0; const byTender={}, byCat={}, byItem={}, byHour={};
+  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0, cogs=0, roundUp=0, comps=0; const byTender={}, byCat={}, byItem={}, byHour={};
   const itemCost=(l)=>{ const it=FLOW.catalog.find(i=>i.id===l.catId); return (it&&+it.cost)||0; };
   done.forEach(r=>{ const rf=r.status==="REFUNDED";
     if(rf){ refunds += recordTotal(r); }
@@ -949,6 +949,7 @@ function renderReport(app, station){
       net += recordNet(r)*frac; tax += recordTax(r)*frac; tips += r.tip||0; disc += recordDiscount(r)*frac; roundUp += r.roundUp||0;
       if(r.ts){ const hr=new Date(r.ts).getHours(); byHour[hr]=(byHour[hr]||0)+recordNet(r)*frac; }
       r.lines.filter(l=>!l.returned).forEach(l=>{ items += l.qty; cogs += itemCost(l)*l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty;
+        if(l.comped) comps += (l.comped.amount||0);   // 🎁 value given away as comps today
         const bi=byItem[l.name]=byItem[l.name]||{qty:0,rev:0,cost:0}; bi.qty+=l.qty; bi.rev+=l.price*l.qty; bi.cost+=itemCost(l)*l.qty; });
       const ret = -((r.tenders||[]).filter(t=>t.refund).reduce((s,t)=>s+t.amount,0)); if(ret>0.0001) refunds += ret;   // partial line returns
     }
@@ -974,7 +975,7 @@ function renderReport(app, station){
   const sum=document.createElement("div"); sum.className="card";
   sum.innerHTML="<div class='row'><b>Sales summary</b></div>"
     + L("Orders", String(orders)) + L("Items sold", String(items))
-    + L("Net sales", money(net)) + (disc?L("Discounts","−"+money(disc)):"") + L("Tax collected", money(tax)) + (tips?L("Tips", money(tips)):"") + (refunds?L("Refunds","−"+money(refunds)):"")
+    + L("Net sales", money(net)) + (disc?L("Discounts","−"+money(disc)):"") + (comps?L("Comps (on the house)","−"+money(comps)):"") + L("Tax collected", money(tax)) + (tips?L("Tips", money(tips)):"") + (refunds?L("Refunds","−"+money(refunds)):"")
     + L("Total collected", money(collected), true) + (onAccount?L("On account (A/R)", money(onAccount)):"");
   app.appendChild(sum);
   // ---- community: charity round-ups collected today (only when the round-up option is on) ----
