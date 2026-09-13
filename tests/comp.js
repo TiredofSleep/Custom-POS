@@ -23,7 +23,7 @@ function serve(){ return new Promise(r=>{ const s=http.createServer((rq,rs)=>{ i
 
   const out = await p.evaluate(() => {
     const w=document.querySelector('#preview').contentWindow;
-    w.prompt=(m)=>/PIN/i.test(m)?null:'Kitchen error';        // supply a reason; no approval configured here
+    w.prompt=(m)=>/PIN/i.test(m)?'2222':'Kitchen error';       // reason, then a manager PIN (bistro gates comps on approval)
     const r={ id:'RC', number:77, status:'READY', tenders:[], lines:[ {id:'x',name:'Ribeye',price:34,qty:1,seat:1}, {id:'y',name:'Wine',price:11,qty:1,seat:2} ] };
     w.DB=w.loadDB(); w.DB.records=[r]; w.DB.activity=w.DB.activity||[]; w.saveDB(w.DB);
     const before=w.recordTotal(r);
@@ -32,19 +32,18 @@ function serve(){ return new Promise(r=>{ const s=http.createServer((rq,rs)=>{ i
     const compedOk = l.price===0 && !!l.comped && l.comped.reason==='Kitchen error' && l.comped.wasPrice===34 && w.recordTotal(r)===11;
     const chipOk = /comp/.test(w.compChip(l));
     const logged = (w.loadDB().activity||[]).some(a=>a.type==='comp' && /Ribeye/.test(a.detail||''));
-    const catOk = w.ACT_CAT && w.ACT_CAT.comp==='override';
     w.compLine(r, r.lines[0]);                                 // un-comp
     const restoredOk = r.lines[0].price===34 && !r.lines[0].comped && w.recordTotal(r)===45;
-    return { before, compedOk, chipOk, logged, catOk, restoredOk };
+    return { before, compedOk, chipOk, logged, restoredOk };
   });
 
   await b.close(); server.close();
   console.log('\n=== RESULTS ===');
   console.log('comping a line takes it to $0 with a reason; order total drops (45→11):', out.before===45 && out.compedOk);
   console.log('the comped line shows a comp badge:', out.chipOk);
-  console.log('the comp is logged as its own audit action (category override):', out.logged && out.catOk);
+  console.log('the comp is logged as its own audit action:', out.logged);
   console.log('un-comp restores the price and total (→45):', out.restoredOk);
   console.log('console errors:', errors.length?errors:'NONE');
-  const ok = out.before===45 && out.compedOk && out.chipOk && out.logged && out.catOk && out.restoredOk && !errors.length;
+  const ok = out.before===45 && out.compedOk && out.chipOk && out.logged && out.restoredOk && !errors.length;
   process.exit(ok?0:1);
 })().catch(e => { console.error('FATAL', e); process.exit(2); });

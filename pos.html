@@ -1471,14 +1471,22 @@ const FLOOR_STATES = [
 ];
 function floorStates(){ return (FLOW.floor && FLOW.floor.states) || FLOOR_STATES; }
 function floorStateById(id){ return floorStates().find(s=>s.id===id) || floorStates()[0]; }
-function tableRec(t){ const r=(DB.tables||{})[t.id]; return { state:(r&&r.state)||floorStates()[0].id, since:(r&&r.since)||null, seatedTs:(r&&r.seatedTs)||null }; }
+function tableRec(t){ const r=(DB.tables||{})[t.id]; return { state:(r&&r.state)||floorStates()[0].id, since:(r&&r.since)||null, seatedTs:(r&&r.seatedTs)||null, server:(r&&r.server)||null }; }
+// 🧑‍🍳 server assignment: which server owns a table, and the "my tables" view.
+function tableServer(id){ const r=(DB.tables||{})[id]; return (r&&r.server)||null; }
+function serverStaff(){ return (FLOW.staff||[]); }   // any staff member can own tables
+function assignServer(id, name){ DB=loadDB(); DB.tables=DB.tables||{}; const prev=DB.tables[id]||{ state:floorStates()[0].id, since:Date.now() };
+  DB.tables[id]=Object.assign({}, prev, { server:(name||null) }); saveDB(DB);
+  logActivity("access", (name?("table "+tableLabel(id)+" → "+name):("cleared server on table "+tableLabel(id)))); render(); }
 // state change also drives turn-time analytics: a "turn" runs from leaving Empty until returning to Empty
 function setTableState(id, state){ DB=loadDB(); DB.tables=DB.tables||{}; DB.turns=DB.turns||[];
   const emptyId=floorStates()[0].id; const now=Date.now(); const prev=DB.tables[id]||{}; let seatedTs=prev.seatedTs||null;
   const wasEmpty=!prev.state || prev.state===emptyId;
   if(wasEmpty && state!==emptyId) seatedTs=now;                               // a table just got seated — turn begins
   if(state===emptyId){ if(seatedTs) DB.turns.push({ table:id, seatedTs, clearedTs:now, dur:now-seatedTs, day:todayStr() }); seatedTs=null; }  // cleared — turn ends, logged
-  DB.tables[id]={ state, since:now, seatedTs }; saveDB(DB); render();
+  DB.tables[id]=Object.assign({}, prev, { state, since:now, seatedTs });      // keep the assigned server across state changes
+  if(state===emptyId) delete DB.tables[id].server;                            // a cleared table is free again
+  saveDB(DB); render();
 }
 function tableSeats(id){ const t=((FLOW.floor&&FLOW.floor.tables)||[]).find(x=>x.id===id); return (t&&+t.seats)||0; }
 function tableLabel(id){ const t=((FLOW.floor&&FLOW.floor.tables)||[]).find(x=>x.id===id); return (t&&(t.label||t.id))||id; }
@@ -1490,12 +1498,17 @@ function turnStats(){ const ts=turnsToday(); const n=ts.length; return { n, avgM
 function renderFloor(app, station){
   const cfg=FLOW.floor||{ tables:[] };
   app.innerHTML="<h2>"+station.label+"</h2>";
-  const tables=(cfg.tables||[]).filter(t=> !floorSection || (t.section||"")===floorSection);
+  const tables=(cfg.tables||[]).filter(t=> (!floorSection || (t.section||"")===floorSection) && (!floorServer || tableServer(t.id)===floorServer));
   const sections=cfg.sections || [...new Set((cfg.tables||[]).map(t=>t.section).filter(Boolean))];
   // section filter (server sees a section; manager sees all)
   if(sections.length){ const bar=document.createElement("div"); bar.className="opts"; bar.style.marginBottom="10px";
     const mk=(lab,val)=>{ const b=document.createElement("button"); if(floorSection===val) b.className="sel"; b.textContent=lab; b.onclick=()=>{ floorSection=val; selTable=null; render(); }; bar.appendChild(b); };
     mk("All", null); sections.forEach(s=>mk(s, s)); app.appendChild(bar); }
+  // 🧑‍🍳 "my tables" — filter the floor to one server's tables
+  if(serverStaff().length){ const sbar=document.createElement("div"); sbar.className="opts"; sbar.style.marginBottom="10px";
+    const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="6px"; lbl.textContent="Tables:"; sbar.appendChild(lbl);
+    const mk=(lab,val)=>{ const b=document.createElement("button"); if(floorServer===val) b.className="sel"; b.textContent=lab; b.onclick=()=>{ floorServer=val; selTable=null; render(); }; sbar.appendChild(b); };
+    mk("All", null); serverStaff().forEach(s=>mk(s.name, s.name)); app.appendChild(sbar); }
   // at-a-glance: how many tables are occupied (not empty)
   const occupied=tables.filter(t=>tableRec(t).state!=="empty").length;
   const meta=document.createElement("p"); meta.className="muted"; meta.style.margin="0 0 10px"; meta.textContent=occupied+" of "+tables.length+" tables occupied · tap a table to advance it"; app.appendChild(meta);
@@ -1518,6 +1531,7 @@ function renderFloor(app, station){
     const chk=tableOpenTotal(t.id);
     b.innerHTML="<b>"+ (t.label||t.id) +"</b> <span style='float:right;font-size:12px'>"+st.label+"</span>"
       +"<small>"+(t.seats?t.seats+" seats":"")+(t.section?" · "+t.section:"")+"</small>"
+      +"<small>"+(tableServer(t.id)?"🧑‍🍳 "+tableServer(t.id):"")+"</small>"
       +"<small>"+(chk>0.0001?"🧾 "+money(chk)+" open":(tr.since?fmtDur(el)+" in state":"—"))+"</small>";
     b.onclick=()=>{ selTable=(selTable===t.id?null:t.id); render(); };
     grid.appendChild(b); });
@@ -1536,7 +1550,13 @@ function renderFloor(app, station){
       if(nx){ const adv=document.createElement("button"); adv.className="primary"; adv.textContent="→ "+nx.label; adv.style.margin="4px 8px 8px 0"; adv.onclick=()=>{ setTableState(t.id, nx.id); }; c.appendChild(adv); }
       const jump=document.createElement("div"); jump.className="opts";
       floorStates().forEach(s=>{ const b=document.createElement("button"); if(s.id===st.id) b.className="sel"; b.textContent=s.label; b.onclick=()=>setTableState(t.id, s.id); jump.appendChild(b); });
-      c.appendChild(jump); app.appendChild(c);
+      c.appendChild(jump);
+      // 🧑‍🍳 assign a server to this table (or clear)
+      if(serverStaff().length){ const sv=document.createElement("div"); sv.className="opts"; sv.style.marginTop="8px";
+        const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="6px"; lbl.textContent="Server:"; sv.appendChild(lbl);
+        serverStaff().forEach(s=>{ const b=document.createElement("button"); if(tableServer(t.id)===s.name) b.className="sel"; b.textContent=s.name; b.onclick=()=>assignServer(t.id, tableServer(t.id)===s.name?null:s.name); sv.appendChild(b); });
+        c.appendChild(sv); }
+      app.appendChild(c);
     }
   }
 }
@@ -1867,6 +1887,7 @@ let activityFilter = "all";   // activity-log category filter in the report: all
 let reportStore = null;       // multi-store report: which store the report is scoped to (null = all stores, with roll-up)
 let selTable = null;   // floor plan: the table currently opened
 let floorSection = null; // floor plan: active section filter (null = all)
+let floorServer = null;  // floor plan: "my tables" — filter to one server (null = all)
 let selCell = null;    // scheduling: the {staffId, day} cell being edited
 function attachCustomer(phone, name){
   phone=(phone||"").trim(); if(!phone) return;
