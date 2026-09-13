@@ -53,7 +53,7 @@ takes days."
 3. ✅ **Suggested add-on / upsell prompt** — shipped (`upsell.js`).
 4. ✅ **Wastage** — already tracked (`adjustStock` "Waste" reason → `adjustLog`, shown in the report); no rebuild needed.
 5. ⬜ **Delivery-driver report** — small; low priority for a dine-in burger joint (revisit if a delivery line matters).
-6. ⬜ **Tip-out by role + tip attribution on transfer** — bartender/server pain; a good next build.
+6. ✅ **Tip-out by role** — shipped: the close spells out each support role's cut of tips + what servers keep (`tip-out.js`).
 
 These are recommendations, not commitments — the owner prioritizes (and real Burger Barn grievances outrank a
 forum). Each ships through the safety pipeline with a test, like everything here.
