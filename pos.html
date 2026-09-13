@@ -2126,6 +2126,17 @@ function renderIntake(app, station){
       c.appendChild(row); });
     const tot=document.createElement("div"); tot.className="line"; tot.innerHTML="<b>Total</b><span class='spacer'></span><b>"+money(draft.lines.reduce((s,l)=>s+l.price*l.qty,0))+"</b>"; c.appendChild(tot); }
   app.appendChild(c);
+  // 💡 suggested add-ons (upsell): items referenced by draft items' `suggest`, not already on the ticket — one tap adds
+  if(draft.lines.length && station.view.money){
+    const want={}; draft.lines.forEach(l=>{ const it=FLOW.catalog.find(x=>x.id===l.catId); (it&&it.suggest||[]).forEach(id=>{ want[id]=1; }); });
+    const have={}; draft.lines.forEach(l=>{ have[l.catId]=1; });
+    const sugg=Object.keys(want).map(id=>FLOW.catalog.find(x=>x.id===id)).filter(it=>it && !have[it.id] && !is86(it) && !isOutOfStock(it) && itemAvailNow(it));
+    if(sugg.length){ const sc=document.createElement("div"); sc.className="card"; sc.style.cssText="padding:8px 10px";
+      const lbl=document.createElement("div"); lbl.className="lbl"; lbl.textContent="💡 Want to add…"; sc.appendChild(lbl);
+      const opts=document.createElement("div"); opts.className="opts"; opts.style.cssText="display:flex;flex-wrap:wrap;gap:6px";
+      sugg.forEach(it=>{ const b=document.createElement("button"); b.textContent="+ "+it.name+" "+money(itemPriceNow(it)); b.onclick=()=>addItem(it); opts.appendChild(b); });
+      sc.appendChild(opts); app.appendChild(sc); }
+  }
   // deposit control (deposit-balance payment point)
   const dep = FLOW.endpoints.payment.deposit;
   if(dep && station.view.money && draft.lines.length){
