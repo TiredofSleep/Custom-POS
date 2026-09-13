@@ -525,6 +525,8 @@ function storeChip(r){ if(!storesOn() || !r.storeId) return ""; const nm=storeNa
 function tableChip(r){ return r.tableId ? " <span class='pill' title='Table'>🍽 "+tableLabel(r.tableId)+"</span>" : ""; }
 // 👤 which seat a line belongs to (dine-in seat-by-seat ordering). Blank when the line isn't tied to a seat.
 function seatChip(l){ return (l&&l.seat) ? " <span class='pill' title='Seat'>👤 S"+l.seat+"</span>" : ""; }
+// 🎁 a comped line (free, reason-coded, optionally manager-approved). Shows the reason on hover.
+function compChip(l){ return (l&&l.comped) ? " <span class='pill' title='Comp: "+(l.comped.reason||"")+((l.comped.by)?" · "+l.comped.by:"")+"' style='background:var(--bad);color:#fff'>🎁 comp</span>" : ""; }
 function assembledAt(r){ if(!storesOn() || !r.storeId) return ""; const p=plantStore(); return (p && r.storeId!==p.id) ? "assembled at "+p.name : ""; }   // a drop-store order is done at the plant
 
 /* ===================================== MONEY MATH ===================================== */
@@ -611,6 +613,19 @@ function returnLines(r, lineIds){
   r.refundedAt=new Date().toISOString().slice(11,16);
   logActivity("refund", "line refund "+money(amount)+" on #"+r.number+" — "+names.join(", "), r.number, amount);
   saveDB(DB); render();
+}
+// 🎁 COMP a line — take it to $0 with a reason on the record. Distinct from a discount (a %-off promo): a comp
+// is discretionary ("kitchen error", "long wait", "on the house"). Manager-approved when the instance opts in
+// (FLOW.endpoints.approvals.comp + approver roles) — otherwise reason-only. Reversible via the same control.
+const COMP_REASONS=["Manager comp","Kitchen error","Long wait","Customer service","Birthday","On the house"];
+function compLine(r, l){
+  if(l.comped){ withApproval("comp","Un-comp "+l.name,(who)=>{ l.price=(l.comped&&l.comped.wasPrice)||l.price; delete l.comped; logActivity("comp","un-comped "+l.name+(who?" (by "+who.name+")":""), r.number); saveDB(DB); }); return; }
+  const reason=prompt("Comp "+l.name+" — reason?\n("+COMP_REASONS.join(" · ")+")", "Manager comp");
+  if(reason==null) return;
+  const amt=+(l.price*l.qty).toFixed(2);
+  withApproval("comp","Comp "+l.name+" ("+money(amt)+") — "+(reason.trim()||"Manager comp"),(who)=>{
+    l.comped={ reason:(reason.trim()||"Manager comp"), by:(who?who.name:((typeof actingStaff==="function"&&actingStaff())||"")), at:new Date().toISOString().slice(11,16), wasPrice:l.price, amount:amt };
+    l.price=0; logActivity("comp","comped "+l.name+" — "+(reason.trim()||"Manager comp")+(who?" (by "+who.name+")":""), r.number, amt); saveDB(DB); });
 }
 
 /* Processor-agnostic PAYMENTS interface (matches docs/PAYMENTS-MODULE.md). By default — with no processor
@@ -713,7 +728,7 @@ function flash(msg){ let t=document.getElementById("toast"); if(!t){ t=document.
    privacy); the theft-relevant events, each attributed to a station, the acting staff (when one person is
    clocked in), and a timestamp. Owner-facing, exportable, capped so localStorage never runs away.
    Categories: order · money · override · void · refund · discount · idcheck · stock · clock · access · admin. */
-const ACT_CAT = { order:"money", money:"money", refund:"money", discount:"money", override:"override", void:"override", idcheck:"access", clock:"access", access:"access", stock:"admin", admin:"admin" };
+const ACT_CAT = { order:"money", money:"money", refund:"money", discount:"money", comp:"override", override:"override", void:"override", idcheck:"access", clock:"access", access:"access", stock:"admin", admin:"admin" };
 function actingStaff(){ try{ const on=(FLOW.staff||[]).filter(s=>openPunch(s.id)); return on.length===1?on[0].name:(on.length>1?"(multiple on shift)":""); }catch(e){ return ""; } }
 function logActivity(type, detail, orderNo, amt){
   try{ DB=DB||loadDB(); DB.activity=DB.activity||[];
@@ -2304,7 +2319,11 @@ function renderCheckout(app, station){
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No orders ready to check out."; app.appendChild(e); }
   recs.forEach(r=>{ const c=document.createElement("div"); c.className="card"; const bal=recordBalance(r);
     c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
-    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
+    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
+      const priceHtml=l.comped ? ("<s class='muted'>"+money((l.comped.wasPrice||0)*l.qty)+"</s> "+money(0)) : money(l.price*l.qty);
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+compChip(l)+"</span><span class='spacer'></span><span>"+priceHtml+"</span>";
+      if(r.status==="READY" && station.view.money && !l.returned){ const cbtn=document.createElement("button"); cbtn.textContent=l.comped?"un-comp":"comp"; cbtn.title=l.comped?"Undo the comp":"Comp this item (on the house)"; cbtn.style.cssText="padding:2px 8px;margin-left:6px"; cbtn.onclick=()=>compLine(r,l); row.appendChild(cbtn); }
+      c.appendChild(row); });
     // tax area (destination sales tax): for delivery, tax at the delivery address's rate, not the shop's.
     // Shown only when tax zones are configured; "Shop" = the base (origin) rate.
     if(FLOW.endpoints.tax && Array.isArray(FLOW.endpoints.tax.zones) && FLOW.endpoints.tax.zones.length && r.status==="READY"){
