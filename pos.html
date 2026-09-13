@@ -523,6 +523,8 @@ function setStore(id){ if(id) localStorage.setItem(stkey(), id); else localStora
 function storeForOrder(cust){ return (cust && cust.storeId) || homeStore() || defaultStoreId(); }   // an order's home store
 function storeChip(r){ if(!storesOn() || !r.storeId) return ""; const nm=storeName(r.storeId); return nm ? " <span class='pill' title='Store'>🏬 "+nm+"</span>" : ""; }
 function tableChip(r){ return r.tableId ? " <span class='pill' title='Table'>🍽 "+tableLabel(r.tableId)+"</span>" : ""; }
+// 👤 which seat a line belongs to (dine-in seat-by-seat ordering). Blank when the line isn't tied to a seat.
+function seatChip(l){ return (l&&l.seat) ? " <span class='pill' title='Seat'>👤 S"+l.seat+"</span>" : ""; }
 function assembledAt(r){ if(!storesOn() || !r.storeId) return ""; const p=plantStore(); return (p && r.storeId!==p.id) ? "assembled at "+p.name : ""; }   // a drop-store order is done at the plant
 
 /* ===================================== MONEY MATH ===================================== */
@@ -1418,7 +1420,7 @@ function renderKDS(app, station){
     const fc=r.firedCourse||1;
     c.innerHTML="<div class='row'><b>#"+r.number+"</b> "+kdsChip(r)+(coursingOn()?" <span class='pill'>"+courseLabel(fc)+"</span>":"")+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     r.lines.filter(l=>courseReleased(r,l)).forEach(l=>{ const row=document.createElement("div"); row.className="line"; const where=lineComplete(l)?"ready":("at "+l.path[l.stage]);
-      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span class='muted'>"+where+"</span>"; c.appendChild(row); });
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+"</span><span class='spacer'></span><span class='muted'>"+where+"</span>"; c.appendChild(row); });
     // held courses waiting to be fired
     if(coursingOn()){ const held=r.lines.filter(l=>!courseReleased(r,l));
       if(held.length){ const h=document.createElement("div"); h.className="muted"; h.style.marginTop="4px"; h.textContent="held: "+held.map(l=>l.qty+"× "+l.name).join(", ")+" ("+courseLabel(fc+1)+")"; c.appendChild(h); } }
@@ -1893,9 +1895,25 @@ function renderIntake(app, station){
     const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="8px"; lbl.textContent="🍽 Table:"; tb.appendChild(lbl);
     const opts=document.createElement("div"); opts.className="opts"; opts.style.display="inline-flex"; opts.style.flexWrap="wrap";
     (FLOW.floor.tables||[]).forEach(t=>{ const b=document.createElement("button"); const open=tableOpenTotal(t.id); if(draft.tableId===t.id) b.className="sel";
-      b.textContent=(t.label||t.id)+(open>0.0001?" · "+money(open):""); b.onclick=()=>{ draft.tableId=(draft.tableId===t.id?null:t.id); render(); }; opts.appendChild(b); });
-    const none=document.createElement("button"); if(!draft.tableId) none.className="sel"; none.textContent="No table"; none.onclick=()=>{ draft.tableId=null; render(); }; opts.appendChild(none);
+      b.textContent=(t.label||t.id)+(open>0.0001?" · "+money(open):""); b.onclick=()=>{ draft.tableId=(draft.tableId===t.id?null:t.id); draft.seat=null; draft.__seatMax=0; render(); }; opts.appendChild(b); });
+    const none=document.createElement("button"); if(!draft.tableId) none.className="sel"; none.textContent="No table"; none.onclick=()=>{ draft.tableId=null; draft.seat=null; draft.__seatMax=0; render(); }; opts.appendChild(none);
     tb.appendChild(opts); app.appendChild(tb);
+  }
+  // 👤 seat picker — dine-in seat-by-seat ordering. Pick a seat and the items you tap ring to that seat (so the
+  // kitchen and the check know whose is whose, and the table can split by seat). "Whole table" = shared/no seat.
+  // Seats shown = the table's capacity, or higher if the ticket already used more, or the server added seats.
+  if(draft.tableId){
+    const cap=tableSeats(draft.tableId)||0;
+    const usedMax=Math.max(0, ...(draft.lines||[]).map(l=>+l.seat||0));
+    const shown=Math.max(cap, usedMax, draft.__seatMax||0, 4);   // always offer at least a few
+    const sc=document.createElement("div"); sc.className="card"; sc.style.cssText="padding:8px 10px;margin-bottom:10px";
+    const slbl=document.createElement("span"); slbl.className="muted"; slbl.style.marginRight="8px"; slbl.textContent="👤 Seat:"; sc.appendChild(slbl);
+    const sopts=document.createElement("div"); sopts.className="opts"; sopts.style.display="inline-flex"; sopts.style.flexWrap="wrap";
+    const whole=document.createElement("button"); if(!draft.seat) whole.className="sel"; whole.textContent="Whole table"; whole.onclick=()=>{ draft.seat=null; render(); }; sopts.appendChild(whole);
+    for(let n=1;n<=shown;n++){ const cnt=(draft.lines||[]).filter(l=>(+l.seat||0)===n).length; const b=document.createElement("button"); if(draft.seat===n) b.className="sel";
+      b.textContent="Seat "+n+(cnt?" ("+cnt+")":""); b.onclick=()=>{ draft.seat=n; render(); }; sopts.appendChild(b); }
+    const add=document.createElement("button"); add.textContent="+ seat"; add.title="Add another seat"; add.onclick=()=>{ draft.__seatMax=shown+1; draft.seat=shown+1; render(); }; sopts.appendChild(add);
+    sc.appendChild(sopts); app.appendChild(sc);
   }
   const cat=document.createElement("div"); cat.innerHTML="<h2>New order</h2>";
   // search / barcode-scan box — shown for big menus or when a scanner is configured (keyboard-wedge types code + Enter)
@@ -1954,7 +1972,7 @@ function renderIntake(app, station){
   const c=document.createElement("div"); c.className="card";
   if(!draft.lines.length){ c.innerHTML="<div class='empty'>Tap items to build the order.</div>"; }
   else { draft.lines.forEach((l,idx)=>{ const row=document.createElement("div"); row.className="line";
-      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+(l.performer?" <span class='pill'>"+l.performer+"</span>":"")+tagChip(l)+"</span><span class='pill route'>"+((l.path||[]).join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":"");
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+(l.performer?" <span class='pill'>"+l.performer+"</span>":"")+tagChip(l)+"</span><span class='pill route'>"+((l.path||[]).join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":"");
       if(station.view.money){   // quantity steppers + per-line price edit (haggling, custom items, ring 6 in one tap)
         const dec=document.createElement("button"); dec.textContent="−"; dec.title="one fewer"; dec.style.cssText="padding:2px 9px;margin-left:6px"; dec.onclick=()=>{ if(l.qty>1) l.qty--; else { logActivity("void", "removed "+l.name+" ("+money(l.price)+") from an unsent ticket", null, l.price); draft.lines.splice(idx,1); } render(); }; row.appendChild(dec);
         const inc=document.createElement("button"); inc.textContent="+"; inc.title="one more"; inc.style.cssText="padding:2px 9px;margin-left:4px"; inc.onclick=()=>{ l.qty++; render(); }; row.appendChild(inc);
@@ -2056,6 +2074,7 @@ function addLine(item, choices, addons, flags, performer){
   const modLabel=mods.map(m=>m.name).filter(Boolean).join(", ");
   const cart = editingId ? ((DB.records||[]).find(r=>r.id===editingId)||draft) : draft;   // detailing edits the order; intake edits the draft
   cart.lines.push({ id:"L"+Math.round(performance.now())+Math.floor(Math.random()*1e4), catId:item.id, name:item.name, modLabel, flags:(flags||[]).slice(), performer:performer||null, price, qty:1, category:item.category, path:item.path.slice(), stage:0, course:item.course||1,
+    seat: (editingId ? null : (draft && draft.seat) || null),   // 👤 dine-in: which seat this line rings to (null = whole table)
     serialized: !!item.serialized, tag: item.serialized ? genUnitTag() : undefined, tagLabel: item.serialized ? (item.tagLabel||"Tag") : undefined });
   if(editingId) saveDB(DB);
   render();
@@ -2154,7 +2173,7 @@ function renderPipeline(app, station){
       const flagHtml=(l.flags||[]).map(f=>{ hasFlags=true; return " <span class='pill flag'>⚠ "+f+"</span>"; }).join("");
       const perfHtml=l.performer?" <span class='pill'>"+l.performer+"</span>":"";
       if(station.reconcile){ const ck=reconChecked(r,station,l); if(!ck) reconOk=false; const cb=document.createElement("button"); cb.textContent=ck?"✓":"○"; cb.title="Count this piece out"; cb.style.cssText="padding:2px 9px;margin-right:4px"; if(ck) cb.className="sel"; cb.onclick=()=>reconToggle(r,station,l); row.appendChild(cb); }
-      row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+perfHtml+flagHtml+tagChip(l)+bagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"); c.appendChild(row); });
+      row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+perfHtml+flagHtml+tagChip(l)+bagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"); c.appendChild(row); });
     if(station.bag){ const bagged=mine.some(l=>l.bag); const bw=document.createElement("div"); bw.className="mgroup"; bw.innerHTML="<div class='lbl'>Assembly bags</div>";
       const bb=document.createElement("button"); bb.textContent=bagged?("🧺 Re-bag ("+((r.bagsAt&&r.bagsAt[station.id])||0)+" bag(s))"):("🧺 Bag these "+pieceCount(mine)+" piece(s)"); bb.onclick=()=>bagOrder(r,station); bw.appendChild(bb); c.appendChild(bw); }
     if(printOn()){ const pw=document.createElement("div"); pw.className="mgroup"; pw.innerHTML="<div class='lbl'>Print</div>";
@@ -2204,7 +2223,7 @@ function renderDetail(app, station){
   const c=document.createElement("div"); c.className="card";
   if(!rec.lines.length){ c.innerHTML="<div class='empty'>No pieces yet — tap items above.</div>"; }
   else rec.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
-    row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+tagChip(l)+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":""));
+    row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+tagChip(l)+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":""));
     if(l.serialized){ const tb=document.createElement("button"); tb.textContent="🏷 "+(l.tag||"tag"); tb.title="Scan / set the "+(l.tagLabel||"tag"); tb.style.cssText="padding:2px 8px;margin-left:6px"; tb.onclick=()=>{ const v=prompt("Scan or type the "+(l.tagLabel||"tag")+" for this "+l.name+":", l.tag||""); if(v!=null&&v.trim()){ l.tag=v.trim(); saveDB(DB); render(); } }; row.appendChild(tb); }
     const rm=document.createElement("button"); rm.textContent="✕"; rm.title="Remove"; rm.style.cssText="padding:2px 8px;margin-left:6px"; rm.onclick=()=>{ rec.lines=rec.lines.filter(x=>x.id!==l.id); saveDB(DB); render(); }; row.appendChild(rm);
     c.appendChild(row); });
@@ -2235,7 +2254,7 @@ function printDoc(kind, text, meta){
   return job;
 }
 function dueDateText(r){ const t=FLOW.timer; if(!t||t.mode!=="due"||!r.ts) return ""; return new Date(r.ts + t.promiseSec*1000).toISOString().slice(0,16).replace("T"," "); }
-function docLineText(l){ return "  "+(l.qty||1)+"x "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.serialized&&l.tag?"  ["+(l.tagLabel||"Tag")+" "+l.tag+"]":"")+(l.bag?"  bag "+l.bag:""); }
+function docLineText(l){ return "  "+(l.qty||1)+"x "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.seat?"  [Seat "+l.seat+"]":"")+(l.serialized&&l.tag?"  ["+(l.tagLabel||"Tag")+" "+l.tag+"]":"")+(l.bag?"  bag "+l.bag:""); }
 function docTicket(r){
   const L=[]; L.push(((FLOW.branding&&FLOW.branding.name)||"Order").toUpperCase());
   if(storesOn()&&r.storeId){ L.push(storeName(r.storeId)); const aa=assembledAt(r); if(aa) L.push(aa); }
@@ -2274,7 +2293,7 @@ function renderCheckout(app, station){
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No orders ready to check out."; app.appendChild(e); }
   recs.forEach(r=>{ const c=document.createElement("div"); c.className="card"; const bal=recordBalance(r);
     c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
-    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
+    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
     // tax area (destination sales tax): for delivery, tax at the delivery address's rate, not the shop's.
     // Shown only when tax zones are configured; "Shop" = the base (origin) rate.
     if(FLOW.endpoints.tax && Array.isArray(FLOW.endpoints.tax.zones) && FLOW.endpoints.tax.zones.length && r.status==="READY"){

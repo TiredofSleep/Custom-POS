@@ -17,7 +17,7 @@ plan — not spelled out feature by feature.*
 | Floor plan, sections, drag-drop designer | ✅ | `floor.js`, `floor-designer.js` |
 | Table states (open→seated→ordered→…) + turn timing + covers | ✅ | `floor.js`, `turns.js` |
 | Coursing — apps/drinks first, fire entrées, add dessert later | ✅ | `coursing.js` |
-| **Order by SEAT number** (seat 2's ribeye) | ❌ | "seats" today = table capacity only — **top gap** |
+| **Order by SEAT number** (seat 2's ribeye) | ✅ | seat picker at intake; seat rides the line → KDS/station/ticket/check (`seat-order.js`) |
 | Split the check | 🟡 | even 2/3/4-way (`split.js`) — **not by seat or by item** |
 | **Per-seat / per-item checks** | ❌ | each guest pays their own — the other half of the seat gap |
 | Transfer / merge tables, move a guest | ❌ | |
@@ -116,8 +116,8 @@ Everything not ✅ above, collected:
 Sequenced by daily value to a sit-down burger place like Hamburger Barn, and by how much each unlocks the rest.
 
 - **P1 — the heart of the server flow**
-  1. Seat-numbered ordering (assign each line to a seat; show seats on the ticket & KDS)
-  2. Split & pay **by seat** (falls out of #1) and by item
+  1. ✅ Seat-numbered ordering (assign each line to a seat; seats show on the ticket & KDS) — *shipped*
+  2. Split & pay **by seat** (falls out of #1) and by item — *next*
   3. Comps with reason + manager approval
 - **P2 — runs a real dining room**
   4. Server assignment + "my tables"
