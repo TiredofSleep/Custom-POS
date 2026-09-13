@@ -523,6 +523,14 @@ function setStore(id){ if(id) localStorage.setItem(stkey(), id); else localStora
 function storeForOrder(cust){ return (cust && cust.storeId) || homeStore() || defaultStoreId(); }   // an order's home store
 function storeChip(r){ if(!storesOn() || !r.storeId) return ""; const nm=storeName(r.storeId); return nm ? " <span class='pill' title='Store'>🏬 "+nm+"</span>" : ""; }
 function tableChip(r){ return r.tableId ? " <span class='pill' title='Table'>🍽 "+tableLabel(r.tableId)+"</span>" : ""; }
+// 👤 which seat a line belongs to (dine-in seat-by-seat ordering). Blank when the line isn't tied to a seat.
+function seatChip(l){ return (l&&l.seat) ? " <span class='pill' title='Seat'>👤 S"+l.seat+"</span>" : ""; }
+// 🚗 order type (dine-in / to-go / drive-thru) + channel (in-house vs an online/delivery order the hub handed in).
+function orderTypes(){ return (FLOW.endpoints && FLOW.endpoints.orderTypes) || null; }
+function orderTypeChip(r){ if(!r||!r.orderType) return ""; const ic=/drive/i.test(r.orderType)?"🚗":(/go|take/i.test(r.orderType)?"🥡":"🍽"); return " <span class='pill' title='Order type'>"+ic+" "+r.orderType+"</span>"; }
+function channelChip(r){ return (r&&r.channel&&r.channel!=="in-house") ? " <span class='pill' title='Channel' style='background:var(--brand);color:#fff'>🌐 "+r.channel+"</span>" : ""; }
+// 🎁 a comped line (free, reason-coded, optionally manager-approved). Shows the reason on hover.
+function compChip(l){ return (l&&l.comped) ? " <span class='pill' title='Comp: "+(l.comped.reason||"")+((l.comped.by)?" · "+l.comped.by:"")+"' style='background:var(--bad);color:#fff'>🎁 comp</span>" : ""; }
 function assembledAt(r){ if(!storesOn() || !r.storeId) return ""; const p=plantStore(); return (p && r.storeId!==p.id) ? "assembled at "+p.name : ""; }   // a drop-store order is done at the plant
 
 /* ===================================== MONEY MATH ===================================== */
@@ -560,8 +568,29 @@ function recordTotal(r){ return +(lineSubtotal(r) - recordDiscount(r) + (taxIncl
 // age-restricted items (tobacco/alcohol/lottery): an item's ageRestricted (true→21, or a number) drives an ID-check gate at checkout
 function lineAge(l){ const it=FLOW.catalog.find(i=>i.id===l.catId); const a=it&&it.ageRestricted; return a===true?21:(+a||0); }
 function orderAgeReq(r){ return Math.max(0, ...((r.lines||[]).filter(l=>!l.returned).map(lineAge))); }
+// whole-year age from a TYPED birthdate — accepts YYYY-MM-DD or M/D/YYYY; null if it isn't a real date.
+// We compute and gate on the age; we deliberately do NOT store the raw DOB (the defensible record is
+// "age N was verified/refused, when, at which station" — not the customer's date of birth).
+function ageFromDOB(s){ s=String(s||"").trim(); if(!s) return null;
+  var m1=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/), m2=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/), y,m,d;
+  if(m1){ y=+m1[1]; m=+m1[2]; d=+m1[3]; } else if(m2){ m=+m2[1]; d=+m2[2]; y=+m2[3]; } else return null;
+  if(m<1||m>12||d<1||d>31) return null;
+  var dob=new Date(y,m-1,d); if(dob.getFullYear()!==y||dob.getMonth()!==m-1||dob.getDate()!==d) return null;   // rejects 02/30 etc.
+  if(dob>new Date()) return null;
+  var now=new Date(), a=now.getFullYear()-y; if(now.getMonth()<m-1||(now.getMonth()===m-1&&now.getDate()<d)) a--; return a; }
 function recordPaid(r){ return (r.tenders||[]).reduce((s,t)=> s + t.amount, 0); }
 function recordBalance(r){ return +(recordTotal(r) - recordPaid(r)).toFixed(2); }
+// 👤 SPLIT BY SEAT — each guest pays their own. One bucket per seat (+ a "Shared" bucket for whole-table lines).
+// A seat's amount = its share of the line subtotal, scaled to the record total so tax/tip/discount ride along.
+function orderHasSeats(r){ return (r.lines||[]).some(l=>!l.returned && l.seat); }
+function seatBuckets(r){ const map={};
+  (r.lines||[]).forEach(l=>{ if(l.returned) return; const k=l.seat?("s"+l.seat):"shared";
+    (map[k]=map[k]||{ key:k, seat:l.seat||null, label:l.seat?("Seat "+l.seat):"Shared", sub:0 }).sub += l.price*l.qty; });
+  return Object.keys(map).sort((a,b)=>(map[a].seat||0)-(map[b].seat||0)).map(k=>map[k]); }
+function seatAmount(r, bucket){ const subTot=(r.lines||[]).filter(l=>!l.returned).reduce((s,l)=>s+l.price*l.qty,0)||1;
+  return +(recordTotal(r) * bucket.sub / subTot).toFixed(2); }
+function seatPaid(r, key){ return (r.tenders||[]).filter(t=>t.seatKey===key).reduce((s,t)=>s+t.amount,0); }
+function seatDue(r, bucket){ return +Math.max(0, seatAmount(r,bucket)-seatPaid(r,bucket.key)).toFixed(2); }
 function firstPerformer(r){ const l=r.lines.find(x=>x.performer); return l?l.performer:null; }
 // refund reverses every original tender back to itself (card → card, cash → cash) and marks the order REFUNDED
 function refundRecord(r){
@@ -588,6 +617,19 @@ function returnLines(r, lineIds){
   r.refundedAt=new Date().toISOString().slice(11,16);
   logActivity("refund", "line refund "+money(amount)+" on #"+r.number+" — "+names.join(", "), r.number, amount);
   saveDB(DB); render();
+}
+// 🎁 COMP a line — take it to $0 with a reason on the record. Distinct from a discount (a %-off promo): a comp
+// is discretionary ("kitchen error", "long wait", "on the house"). Manager-approved when the instance opts in
+// (FLOW.endpoints.approvals.comp + approver roles) — otherwise reason-only. Reversible via the same control.
+const COMP_REASONS=["Manager comp","Kitchen error","Long wait","Customer service","Birthday","On the house"];
+function compLine(r, l){
+  if(l.comped){ withApproval("comp","Un-comp "+l.name,(who)=>{ l.price=(l.comped&&l.comped.wasPrice)||l.price; delete l.comped; logActivity("comp","un-comped "+l.name+(who?" (by "+who.name+")":""), r.number); saveDB(DB); }); return; }
+  const reason=prompt("Comp "+l.name+" — reason?\n("+COMP_REASONS.join(" · ")+")", "Manager comp");
+  if(reason==null) return;
+  const amt=+(l.price*l.qty).toFixed(2);
+  withApproval("comp","Comp "+l.name+" ("+money(amt)+") — "+(reason.trim()||"Manager comp"),(who)=>{
+    l.comped={ reason:(reason.trim()||"Manager comp"), by:(who?who.name:((typeof actingStaff==="function"&&actingStaff())||"")), at:new Date().toISOString().slice(11,16), wasPrice:l.price, amount:amt };
+    l.price=0; logActivity("comp","comped "+l.name+" — "+(reason.trim()||"Manager comp")+(who?" (by "+who.name+")":""), r.number, amt); saveDB(DB); });
 }
 
 /* Processor-agnostic PAYMENTS interface (matches docs/PAYMENTS-MODULE.md). By default — with no processor
@@ -676,6 +718,16 @@ function adjustStock(item, qty, reason){
 }
 function isLowStock(item){ return tracksStock(item) && stockOnHand(item) <= (item.reorderAt!=null?item.reorderAt:0); }
 function isOutOfStock(item){ return tracksStock(item) && stockOnHand(item) <= 0; }
+// ⏰ TIME WINDOWS — day-part menus (breakfast till 11) + happy-hour pricing. A window is {days?:[0-6], from, to}
+// ("HH:MM"); days omitted = every day; from/to omitted = all day; from>to spans midnight. All read the live clock.
+function hmToMin(s){ const m=String(s||"").match(/^(\d{1,2}):(\d{2})$/); return m?(+m[1]*60 + +m[2]):null; }
+function withinWindow(win, at){ if(!win) return false; const now=at||new Date(); const day=now.getDay();
+  if(Array.isArray(win.days) && win.days.length && win.days.indexOf(day)<0) return false;
+  const f=hmToMin(win.from), t=hmToMin(win.to); if(f==null||t==null) return true;
+  const cur=now.getHours()*60+now.getMinutes(); return f<=t ? (cur>=f&&cur<t) : (cur>=f||cur<t); }
+function happyActive(at){ return withinWindow(FLOW.endpoints && FLOW.endpoints.happyHour, at); }   // shop-wide happy-hour window
+function itemAvailNow(item, at){ return !item || !item.avail || withinWindow(item.avail, at); }      // day-part availability
+function itemPriceNow(item, at){ return (item && item.happyPrice!=null && happyActive(at)) ? +item.happyPrice : (item?item.price:0); }  // happy-hour price when live
 function needsConfig(item){ return (item.modifiers&&item.modifiers.length) || (item.addons&&item.addons.length) || (item.flags&&item.flags.length) || item.performer; }
 
 /* ============================================================================ RENDER */
@@ -690,7 +742,7 @@ function flash(msg){ let t=document.getElementById("toast"); if(!t){ t=document.
    privacy); the theft-relevant events, each attributed to a station, the acting staff (when one person is
    clocked in), and a timestamp. Owner-facing, exportable, capped so localStorage never runs away.
    Categories: order · money · override · void · refund · discount · idcheck · stock · clock · access · admin. */
-const ACT_CAT = { order:"money", money:"money", refund:"money", discount:"money", override:"override", void:"override", idcheck:"access", clock:"access", access:"access", stock:"admin", admin:"admin" };
+const ACT_CAT = { order:"money", money:"money", refund:"money", discount:"money", comp:"override", override:"override", void:"override", idcheck:"access", clock:"access", access:"access", stock:"admin", admin:"admin" };
 function actingStaff(){ try{ const on=(FLOW.staff||[]).filter(s=>openPunch(s.id)); return on.length===1?on[0].name:(on.length>1?"(multiple on shift)":""); }catch(e){ return ""; } }
 function logActivity(type, detail, orderNo, amt){
   try{ DB=DB||loadDB(); DB.activity=DB.activity||[];
@@ -888,7 +940,7 @@ function renderReport(app, station){
   const done = (storesOn() && reportStore) ? dayAll.filter(r=>r.storeId===reportStore) : dayAll;
   const L=(lab,val,bold)=>"<div class='line'>"+(bold?"<b>":"<span>")+lab+(bold?"</b>":"</span>")+"<span class='spacer'></span>"+(bold?"<b>":"<span>")+val+(bold?"</b>":"</span>")+"</div>";
   // ---- daily sales summary (refund-aware: a refunded order's sale nets out, its reversed tender nets its tenders) ----
-  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0, cogs=0, roundUp=0; const byTender={}, byCat={}, byItem={}, byHour={};
+  let net=0, tax=0, tips=0, disc=0, items=0, refunds=0, orders=0, cogs=0, roundUp=0, comps=0; const byTender={}, byCat={}, byItem={}, byHour={};
   const itemCost=(l)=>{ const it=FLOW.catalog.find(i=>i.id===l.catId); return (it&&+it.cost)||0; };
   done.forEach(r=>{ const rf=r.status==="REFUNDED";
     if(rf){ refunds += recordTotal(r); }
@@ -897,6 +949,7 @@ function renderReport(app, station){
       net += recordNet(r)*frac; tax += recordTax(r)*frac; tips += r.tip||0; disc += recordDiscount(r)*frac; roundUp += r.roundUp||0;
       if(r.ts){ const hr=new Date(r.ts).getHours(); byHour[hr]=(byHour[hr]||0)+recordNet(r)*frac; }
       r.lines.filter(l=>!l.returned).forEach(l=>{ items += l.qty; cogs += itemCost(l)*l.qty; byCat[l.category||"other"]=(byCat[l.category||"other"]||0)+l.price*l.qty;
+        if(l.comped) comps += (l.comped.amount||0);   // 🎁 value given away as comps today
         const bi=byItem[l.name]=byItem[l.name]||{qty:0,rev:0,cost:0}; bi.qty+=l.qty; bi.rev+=l.price*l.qty; bi.cost+=itemCost(l)*l.qty; });
       const ret = -((r.tenders||[]).filter(t=>t.refund).reduce((s,t)=>s+t.amount,0)); if(ret>0.0001) refunds += ret;   // partial line returns
     }
@@ -922,9 +975,18 @@ function renderReport(app, station){
   const sum=document.createElement("div"); sum.className="card";
   sum.innerHTML="<div class='row'><b>Sales summary</b></div>"
     + L("Orders", String(orders)) + L("Items sold", String(items))
-    + L("Net sales", money(net)) + (disc?L("Discounts","−"+money(disc)):"") + L("Tax collected", money(tax)) + (tips?L("Tips", money(tips)):"") + (refunds?L("Refunds","−"+money(refunds)):"")
+    + L("Net sales", money(net)) + (disc?L("Discounts","−"+money(disc)):"") + (comps?L("Comps (on the house)","−"+money(comps)):"") + L("Tax collected", money(tax)) + (tips?L("Tips", money(tips)):"") + (refunds?L("Refunds","−"+money(refunds)):"")
     + L("Total collected", money(collected), true) + (onAccount?L("On account (A/R)", money(onAccount)):"");
   app.appendChild(sum);
+  // 💸 tip-out by role — the payroll pain point. When configured, show each support role's cut of today's tips
+  // (a % of tips) and what's left for the servers, so tip-out is spelled out at close instead of done by hand.
+  const tipOut=(FLOW.endpoints.payment.tip&&FLOW.endpoints.payment.tip.tipOut)||null;
+  if(tipOut && tipOut.length && tips>0.0001){
+    let out=0; const rows=tipOut.map(t=>{ const cut=+(tips*(+t.pct||0)/100).toFixed(2); out+=cut; return L("→ "+(t.role||"support")+" ("+(+t.pct||0)+"%)","−"+money(cut)); }).join("");
+    const toCard=document.createElement("div"); toCard.className="card";
+    toCard.innerHTML="<div class='row'><b>Tip-out</b> <span class='muted'>from "+money(tips)+" in tips</span></div>"+rows+L("Kept by servers", money(+(tips-out).toFixed(2)), true);
+    app.appendChild(toCard);
+  }
   // ---- community: charity round-ups collected today (only when the round-up option is on) ----
   if(FLOW.endpoints.payment.roundUp && roundUp>0){ const cause=(FLOW.endpoints.payment.roundUp.cause)||"a local cause";
     const cc=document.createElement("div"); cc.className="card"; cc.innerHTML="<div class='row'><b>Community ♥</b></div>"+L("Rounded up for "+cause, money(roundUp), true)+"<div class='muted' style='margin-top:2px'>Collected from customers who chose to round up — set it aside to donate.</div>";
@@ -1115,7 +1177,9 @@ function renderReport(app, station){
   // ---- ID checks (audit): defensible record of every age-restricted sale that was verified ----
   { const idlog=(DB.ageLog||[]).filter(a=>a.day===todayStr());
     if(idlog.length){ const ic=document.createElement("div"); ic.className="card"; ic.innerHTML="<div class='row'><b>ID checks (audit)</b> <span class='pill'>"+idlog.length+" today</span></div>";
-      idlog.slice(-8).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+a.at+" · #"+a.number+" — verified "+a.req+"+</span><span class='spacer'></span><span class='muted'>"+(a.station||"")+"</span>"; ic.appendChild(row); }); app.appendChild(ic); } }
+      idlog.slice(-8).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line";
+        const res=a.result==="refused" ? ("<span style='color:var(--bad)'>REFUSED — under "+a.req+"</span>") : ("verified "+a.req+"+");
+        row.innerHTML="<span>"+a.at+" · #"+a.number+" — "+res+(a.age!=null?" (age "+a.age+")":"")+"</span><span class='spacer'></span><span class='muted'>"+(a.station||"")+"</span>"; ic.appendChild(row); }); app.appendChild(ic); } }
   // ---- commission (only when the trade pays commission) ----
   const pct=(FLOW.commission&&FLOW.commission.pct)||0;
   if(FLOW.performers){
@@ -1404,9 +1468,9 @@ function renderKDS(app, station){
   if(!live.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="All caught up — no tickets working."; app.appendChild(e); }
   live.forEach(r=>{ const c=document.createElement("div"); c.className="card";
     const fc=r.firedCourse||1;
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> "+kdsChip(r)+(coursingOn()?" <span class='pill'>"+courseLabel(fc)+"</span>":"")+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> "+kdsChip(r)+orderTypeChip(r)+channelChip(r)+(coursingOn()?" <span class='pill'>"+courseLabel(fc)+"</span>":"")+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     r.lines.filter(l=>courseReleased(r,l)).forEach(l=>{ const row=document.createElement("div"); row.className="line"; const where=lineComplete(l)?"ready":("at "+l.path[l.stage]);
-      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span class='muted'>"+where+"</span>"; c.appendChild(row); });
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+"</span><span class='spacer'></span><span class='muted'>"+where+"</span>"; c.appendChild(row); });
     // held courses waiting to be fired
     if(coursingOn()){ const held=r.lines.filter(l=>!courseReleased(r,l));
       if(held.length){ const h=document.createElement("div"); h.className="muted"; h.style.marginTop="4px"; h.textContent="held: "+held.map(l=>l.qty+"× "+l.name).join(", ")+" ("+courseLabel(fc+1)+")"; c.appendChild(h); } }
@@ -1431,14 +1495,37 @@ const FLOOR_STATES = [
 ];
 function floorStates(){ return (FLOW.floor && FLOW.floor.states) || FLOOR_STATES; }
 function floorStateById(id){ return floorStates().find(s=>s.id===id) || floorStates()[0]; }
-function tableRec(t){ const r=(DB.tables||{})[t.id]; return { state:(r&&r.state)||floorStates()[0].id, since:(r&&r.since)||null, seatedTs:(r&&r.seatedTs)||null }; }
+function tableRec(t){ const r=(DB.tables||{})[t.id]; return { state:(r&&r.state)||floorStates()[0].id, since:(r&&r.since)||null, seatedTs:(r&&r.seatedTs)||null, server:(r&&r.server)||null }; }
+// 🧑‍🍳 server assignment: which server owns a table, and the "my tables" view.
+function tableServer(id){ const r=(DB.tables||{})[id]; return (r&&r.server)||null; }
+function serverStaff(){ return (FLOW.staff||[]); }   // any staff member can own tables
+function assignServer(id, name){ DB=loadDB(); DB.tables=DB.tables||{}; const prev=DB.tables[id]||{ state:floorStates()[0].id, since:Date.now() };
+  DB.tables[id]=Object.assign({}, prev, { server:(name||null) }); saveDB(DB);
+  logActivity("access", (name?("table "+tableLabel(id)+" → "+name):("cleared server on table "+tableLabel(id)))); render(); }
 // state change also drives turn-time analytics: a "turn" runs from leaving Empty until returning to Empty
 function setTableState(id, state){ DB=loadDB(); DB.tables=DB.tables||{}; DB.turns=DB.turns||[];
   const emptyId=floorStates()[0].id; const now=Date.now(); const prev=DB.tables[id]||{}; let seatedTs=prev.seatedTs||null;
   const wasEmpty=!prev.state || prev.state===emptyId;
   if(wasEmpty && state!==emptyId) seatedTs=now;                               // a table just got seated — turn begins
   if(state===emptyId){ if(seatedTs) DB.turns.push({ table:id, seatedTs, clearedTs:now, dur:now-seatedTs, day:todayStr() }); seatedTs=null; }  // cleared — turn ends, logged
-  DB.tables[id]={ state, since:now, seatedTs }; saveDB(DB); render();
+  DB.tables[id]=Object.assign({}, prev, { state, since:now, seatedTs });      // keep the assigned server across state changes
+  if(state===emptyId) delete DB.tables[id].server;                            // a cleared table is free again
+  saveDB(DB); render();
+}
+// 🔀 TRANSFER / MERGE tables — move a table's open check(s) to another table. If the target is empty it's a
+// transfer (party moved); if it already has a check it's a merge (two tables become one party). The source is
+// then freed (its turn ends). Reuses setTableState so turn analytics and the server-clear stay consistent.
+function moveTable(fromId, toId){ if(!toId || fromId===toId) return;
+  DB=loadDB(); const moved=(DB.records||[]).filter(r=>r.tableId===fromId && r.status!=="CLOSED" && r.status!=="REFUNDED");
+  if(!moved.length){ flash("No open check on "+tableLabel(fromId)); return; }
+  moved.forEach(r=>{ r.tableId=toId; r._t=Date.now(); });
+  DB.tables=DB.tables||{}; const src=DB.tables[fromId]||{}, tgt=DB.tables[toId]||{};
+  const emptyId=floorStates()[0].id, occ=(floorStates()[1]||floorStates()[0]).id;
+  const wasOccupied=(tgt.state && tgt.state!==emptyId);
+  DB.tables[toId]=Object.assign({}, tgt, { state: wasOccupied?tgt.state:occ, since:Date.now(), seatedTs: tgt.seatedTs||src.seatedTs||Date.now(), server: tgt.server||src.server||null });
+  saveDB(DB);
+  logActivity("access", (wasOccupied?"merged ":"moved ")+tableLabel(fromId)+" → "+tableLabel(toId)+" ("+moved.length+" check"+(moved.length>1?"s":"")+")");
+  selTable=toId; setTableState(fromId, emptyId);   // free the source (logs its turn, clears its server, saves + renders)
 }
 function tableSeats(id){ const t=((FLOW.floor&&FLOW.floor.tables)||[]).find(x=>x.id===id); return (t&&+t.seats)||0; }
 function tableLabel(id){ const t=((FLOW.floor&&FLOW.floor.tables)||[]).find(x=>x.id===id); return (t&&(t.label||t.id))||id; }
@@ -1447,15 +1534,69 @@ function tableOpenOrders(id){ return DB.records.filter(r=>r.tableId===id && r.st
 function tableOpenTotal(id){ return tableOpenOrders(id).reduce((s,r)=>s+recordBalance(r),0); }
 function turnsToday(){ return (DB.turns||[]).filter(x=>x.day===todayStr()); }
 function turnStats(){ const ts=turnsToday(); const n=ts.length; return { n, avgMs:n?ts.reduce((s,x)=>s+x.dur,0)/n:0, covers:ts.reduce((s,x)=>s+tableSeats(x.table),0) }; }
+/* 🕐 RESERVATIONS + WAITLIST — the host stand, run from the floor. Reservations are booked for a time today;
+   the waitlist holds walk-ins with a quoted wait. Both can be "seated" (optionally onto the selected table) or
+   cleared. Records are never hard-deleted — a reservation is cancelled, a waitlist party marked seated/left. */
+function todayReservations(){ return (DB.reservations||[]).filter(r=>r.day===todayStr() && r.status!=="cancelled").sort((a,b)=>String(a.time||"").localeCompare(String(b.time||""))); }
+function addReservation(name, party, time, phone){ name=(name||"").trim(); if(!name){ flash("Name for the reservation?"); return; }
+  DB=loadDB(); DB.reservations=DB.reservations||[]; DB.reservations.push({ id:"RSV"+Date.now(), name, phone:(phone||"").trim(), party:Math.max(1,+party||1), time:(time||"").trim(), day:todayStr(), status:"booked" });
+  logActivity("access","reservation · "+name+" ×"+(Math.max(1,+party||1))+((time||"").trim()?" @ "+time.trim():"")); saveDB(DB); render(); }
+function seatReservation(id, tableId){ DB=loadDB(); const r=(DB.reservations||[]).find(x=>x.id===id); if(!r) return; r.status="seated"; if(tableId) r.tableId=tableId; logActivity("access","seated reservation · "+r.name); saveDB(DB);
+  if(tableId) setTableState(tableId, (floorStates()[1]||floorStates()[0]).id); else render(); }   // save the seated status BEFORE setTableState (it reloads DB)
+function cancelReservation(id){ DB=loadDB(); const r=(DB.reservations||[]).find(x=>x.id===id); if(!r) return; r.status="cancelled"; logActivity("access","cancelled reservation · "+r.name); saveDB(DB); render(); }
+function activeWaitlist(){ return (DB.waitlist||[]).filter(w=>w.status==="waiting").sort((a,b)=>(a.addedTs||0)-(b.addedTs||0)); }
+function waitlistWait(w){ return Math.round((Date.now()-(w.addedTs||Date.now()))/60000); }
+function addWaitlist(name, party, quote, phone){ name=(name||"").trim(); if(!name){ flash("Name for the waitlist?"); return; }
+  DB=loadDB(); DB.waitlist=DB.waitlist||[]; DB.waitlist.push({ id:"WL"+Date.now(), name, phone:(phone||"").trim(), party:Math.max(1,+party||1), quote:Math.max(0,+quote||0), addedTs:Date.now(), status:"waiting" });
+  logActivity("access","waitlist + "+name+" ×"+(Math.max(1,+party||1))+((+quote||0)?" ~"+(+quote)+"m":"")); saveDB(DB); render(); }
+function seatWaitlist(id, tableId){ DB=loadDB(); const w=(DB.waitlist||[]).find(x=>x.id===id); if(!w) return; w.status="seated"; if(tableId) w.tableId=tableId; logActivity("access","seated waitlist · "+w.name); saveDB(DB);
+  if(tableId) setTableState(tableId, (floorStates()[1]||floorStates()[0]).id); else render(); }   // save before setTableState (it reloads DB)
+function leaveWaitlist(id){ DB=loadDB(); const w=(DB.waitlist||[]).find(x=>x.id===id); if(!w) return; w.status="left"; logActivity("access","waitlist left · "+w.name); saveDB(DB); render(); }
+// the host stand UI — a Reservations card and a Waitlist card, each with a quick add row + "Seat"/"clear".
+// "Seat" uses the currently-selected table when one is picked, so the host taps a table then seats the party.
+function renderHostStand(app){
+  const seatTarget = selTable ? (" → "+tableLabel(selTable)) : "";
+  const mkAdd=(fields, onAdd)=>{ const row=document.createElement("div"); row.className="opts"; row.style.cssText="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px";
+    const els={}; fields.forEach(f=>{ const i=document.createElement("input"); i.placeholder=f.ph; i.id=f.id; if(f.w) i.style.width=f.w; if(f.type) i.type=f.type; row.appendChild(i); els[f.id]=i; });
+    const add=document.createElement("button"); add.className="primary"; add.textContent="Add"; add.onclick=()=>{ onAdd(els); }; row.appendChild(add); return row; };
+  // Reservations
+  const rc=document.createElement("div"); rc.className="card"; rc.style.marginBottom="10px";
+  rc.innerHTML="<div class='row'><b>🕐 Reservations</b> <span class='pill'>"+todayReservations().filter(r=>r.status==="booked").length+" booked</span></div>";
+  todayReservations().forEach(r=>{ const row=document.createElement("div"); row.className="line";
+    row.innerHTML="<span>"+(r.status==="seated"?"✓ ":"")+"<b>"+(r.time||"—")+"</b> · "+r.name+" ×"+r.party+(r.phone?" <span class='muted'>"+r.phone+"</span>":"")+(r.status==="seated"?" <span class='pill clock good'>seated</span>":"")+"</span><span class='spacer'></span>";
+    if(r.status!=="seated"){ const s=document.createElement("button"); s.className="good"; s.textContent="Seat"+seatTarget; s.onclick=()=>seatReservation(r.id, selTable||null); row.appendChild(s);
+      const x=document.createElement("button"); x.textContent="✕"; x.title="Cancel"; x.style.marginLeft="4px"; x.onclick=()=>cancelReservation(r.id); row.appendChild(x); }
+    rc.appendChild(row); });
+  rc.appendChild(mkAdd([{id:"rsvName",ph:"name"},{id:"rsvParty",ph:"party",w:"64px",type:"number"},{id:"rsvTime",ph:"time e.g. 7:00",w:"110px"},{id:"rsvPhone",ph:"phone (optional)"}],
+    els=>{ addReservation(els.rsvName.value, els.rsvParty.value, els.rsvTime.value, els.rsvPhone.value); }));
+  app.appendChild(rc);
+  // Waitlist
+  const wc=document.createElement("div"); wc.className="card"; wc.style.marginBottom="10px";
+  wc.innerHTML="<div class='row'><b>📝 Waitlist</b> <span class='pill'>"+activeWaitlist().length+" waiting</span></div>";
+  activeWaitlist().forEach(w=>{ const row=document.createElement("div"); row.className="line"; const waited=waitlistWait(w);
+    row.innerHTML="<span><b>"+w.name+"</b> ×"+w.party+(w.quote?" · quoted "+w.quote+"m":"")+" <span class='muted'>· waiting "+waited+"m</span></span><span class='spacer'></span>";
+    const s=document.createElement("button"); s.className="good"; s.textContent="Seat"+seatTarget; s.onclick=()=>seatWaitlist(w.id, selTable||null); row.appendChild(s);
+    const x=document.createElement("button"); x.textContent="✕"; x.title="Left"; x.style.marginLeft="4px"; x.onclick=()=>leaveWaitlist(w.id); row.appendChild(x);
+    wc.appendChild(row); });
+  wc.appendChild(mkAdd([{id:"wlName",ph:"name"},{id:"wlParty",ph:"party",w:"64px",type:"number"},{id:"wlQuote",ph:"quote min",w:"90px",type:"number"},{id:"wlPhone",ph:"phone (optional)"}],
+    els=>{ addWaitlist(els.wlName.value, els.wlParty.value, els.wlQuote.value, els.wlPhone.value); }));
+  app.appendChild(wc);
+}
 function renderFloor(app, station){
   const cfg=FLOW.floor||{ tables:[] };
   app.innerHTML="<h2>"+station.label+"</h2>";
-  const tables=(cfg.tables||[]).filter(t=> !floorSection || (t.section||"")===floorSection);
+  renderHostStand(app);   // 🕐 reservations + waitlist at the top of the host's floor screen
+  const tables=(cfg.tables||[]).filter(t=> (!floorSection || (t.section||"")===floorSection) && (!floorServer || tableServer(t.id)===floorServer));
   const sections=cfg.sections || [...new Set((cfg.tables||[]).map(t=>t.section).filter(Boolean))];
   // section filter (server sees a section; manager sees all)
   if(sections.length){ const bar=document.createElement("div"); bar.className="opts"; bar.style.marginBottom="10px";
     const mk=(lab,val)=>{ const b=document.createElement("button"); if(floorSection===val) b.className="sel"; b.textContent=lab; b.onclick=()=>{ floorSection=val; selTable=null; render(); }; bar.appendChild(b); };
     mk("All", null); sections.forEach(s=>mk(s, s)); app.appendChild(bar); }
+  // 🧑‍🍳 "my tables" — filter the floor to one server's tables
+  if(serverStaff().length){ const sbar=document.createElement("div"); sbar.className="opts"; sbar.style.marginBottom="10px";
+    const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="6px"; lbl.textContent="Tables:"; sbar.appendChild(lbl);
+    const mk=(lab,val)=>{ const b=document.createElement("button"); if(floorServer===val) b.className="sel"; b.textContent=lab; b.onclick=()=>{ floorServer=val; selTable=null; render(); }; sbar.appendChild(b); };
+    mk("All", null); serverStaff().forEach(s=>mk(s.name, s.name)); app.appendChild(sbar); }
   // at-a-glance: how many tables are occupied (not empty)
   const occupied=tables.filter(t=>tableRec(t).state!=="empty").length;
   const meta=document.createElement("p"); meta.className="muted"; meta.style.margin="0 0 10px"; meta.textContent=occupied+" of "+tables.length+" tables occupied · tap a table to advance it"; app.appendChild(meta);
@@ -1478,6 +1619,7 @@ function renderFloor(app, station){
     const chk=tableOpenTotal(t.id);
     b.innerHTML="<b>"+ (t.label||t.id) +"</b> <span style='float:right;font-size:12px'>"+st.label+"</span>"
       +"<small>"+(t.seats?t.seats+" seats":"")+(t.section?" · "+t.section:"")+"</small>"
+      +"<small>"+(tableServer(t.id)?"🧑‍🍳 "+tableServer(t.id):"")+"</small>"
       +"<small>"+(chk>0.0001?"🧾 "+money(chk)+" open":(tr.since?fmtDur(el)+" in state":"—"))+"</small>";
     b.onclick=()=>{ selTable=(selTable===t.id?null:t.id); render(); };
     grid.appendChild(b); });
@@ -1496,7 +1638,19 @@ function renderFloor(app, station){
       if(nx){ const adv=document.createElement("button"); adv.className="primary"; adv.textContent="→ "+nx.label; adv.style.margin="4px 8px 8px 0"; adv.onclick=()=>{ setTableState(t.id, nx.id); }; c.appendChild(adv); }
       const jump=document.createElement("div"); jump.className="opts";
       floorStates().forEach(s=>{ const b=document.createElement("button"); if(s.id===st.id) b.className="sel"; b.textContent=s.label; b.onclick=()=>setTableState(t.id, s.id); jump.appendChild(b); });
-      c.appendChild(jump); app.appendChild(c);
+      c.appendChild(jump);
+      // 🧑‍🍳 assign a server to this table (or clear)
+      if(serverStaff().length){ const sv=document.createElement("div"); sv.className="opts"; sv.style.marginTop="8px";
+        const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="6px"; lbl.textContent="Server:"; sv.appendChild(lbl);
+        serverStaff().forEach(s=>{ const b=document.createElement("button"); if(tableServer(t.id)===s.name) b.className="sel"; b.textContent=s.name; b.onclick=()=>assignServer(t.id, tableServer(t.id)===s.name?null:s.name); sv.appendChild(b); });
+        c.appendChild(sv); }
+      // 🔀 transfer / merge this table's open check to another table
+      if(tableOpenOrders(t.id).length){ const mv=document.createElement("div"); mv.className="opts"; mv.style.marginTop="8px";
+        const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="6px"; lbl.textContent="Move check to:"; mv.appendChild(lbl);
+        (cfg.tables||[]).filter(x=>x.id!==t.id).forEach(x=>{ const occ=tableOpenOrders(x.id).length; const b=document.createElement("button");
+          b.textContent=(x.label||x.id)+(occ?" (merge)":""); b.title=occ?("Merge onto "+(x.label||x.id)):("Move to "+(x.label||x.id)); b.onclick=()=>moveTable(t.id, x.id); mv.appendChild(b); });
+        c.appendChild(mv); }
+      app.appendChild(c);
     }
   }
 }
@@ -1827,6 +1981,7 @@ let activityFilter = "all";   // activity-log category filter in the report: all
 let reportStore = null;       // multi-store report: which store the report is scoped to (null = all stores, with roll-up)
 let selTable = null;   // floor plan: the table currently opened
 let floorSection = null; // floor plan: active section filter (null = all)
+let floorServer = null;  // floor plan: "my tables" — filter to one server (null = all)
 let selCell = null;    // scheduling: the {staffId, day} cell being edited
 function attachCustomer(phone, name){
   phone=(phone||"").trim(); if(!phone) return;
@@ -1875,38 +2030,86 @@ function renderCustomerBar(app, station){
 function renderIntake(app, station){
   if(!draft) draft = { lines:[] };
   renderCustomerBar(app, station);
+  // 🚗 order type — dine-in / to-go / drive-thru (when the flow configures them)
+  if(orderTypes() && orderTypes().length){
+    if(!draft.orderType) draft.orderType=orderTypes()[0];
+    const ot=document.createElement("div"); ot.className="card"; ot.style.cssText="padding:8px 10px;margin-bottom:10px";
+    const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="8px"; lbl.textContent="Order:"; ot.appendChild(lbl);
+    const opts=document.createElement("div"); opts.className="opts"; opts.style.display="inline-flex"; opts.style.flexWrap="wrap";
+    orderTypes().forEach(tp=>{ const b=document.createElement("button"); if(draft.orderType===tp) b.className="sel"; b.textContent=tp; b.onclick=()=>{ draft.orderType=tp; render(); }; opts.appendChild(b); });
+    ot.appendChild(opts); app.appendChild(ot);
+  }
   // table selector — when a floor is configured, ring this check to a table (restaurants)
   if(FLOW.floor && (FLOW.floor.tables||[]).length){
     const tb=document.createElement("div"); tb.className="card"; tb.style.cssText="padding:8px 10px;margin-bottom:10px";
     const lbl=document.createElement("span"); lbl.className="muted"; lbl.style.marginRight="8px"; lbl.textContent="🍽 Table:"; tb.appendChild(lbl);
     const opts=document.createElement("div"); opts.className="opts"; opts.style.display="inline-flex"; opts.style.flexWrap="wrap";
     (FLOW.floor.tables||[]).forEach(t=>{ const b=document.createElement("button"); const open=tableOpenTotal(t.id); if(draft.tableId===t.id) b.className="sel";
-      b.textContent=(t.label||t.id)+(open>0.0001?" · "+money(open):""); b.onclick=()=>{ draft.tableId=(draft.tableId===t.id?null:t.id); render(); }; opts.appendChild(b); });
-    const none=document.createElement("button"); if(!draft.tableId) none.className="sel"; none.textContent="No table"; none.onclick=()=>{ draft.tableId=null; render(); }; opts.appendChild(none);
+      b.textContent=(t.label||t.id)+(open>0.0001?" · "+money(open):""); b.onclick=()=>{ draft.tableId=(draft.tableId===t.id?null:t.id); draft.seat=null; draft.__seatMax=0; render(); }; opts.appendChild(b); });
+    const none=document.createElement("button"); if(!draft.tableId) none.className="sel"; none.textContent="No table"; none.onclick=()=>{ draft.tableId=null; draft.seat=null; draft.__seatMax=0; render(); }; opts.appendChild(none);
     tb.appendChild(opts); app.appendChild(tb);
+  }
+  // 👤 seat picker — dine-in seat-by-seat ordering. Pick a seat and the items you tap ring to that seat (so the
+  // kitchen and the check know whose is whose, and the table can split by seat). "Whole table" = shared/no seat.
+  // Seats shown = the table's capacity, or higher if the ticket already used more, or the server added seats.
+  if(draft.tableId){
+    const cap=tableSeats(draft.tableId)||0;
+    const usedMax=Math.max(0, ...(draft.lines||[]).map(l=>+l.seat||0));
+    const shown=Math.max(cap, usedMax, draft.__seatMax||0, 4);   // always offer at least a few
+    const sc=document.createElement("div"); sc.className="card"; sc.style.cssText="padding:8px 10px;margin-bottom:10px";
+    const slbl=document.createElement("span"); slbl.className="muted"; slbl.style.marginRight="8px"; slbl.textContent="👤 Seat:"; sc.appendChild(slbl);
+    const sopts=document.createElement("div"); sopts.className="opts"; sopts.style.display="inline-flex"; sopts.style.flexWrap="wrap";
+    const whole=document.createElement("button"); if(!draft.seat) whole.className="sel"; whole.textContent="Whole table"; whole.onclick=()=>{ draft.seat=null; render(); }; sopts.appendChild(whole);
+    for(let n=1;n<=shown;n++){ const cnt=(draft.lines||[]).filter(l=>(+l.seat||0)===n).length; const b=document.createElement("button"); if(draft.seat===n) b.className="sel";
+      b.textContent="Seat "+n+(cnt?" ("+cnt+")":""); b.onclick=()=>{ draft.seat=n; render(); }; sopts.appendChild(b); }
+    const add=document.createElement("button"); add.textContent="+ seat"; add.title="Add another seat"; add.onclick=()=>{ draft.__seatMax=shown+1; draft.seat=shown+1; render(); }; sopts.appendChild(add);
+    sc.appendChild(sopts); app.appendChild(sc);
   }
   const cat=document.createElement("div"); cat.innerHTML="<h2>New order</h2>";
   // search / barcode-scan box — shown for big menus or when a scanner is configured (keyboard-wedge types code + Enter)
   const tiles=[];
   const addItem=item=>{ const it=priceItem(item); if(!it) return;
     return needsConfig(it) ? (pending={item:it, choices:{}, addons:[], flags:[], performer:null}, render()) : addLine(it, {}, [], [], null); };
+  // 🍔 Toast-style category tabs: a long menu (a real restaurant) is unusable as one flat wall of tiles, so we
+  // tab it by category. Generic to every vertical — categories come from the catalog in first-appearance order,
+  // labels from an optional FLOW.catLabels map (else the category title-cased). The dry cleaner's short menu
+  // stays a plain grid. Search + category filter combine through one applyFilter so they never fight.
+  let activeCat = draft.__cat || "__all";
+  const catLabel = c => (FLOW.catLabels && FLOW.catLabels[c]) || (c ? c.charAt(0).toUpperCase()+c.slice(1) : "Other");
+  const applyFilter=()=>{ const s=document.getElementById("catSearch"); const q=s?s.value.trim().toLowerCase():"";
+    tiles.forEach(({item,btn})=>{ const inCat=(activeCat==="__all")||((item.category||"other")===activeCat);
+      const hay=(item.name+" "+(item.category||"")+" "+(item.barcode||item.sku||"")).toLowerCase();
+      btn.style.display=(inCat && (!q||hay.includes(q)))?"":"none"; }); };
   if(FLOW.catalog.length>5 || FLOW.endpoints.scan){
     const search=document.createElement("input"); search.id="catSearch"; search.placeholder="Search or scan…"; search.autocomplete="off"; search.style.cssText="width:100%;margin-bottom:10px";
-    search.oninput=()=>{ const q=search.value.trim().toLowerCase(); tiles.forEach(({item,btn})=>{ const hay=(item.name+" "+(item.category||"")+" "+(item.barcode||item.sku||"")).toLowerCase(); btn.style.display=(!q||hay.includes(q))?"":"none"; }); };
+    search.oninput=applyFilter;
     search.onkeydown=e=>{ if(e.key!=="Enter") return; const q=search.value.trim().toLowerCase(); if(!q) return;
       const exact=tiles.find(({item})=>String(item.barcode||item.sku||"").toLowerCase()===q && !item.__out);
       const vis=tiles.find(({btn,item})=>btn.style.display!=="none" && !item.__out);
       const hit=exact||vis; if(hit){ addItem(hit.item); } else { flash("No match for “"+search.value.trim()+"”"); } };
     cat.appendChild(search);
   }
+  const catsInOrder=[]; FLOW.catalog.forEach(it=>{ const c=it.category||"other"; if(catsInOrder.indexOf(c)<0) catsInOrder.push(c); });
+  if(FLOW.catalog.length>8 && catsInOrder.length>1){
+    const tabs=document.createElement("div"); tabs.className="opts cattabs"; tabs.style.cssText="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px";
+    const mk=(key,label)=>{ const t=document.createElement("button"); t.textContent=label; if(activeCat===key) t.className="sel";
+      t.onclick=()=>{ activeCat=key; draft.__cat=key; tabs.querySelectorAll("button").forEach(x=>x.classList.remove("sel")); t.classList.add("sel"); applyFilter(); };
+      tabs.appendChild(t); };
+    mk("__all","All"); catsInOrder.forEach(c=>mk(c,catLabel(c)));
+    cat.appendChild(tabs);
+  }
   const grid=document.createElement("div"); grid.className="grid";
   FLOW.catalog.forEach(item=>{
-    const b=document.createElement("button"); b.className="tile"; const rem=remainingOf(item); const out=is86(item)||isOutOfStock(item);
+    const b=document.createElement("button"); b.className="tile"; const rem=remainingOf(item); const offHours=!itemAvailNow(item); const out=is86(item)||isOutOfStock(item)||offHours;
     item.__out=out;
     if(out) b.className="tile eightysix";
     const via=item.path.length?item.path.join(" → "):"no prep";
-    const priceLbl = item.customPrice ? "price at ring" : money(item.price)+(item.byWeight?" / "+(item.unit||"lb"):"");
+    const happy = item.happyPrice!=null && happyActive();
+    const priceLbl = item.customPrice ? "price at ring"
+      : (happy ? ("<s class='muted'>"+money(item.price)+"</s> "+money(item.happyPrice)+" <span class='pill'>⏰ happy hour</span>")
+               : money(item.price)+(item.byWeight?" / "+(item.unit||"lb"):""));
     let sub = station.view.money?priceLbl+" · "+via:via;
+    if(offHours) sub += " · <span class='pill x86'>"+(item.avail&&(item.avail.from||item.avail.to)?((item.avail.from||"")+"–"+(item.avail.to||"")):"off hours")+"</span>";
     if(item.par!=null) sub += is86(item) ? " · <span class='pill x86'>86</span>" : " · "+rem+" left";
     if(tracksStock(item)) sub += isOutOfStock(item) ? " · <span class='pill x86'>out of stock</span>" : " · "+stockOnHand(item)+" in stock"+(isLowStock(item)?" <span class='pill flag'>low</span>":"");
     b.innerHTML = item.name + "<small>"+sub+"</small>";
@@ -1916,13 +2119,14 @@ function renderIntake(app, station){
     grid.appendChild(b);
   });
   cat.appendChild(grid); app.appendChild(cat);
+  applyFilter();   // honor the active category tab (and any typed search) on first paint
 
   if(pending) app.appendChild(configPanel(station));
 
   const c=document.createElement("div"); c.className="card";
   if(!draft.lines.length){ c.innerHTML="<div class='empty'>Tap items to build the order.</div>"; }
   else { draft.lines.forEach((l,idx)=>{ const row=document.createElement("div"); row.className="line";
-      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+(l.performer?" <span class='pill'>"+l.performer+"</span>":"")+tagChip(l)+"</span><span class='pill route'>"+((l.path||[]).join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":"");
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+(l.performer?" <span class='pill'>"+l.performer+"</span>":"")+tagChip(l)+"</span><span class='pill route'>"+((l.path||[]).join(' → ')||'—')+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":"");
       if(station.view.money){   // quantity steppers + per-line price edit (haggling, custom items, ring 6 in one tap)
         const dec=document.createElement("button"); dec.textContent="−"; dec.title="one fewer"; dec.style.cssText="padding:2px 9px;margin-left:6px"; dec.onclick=()=>{ if(l.qty>1) l.qty--; else { logActivity("void", "removed "+l.name+" ("+money(l.price)+") from an unsent ticket", null, l.price); draft.lines.splice(idx,1); } render(); }; row.appendChild(dec);
         const inc=document.createElement("button"); inc.textContent="+"; inc.title="one more"; inc.style.cssText="padding:2px 9px;margin-left:4px"; inc.onclick=()=>{ l.qty++; render(); }; row.appendChild(inc);
@@ -1932,6 +2136,17 @@ function renderIntake(app, station){
       c.appendChild(row); });
     const tot=document.createElement("div"); tot.className="line"; tot.innerHTML="<b>Total</b><span class='spacer'></span><b>"+money(draft.lines.reduce((s,l)=>s+l.price*l.qty,0))+"</b>"; c.appendChild(tot); }
   app.appendChild(c);
+  // 💡 suggested add-ons (upsell): items referenced by draft items' `suggest`, not already on the ticket — one tap adds
+  if(draft.lines.length && station.view.money){
+    const want={}; draft.lines.forEach(l=>{ const it=FLOW.catalog.find(x=>x.id===l.catId); (it&&it.suggest||[]).forEach(id=>{ want[id]=1; }); });
+    const have={}; draft.lines.forEach(l=>{ have[l.catId]=1; });
+    const sugg=Object.keys(want).map(id=>FLOW.catalog.find(x=>x.id===id)).filter(it=>it && !have[it.id] && !is86(it) && !isOutOfStock(it) && itemAvailNow(it));
+    if(sugg.length){ const sc=document.createElement("div"); sc.className="card"; sc.style.cssText="padding:8px 10px";
+      const lbl=document.createElement("div"); lbl.className="lbl"; lbl.textContent="💡 Want to add…"; sc.appendChild(lbl);
+      const opts=document.createElement("div"); opts.className="opts"; opts.style.cssText="display:flex;flex-wrap:wrap;gap:6px";
+      sugg.forEach(it=>{ const b=document.createElement("button"); b.textContent="+ "+it.name+" "+money(itemPriceNow(it)); b.onclick=()=>addItem(it); opts.appendChild(b); });
+      sc.appendChild(opts); app.appendChild(sc); }
+  }
   // deposit control (deposit-balance payment point)
   const dep = FLOW.endpoints.payment.deposit;
   if(dep && station.view.money && draft.lines.length){
@@ -1971,10 +2186,18 @@ function renderIntake(app, station){
   }
 }
 
+// 🔀 conditional (nested) modifiers: a modifier option or an add-on can carry a `reveal` group that only appears
+// once it's chosen (e.g. "Add cheese" → "Which cheese?"). Groups expand across the list, so reveals can nest.
+function revealedGroups(item){
+  const out=[...(item.modifiers||[])];
+  (item.addons||[]).forEach(a=>{ if(a.reveal && pending.addons.some(x=>x.name===a.name) && out.indexOf(a.reveal)<0) out.push(a.reveal); });
+  for(let i=0;i<out.length;i++){ const chosen=pending.choices[out[i].group]; if(chosen && chosen.reveal && out.indexOf(chosen.reveal)<0) out.push(chosen.reveal); }
+  return out;
+}
 function configPanel(station){
   const item=pending.item; const c=document.createElement("div"); c.className="card"; c.style.borderColor="var(--brand)";
   c.innerHTML="<b>"+item.name+"</b>";
-  (item.modifiers||[]).forEach((g,gi)=>{
+  revealedGroups(item).forEach((g,gi)=>{
     const wrap=document.createElement("div"); wrap.className="mgroup";
     wrap.innerHTML="<div class='lbl'>"+g.group+(g.required?" (required)":"")+"</div>";
     const opts=document.createElement("div"); opts.className="opts";
@@ -2002,9 +2225,11 @@ function configPanel(station){
     (FLOW.performers||[]).forEach(name=>{ const b=document.createElement("button"); if(pending.performer===name) b.className="sel"; b.textContent=name; b.onclick=()=>{ pending.performer=name; render(); }; opts.appendChild(b); });
     wrap.appendChild(opts); c.appendChild(wrap);
   }
-  const reqMet=(item.modifiers||[]).every(g=>!g.required||pending.choices[g.group]) && (!item.performer || pending.performer);
+  const active=revealedGroups(item);
+  const reqMet=active.every(g=>!g.required||pending.choices[g.group]) && (!item.performer || pending.performer);
   const add=document.createElement("button"); add.className="primary"; add.textContent="Add to order"; add.disabled=!reqMet; add.style.marginRight="8px";
-  add.onclick=()=>{ addLine(item, pending.choices, pending.addons, pending.flags, pending.performer); pending=null; render(); };
+  add.onclick=()=>{ const choices={}; active.forEach(g=>{ if(pending.choices[g.group]) choices[g.group]=pending.choices[g.group]; });   // only choices for groups still shown (a deselected reveal drops its choice)
+    addLine(item, choices, pending.addons, pending.flags, pending.performer); pending=null; render(); };
   const cancel=document.createElement("button"); cancel.textContent="Cancel"; cancel.onclick=()=>{ pending=null; render(); };
   c.appendChild(add); c.appendChild(cancel);
   return c;
@@ -2024,6 +2249,7 @@ function addLine(item, choices, addons, flags, performer){
   const modLabel=mods.map(m=>m.name).filter(Boolean).join(", ");
   const cart = editingId ? ((DB.records||[]).find(r=>r.id===editingId)||draft) : draft;   // detailing edits the order; intake edits the draft
   cart.lines.push({ id:"L"+Math.round(performance.now())+Math.floor(Math.random()*1e4), catId:item.id, name:item.name, modLabel, flags:(flags||[]).slice(), performer:performer||null, price, qty:1, category:item.category, path:item.path.slice(), stage:0, course:item.course||1,
+    seat: (editingId ? null : (draft && draft.seat) || null),   // 👤 dine-in: which seat this line rings to (null = whole table)
     serialized: !!item.serialized, tag: item.serialized ? genUnitTag() : undefined, tagLabel: item.serialized ? (item.tagLabel||"Tag") : undefined });
   if(editingId) saveDB(DB);
   render();
@@ -2048,11 +2274,15 @@ function priceItem(item){
     if(isNaN(n)||n<0){ flash("Enter a price"); return null; }
     return {...item, price:+n.toFixed(2)};
   }
+  // ⏰ happy-hour: ring the happy price when the window is live (a fixed-price item)
+  const now=itemPriceNow(item); if(now!==item.price) return {...item, price:now};
   return item;
 }
 function sendDraft(){
   DB=loadDB(); DB.seq++;
   const rec={ id:"R"+DB.seq, number:DB.seq, lines:draft.lines.map(l=>({...l, stage:0})), tenders:[], createdAt:new Date().toISOString().slice(11,16), ts:Date.now() };
+  if(draft.orderType) rec.orderType=draft.orderType;   // 🚗 dine-in / to-go / drive-thru
+  if(draft.channel) rec.channel=draft.channel;         // 🌐 in-house vs an online/delivery order handed in by the hub
   if(storesOn()) rec.storeId = storeForOrder(draft.customer);   // order belongs to a store (customer's, else this device's, else plant)
   if(draft.tableId){ rec.tableId = draft.tableId;   // ring the check to its table; nudge an empty table to "occupied"
     DB.tables=DB.tables||{}; const cur=DB.tables[draft.tableId]; if(!cur || cur.state==="empty" || !cur.state){ DB.tables[draft.tableId]={ state:"ordered", since:Date.now(), seatedTs:(cur&&cur.seatedTs)||Date.now() }; } }
@@ -2116,13 +2346,13 @@ function renderPipeline(app, station){
   const recs=DB.records.filter(r=> r.status==="INPROGRESS" && linesAtStation(r, station.id).length);
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nothing waiting."; app.appendChild(e); }
   recs.forEach(r=>{ const mine=linesAtStation(r, station.id); const c=document.createElement("div"); c.className="card";
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+orderTypeChip(r)+channelChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
     let hasFlags=false, reconOk=true;
     mine.forEach(l=>{ const row=document.createElement("div"); row.className="line"; const next=l.path[l.stage+1];
       const flagHtml=(l.flags||[]).map(f=>{ hasFlags=true; return " <span class='pill flag'>⚠ "+f+"</span>"; }).join("");
       const perfHtml=l.performer?" <span class='pill'>"+l.performer+"</span>":"";
       if(station.reconcile){ const ck=reconChecked(r,station,l); if(!ck) reconOk=false; const cb=document.createElement("button"); cb.textContent=ck?"✓":"○"; cb.title="Count this piece out"; cb.style.cssText="padding:2px 9px;margin-right:4px"; if(ck) cb.className="sel"; cb.onclick=()=>reconToggle(r,station,l); row.appendChild(cb); }
-      row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+perfHtml+flagHtml+tagChip(l)+bagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"); c.appendChild(row); });
+      row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+perfHtml+flagHtml+tagChip(l)+bagChip(l)+"</span><span class='spacer'></span><span class='muted'>"+(next?"→ "+next:"→ ready")+"</span>"); c.appendChild(row); });
     if(station.bag){ const bagged=mine.some(l=>l.bag); const bw=document.createElement("div"); bw.className="mgroup"; bw.innerHTML="<div class='lbl'>Assembly bags</div>";
       const bb=document.createElement("button"); bb.textContent=bagged?("🧺 Re-bag ("+((r.bagsAt&&r.bagsAt[station.id])||0)+" bag(s))"):("🧺 Bag these "+pieceCount(mine)+" piece(s)"); bb.onclick=()=>bagOrder(r,station); bw.appendChild(bb); c.appendChild(bw); }
     if(printOn()){ const pw=document.createElement("div"); pw.className="mgroup"; pw.innerHTML="<div class='lbl'>Print</div>";
@@ -2172,7 +2402,7 @@ function renderDetail(app, station){
   const c=document.createElement("div"); c.className="card";
   if(!rec.lines.length){ c.innerHTML="<div class='empty'>No pieces yet — tap items above.</div>"; }
   else rec.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
-    row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+tagChip(l)+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":""));
+    row.insertAdjacentHTML("beforeend","<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+tagChip(l)+"</span><span class='spacer'></span>"+(station.view.money?"<span>"+money(l.price*l.qty)+"</span>":""));
     if(l.serialized){ const tb=document.createElement("button"); tb.textContent="🏷 "+(l.tag||"tag"); tb.title="Scan / set the "+(l.tagLabel||"tag"); tb.style.cssText="padding:2px 8px;margin-left:6px"; tb.onclick=()=>{ const v=prompt("Scan or type the "+(l.tagLabel||"tag")+" for this "+l.name+":", l.tag||""); if(v!=null&&v.trim()){ l.tag=v.trim(); saveDB(DB); render(); } }; row.appendChild(tb); }
     const rm=document.createElement("button"); rm.textContent="✕"; rm.title="Remove"; rm.style.cssText="padding:2px 8px;margin-left:6px"; rm.onclick=()=>{ rec.lines=rec.lines.filter(x=>x.id!==l.id); saveDB(DB); render(); }; row.appendChild(rm);
     c.appendChild(row); });
@@ -2203,11 +2433,12 @@ function printDoc(kind, text, meta){
   return job;
 }
 function dueDateText(r){ const t=FLOW.timer; if(!t||t.mode!=="due"||!r.ts) return ""; return new Date(r.ts + t.promiseSec*1000).toISOString().slice(0,16).replace("T"," "); }
-function docLineText(l){ return "  "+(l.qty||1)+"x "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.serialized&&l.tag?"  ["+(l.tagLabel||"Tag")+" "+l.tag+"]":"")+(l.bag?"  bag "+l.bag:""); }
+function docLineText(l){ return "  "+(l.qty||1)+"x "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.seat?"  [Seat "+l.seat+"]":"")+(l.serialized&&l.tag?"  ["+(l.tagLabel||"Tag")+" "+l.tag+"]":"")+(l.bag?"  bag "+l.bag:""); }
 function docTicket(r){
   const L=[]; L.push(((FLOW.branding&&FLOW.branding.name)||"Order").toUpperCase());
   if(storesOn()&&r.storeId){ L.push(storeName(r.storeId)); const aa=assembledAt(r); if(aa) L.push(aa); }
   L.push("Order #"+r.number+"   "+(r.createdAt||"")); if(r.customer) L.push((r.customer.name||"")+"   "+(r.customer.phone||""));
+  if(r.orderType||r.tableId||(r.channel&&r.channel!=="in-house")) L.push([r.orderType, r.tableId?("Table "+tableLabel(r.tableId)):"", (r.channel&&r.channel!=="in-house")?r.channel:""].filter(Boolean).join("   "));
   L.push("------------------------------"); (r.lines||[]).forEach(l=>L.push(docLineText(l)));
   L.push("------------------------------"); const dd=dueDateText(r); if(dd) L.push("Promised: "+dd);
   return L.join("\n");
@@ -2226,7 +2457,13 @@ function docBagLabel(r, bagNo, count){
 function receiptPanel(r){
   const sub=lineSubtotal(r), disc=recordDiscount(r), tax=recordTax(r), tip=r.tip||0, tot=recordTotal(r);
   const line=(l,v,b)=>"<div class='line'>"+(b?"<b>":"<span class='muted'>")+l+(b?"</b>":"</span>")+"<span class='spacer'></span>"+(b?"<b>":"<span>")+v+(b?"</b>":"</span>")+"</div>";
-  const rows=r.lines.map(l=>"<div class='line'><span>"+l.qty+"× "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.serialized&&l.tag?" <small class='muted'>["+(l.tagLabel||"Tag")+" "+l.tag+"]</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span></div>").join("");
+  const lineRow=l=>"<div class='line'><span>"+l.qty+"× "+l.name+(l.modLabel?" ("+l.modLabel+")":"")+(l.serialized&&l.tag?" <small class='muted'>["+(l.tagLabel||"Tag")+" "+l.tag+"]</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span></div>";
+  // 👤 per-seat receipt: when the order was rung by seat, group the itemized lines under each seat with its subtotal
+  let rows;
+  if(orderHasSeats(r)){
+    rows=seatBuckets(r).map(bkt=>{ const its=r.lines.filter(l=>((l.seat?("s"+l.seat):"shared"))===bkt.key);
+      return "<div class='line'><b>"+bkt.label+"</b><span class='spacer'></span><b>"+money(bkt.sub)+"</b></div>"+its.map(lineRow).join(""); }).join("");
+  } else { rows=r.lines.map(lineRow).join(""); }
   const hr="<hr style='border:none;border-top:1px dashed var(--line)'>";
   const totals=(disc||tax?line("Subtotal",money(sub)):"")+(disc?line("Discount","−"+money(disc)):"")+(tax?line(taxIncluded()?"Tax (incl.)":"Tax",money(tax)):"")+(tip?line("Tip",money(tip)):"")+line("Total",money(tot),true);
   const tenders=(r.tenders||[]).map(t=>line(t.type==="card"?cardLabel(t):t.type[0].toUpperCase()+t.type.slice(1), money(t.amount))).join("");
@@ -2241,8 +2478,14 @@ function renderCheckout(app, station){
   const recs=DB.records.filter(r=> r.status==="READY"||r.status==="PAID");
   if(!recs.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No orders ready to check out."; app.appendChild(e); }
   recs.forEach(r=>{ const c=document.createElement("div"); c.className="card"; const bal=recordBalance(r);
-    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
-    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+"</span><span class='spacer'></span><span>"+money(l.price*l.qty)+"</span>"; c.appendChild(row); });
+    c.innerHTML="<div class='row'><b>#"+r.number+"</b> <span class='pill'>"+r.status+"</span>"+clockChip(r)+storeChip(r)+tableChip(r)+orderTypeChip(r)+channelChip(r)+"<span class='spacer'></span><span class='muted'>"+r.createdAt+"</span></div>";
+    r.lines.forEach(l=>{ const row=document.createElement("div"); row.className="line";
+      const priceHtml=l.comped ? ("<s class='muted'>"+money((l.comped.wasPrice||0)*l.qty)+"</s> "+money(0)) : money(l.price*l.qty);
+      row.innerHTML="<span>"+l.qty+"× "+l.name+(l.modLabel?" <small class='mods'>"+l.modLabel+"</small>":"")+seatChip(l)+compChip(l)+"</span><span class='spacer'></span><span>"+priceHtml+"</span>";
+      if(r.status==="READY" && station.view.money && !l.returned){ const cbtn=document.createElement("button"); cbtn.textContent=l.comped?"un-comp":"comp"; cbtn.title=l.comped?"Undo the comp":"Comp this item (on the house)"; cbtn.style.cssText="padding:2px 8px;margin-left:6px"; cbtn.onclick=()=>compLine(r,l); row.appendChild(cbtn);
+        if(r.tableId || orderHasSeats(r)){ const sbtn=document.createElement("button"); sbtn.textContent="seat"; sbtn.title="Move this item to another seat"; sbtn.style.cssText="padding:2px 8px;margin-left:4px";
+          sbtn.onclick=()=>{ const v=prompt("Move "+l.name+" to which seat? (number, or blank for whole table)", l.seat||""); if(v===null) return; const n=parseInt(v,10); l.seat=(v.trim()===""?null:(n>0?n:l.seat)); saveDB(DB); logActivity("access","moved "+l.name+" → "+(l.seat?("seat "+l.seat):"whole table")+" on #"+r.number, r.number); render(); }; row.appendChild(sbtn); } }
+      c.appendChild(row); });
     // tax area (destination sales tax): for delivery, tax at the delivery address's rate, not the shop's.
     // Shown only when tax zones are configured; "Shop" = the base (origin) rate.
     if(FLOW.endpoints.tax && Array.isArray(FLOW.endpoints.tax.zones) && FLOW.endpoints.tax.zones.length && r.status==="READY"){
@@ -2319,40 +2562,63 @@ function renderCheckout(app, station){
       const ageReq=orderAgeReq(r);
       if(ageReq && !r.ageVerified){
         const gate=document.createElement("div"); gate.className="mgroup"; gate.style.cssText="border:1px solid var(--bad);border-radius:8px;padding:10px;margin-top:10px";
-        gate.innerHTML="<div style='color:var(--bad);font-weight:700'>⚠ Age-restricted order</div><div class='muted'>This order has items that require the customer to be "+ageReq+"+. Check a photo ID before selling.</div>";
-        const ok=document.createElement("button"); ok.className="primary"; ok.style.marginTop="8px"; ok.textContent="✓ ID checked — customer is "+ageReq+"+";
-        ok.onclick=()=>{ const st=boundStation(); const at=new Date().toISOString().slice(11,16);
-          r.ageVerified={ req:ageReq, at, day:todayStr(), station:(st&&st.label)||"" };   // defensible record: what was required, when, at which station
-          DB.ageLog=DB.ageLog||[]; DB.ageLog.push({ number:r.number, req:ageReq, at, day:todayStr(), station:(st&&st.label)||"" });
-          logActivity("idcheck", "ID checked — customer verified "+ageReq+"+", r.number);
+        gate.innerHTML="<div style='color:var(--bad);font-weight:700'>⚠ Age-restricted order</div><div class='muted'>This order has items that require the customer to be "+ageReq+"+. Check a photo ID and type the date of birth from it.</div>";
+        const row=document.createElement("div"); row.className="opts"; row.style.marginTop="8px";
+        const dob=document.createElement("input"); dob.id="dobInput"; dob.placeholder="Birthdate MM/DD/YYYY"; dob.autocomplete="off"; dob.style.minWidth="180px";
+        const ok=document.createElement("button"); ok.className="primary"; ok.textContent="Verify age";
+        // type the birthdate, we compute the age and REFUSE if it's under the requirement — no override tap
+        const verify=()=>{ const raw=(document.getElementById("dobInput")||{}).value; const age=ageFromDOB(raw);
+          const st=boundStation(); const at=new Date().toISOString().slice(11,16);
+          if(age==null){ flash("Type the date of birth as MM/DD/YYYY"); return; }
+          DB.ageLog=DB.ageLog||[];
+          if(age<ageReq){   // under age → sale refused, logged, tenders stay blocked
+            DB.ageLog.push({ number:r.number, req:ageReq, age, at, day:todayStr(), station:(st&&st.label)||"", result:"refused" });
+            logActivity("idcheck", "SALE REFUSED — birthdate entered, age "+age+" is under "+ageReq, r.number);
+            saveDB(DB); flash("Under "+ageReq+" — cannot sell the age-restricted items"); render(); return; }
+          r.ageVerified={ req:ageReq, age, at, day:todayStr(), station:(st&&st.label)||"", method:"dob" };   // defensible record: requirement met, computed age, when, where (NOT the raw DOB)
+          DB.ageLog.push({ number:r.number, req:ageReq, age, at, day:todayStr(), station:(st&&st.label)||"", result:"verified" });
+          logActivity("idcheck", "ID checked — birthdate entered, age "+age+" ("+ageReq+"+ required)", r.number);
           saveDB(DB); render(); };
-        gate.appendChild(ok);
-        c.appendChild(gate); app.appendChild(c); return;   // no tenders until verified
+        ok.onclick=verify; dob.onkeydown=e=>{ if(e.key==="Enter") verify(); };
+        row.appendChild(dob); row.appendChild(ok); gate.appendChild(row);
+        c.appendChild(gate); app.appendChild(c); return;   // no tenders until a valid, of-age birthdate is entered
       }
-      // split the check evenly N ways (opt-in) — each tap takes one equal share until the balance clears
+      // split the check — evenly N ways, or BY SEAT (each guest pays their own) when the order was rung by seat
       if(FLOW.endpoints.payment.split){
-        const wrap=document.createElement("div"); wrap.className="mgroup"; wrap.innerHTML="<div class='lbl'>Split evenly</div>";
+        const wrap=document.createElement("div"); wrap.className="mgroup"; wrap.innerHTML="<div class='lbl'>Split the check</div>";
         const opts=document.createElement("div"); opts.className="opts";
-        [2,3,4].forEach(n=>{ const bb=document.createElement("button"); if(r.splitWays===n) bb.className="sel"; bb.textContent=n+" ways"; bb.onclick=()=>{ r.splitWays=n; r.splitShare=+(recordTotal(r)/n).toFixed(2); saveDB(DB); render(); }; opts.appendChild(bb); });
-        const no=document.createElement("button"); if(!r.splitWays) no.className="sel"; no.textContent="No split"; no.onclick=()=>{ delete r.splitWays; delete r.splitShare; saveDB(DB); render(); }; opts.appendChild(no);
+        if(orderHasSeats(r)){ const sb=document.createElement("button"); if(r.splitMode==="seat") sb.className="sel"; sb.textContent="👤 By seat";
+          sb.onclick=()=>{ r.splitMode="seat"; delete r.splitWays; delete r.splitShare; const first=seatBuckets(r).find(x=>seatDue(r,x)>0.0001); r.paySeat=first?first.key:null; saveDB(DB); render(); }; opts.appendChild(sb); }
+        [2,3,4].forEach(n=>{ const bb=document.createElement("button"); if(r.splitMode!=="seat"&&r.splitWays===n) bb.className="sel"; bb.textContent=n+" ways"; bb.onclick=()=>{ r.splitMode="even"; r.splitWays=n; r.splitShare=+(recordTotal(r)/n).toFixed(2); delete r.paySeat; saveDB(DB); render(); }; opts.appendChild(bb); });
+        const no=document.createElement("button"); if(!r.splitWays&&r.splitMode!=="seat") no.className="sel"; no.textContent="No split"; no.onclick=()=>{ delete r.splitWays; delete r.splitShare; delete r.splitMode; delete r.paySeat; saveDB(DB); render(); }; opts.appendChild(no);
         wrap.appendChild(opts); c.appendChild(wrap);
-        if(r.splitWays){ const paidShares=Math.round((recordTotal(r)-bal)/r.splitShare); const info=document.createElement("div"); info.className="muted"; info.style.margin="4px 0"; info.textContent=r.splitWays+" shares · "+money(r.splitShare)+" each · "+paidShares+" of "+r.splitWays+" paid"; c.appendChild(info); }
+        if(r.splitMode==="seat"){   // one row per seat: its amount, paid ✓ or a "pay this seat" selector
+          seatBuckets(r).forEach(bkt=>{ const due=seatDue(r,bkt), amt=seatAmount(r,bkt), done=due<=0.0001;
+            const row=document.createElement("div"); row.className="line";
+            row.innerHTML="<span>"+(done?"✓ ":"")+bkt.label+" — "+money(amt)+(done?"":" <span class='muted'>· "+money(due)+" due</span>")+"</span><span class='spacer'></span>";
+            if(!done){ const pick=document.createElement("button"); if(r.paySeat===bkt.key) pick.className="sel"; pick.textContent=r.paySeat===bkt.key?"paying":"pay this"; pick.onclick=()=>{ r.paySeat=bkt.key; saveDB(DB); render(); }; row.appendChild(pick); }
+            else { const t=document.createElement("span"); t.className="pill clock good"; t.textContent="paid"; row.appendChild(t); }
+            c.appendChild(row); });
+        } else if(r.splitWays){ const paidShares=Math.round((recordTotal(r)-bal)/r.splitShare); const info=document.createElement("div"); info.className="muted"; info.style.margin="4px 0"; info.textContent=r.splitWays+" shares · "+money(r.splitShare)+" each · "+paidShares+" of "+r.splitWays+" paid"; c.appendChild(info); }
       }
-      const payAmt = r.splitWays ? Math.min(r.splitShare, bal) : bal;
-      const label = r.splitWays ? "Take share " : (paid>0?"Take balance ":"Take payment ");
-      const b=document.createElement("button"); b.className="primary"; b.textContent=label+money(payAmt)+" cash"; b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:payAmt}); logActivity("money", "cash "+money(payAmt), r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; c.appendChild(b);
+      const paySeatBkt = (r.splitMode==="seat"&&r.paySeat) ? seatBuckets(r).find(x=>x.key===r.paySeat) : null;
+      const payAmt = paySeatBkt ? Math.min(seatDue(r,paySeatBkt), bal) : (r.splitWays ? Math.min(r.splitShare, bal) : bal);
+      const label = paySeatBkt ? (paySeatBkt.label+" ") : (r.splitWays ? "Take share " : (paid>0?"Take balance ":"Take payment "));
+      const seatTag = () => (r.splitMode==="seat" && r.paySeat) ? r.paySeat : undefined;   // tag a tender to its seat
+      const advanceSeat = () => { if(r.splitMode==="seat"){ const nx=seatBuckets(r).find(x=>seatDue(r,x)>0.0001); r.paySeat=nx?nx.key:null; } };
+      const b=document.createElement("button"); b.className="primary"; b.textContent=label+money(payAmt)+" cash"; b.style.marginTop="10px"; b.onclick=()=>{ r.tenders.push({type:"cash",amount:payAmt,seatKey:seatTag()}); logActivity("money", "cash "+money(payAmt), r.number); advanceSeat(); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; c.appendChild(b);
       // make change: enter what the customer handed over and see the change due (the cash-drawer moment)
       const mc=document.createElement("button"); mc.textContent="＄ Make change"; mc.style.margin="10px 0 0 8px"; mc.onclick=()=>{ cashPad={ recId:r.id, received:payAmt }; render(); }; c.appendChild(mc);
       if((FLOW.endpoints.payment.tenders||[]).includes("card")){
         const cb=document.createElement("button"); cb.textContent=(r.splitWays?"Share by card ":"Pay by card ")+money(payAmt); cb.style.margin="10px 0 0 8px";
         const idemKey=r.id+":card:"+Math.round(payAmt*100)+":"+cardTenders(r).length;   // stable across a double-tap of THIS button
-        cb.onclick=()=>{ const res=chargeCardOnce(r, payAmt, idemKey); if(res.status==="approved"){ if(!res.dedup){ const t=res.tender; logActivity("money", "card "+money(payAmt)+(t&&t.brand?" ("+t.brand+" ••"+t.last4+")":""), r.number); } if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { logActivity("money", "card declined "+money(payAmt), r.number); flash("Card "+(res.message||"declined")); } };
+        cb.onclick=()=>{ const res=chargeCardOnce(r, payAmt, idemKey); if(res.status==="approved"){ if(!res.dedup){ const t=res.tender; if(t) t.seatKey=seatTag(); logActivity("money", "card "+money(payAmt)+(t&&t.brand?" ("+t.brand+" ••"+t.last4+")":""), r.number); advanceSeat(); } if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); } else { logActivity("money", "card declined "+money(payAmt), r.number); flash("Card "+(res.message||"declined")); } };
         c.appendChild(cb);
       }
       // house account: put it on the customer's tab (A/R) — settles the order now, they pay it later
       if((FLOW.endpoints.payment.tenders||[]).includes("account") && r.customer && r.customer.phone){
         const ab=document.createElement("button"); ab.textContent="Charge to account "+money(payAmt); ab.style.margin="10px 0 0 8px";
-        ab.onclick=()=>{ r.tenders.push({type:"account",amount:payAmt}); const cust=DB.customers.find(x=>x.phone===r.customer.phone); if(cust){ cust.balance=+((cust.balance||0)+payAmt).toFixed(2); } logActivity("money", "charged to account "+money(payAmt)+(r.customer?" · "+r.customer.name:""), r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); }; c.appendChild(ab);
+        ab.onclick=()=>{ r.tenders.push({type:"account",amount:payAmt,seatKey:seatTag()}); const cust=DB.customers.find(x=>x.phone===r.customer.phone); if(cust){ cust.balance=+((cust.balance||0)+payAmt).toFixed(2); } logActivity("money", "charged to account "+money(payAmt)+(r.customer?" · "+r.customer.name:""), r.number); advanceSeat(); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } saveDB(DB); render(); }; c.appendChild(ab);
       }
       // cash change-making: enter amount tendered, see change due, then take the cash
       if(cashPad && cashPad.recId===r.id){
@@ -2365,7 +2631,7 @@ function renderCheckout(app, station){
         pad.appendChild(row);
         const cd=document.createElement("div"); cd.id="changeDue"; cd.style.cssText="font-size:18px;font-weight:700;margin:8px 0"; cd.textContent="Change due "+money(Math.max(0,(cashPad.received||0)-payAmt)); pad.appendChild(cd);
         const conf=document.createElement("button"); conf.id="cashConfirm"; conf.className="primary"; conf.textContent="✓ Take "+money(payAmt); conf.disabled=(cashPad.received||0)<payAmt-0.0001;
-        conf.onclick=()=>{ const recv=+(cashPad.received||payAmt).toFixed(2); const chg=+(recv-payAmt).toFixed(2); r.tenders.push({ type:"cash", amount:payAmt, tendered:recv, change:chg }); logActivity("money", "cash "+money(payAmt)+" (tendered "+money(recv)+", change "+money(chg)+")", r.number); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; pad.appendChild(conf);
+        conf.onclick=()=>{ const recv=+(cashPad.received||payAmt).toFixed(2); const chg=+(recv-payAmt).toFixed(2); r.tenders.push({ type:"cash", amount:payAmt, tendered:recv, change:chg, seatKey:seatTag() }); logActivity("money", "cash "+money(payAmt)+" (tendered "+money(recv)+", change "+money(chg)+")", r.number); advanceSeat(); if(recordBalance(r)<=0.0001){ r.status="PAID"; onPaid(r); } cashPad=null; saveDB(DB); render(); }; pad.appendChild(conf);
         const cx=document.createElement("button"); cx.textContent="Cancel"; cx.style.marginLeft="8px"; cx.onclick=()=>{ cashPad=null; render(); }; pad.appendChild(cx);
         c.appendChild(pad);
       }

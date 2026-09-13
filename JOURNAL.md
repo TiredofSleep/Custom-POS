@@ -1115,4 +1115,30 @@ order, every primitive, zero console errors. A whole plant, standing up from a c
 The point was never the cleaner. The point was that the cleaner was never special — and now there's a test that
 proves it.
 
+---
+
+## Day 2 — 2026-09-12 · The first real restaurant menu
+
+The restaurant engine already existed — stations, fan-out, a KDS, modifiers, 86 counts, tips, split checks. What
+it didn't have yet was a *real restaurant's whole menu* proving it. Stage 2 is **Hamburger Barn** in Arkadelphia
+(the same town as Ozark), and the point of a stage is that a real business in the vertical depends on the
+software. So the `burgerbarn` builder template got built out from the shop's actual public menu: **58 items**
+across 13 categories — the burgers (Bubba, Bacon Hickory, Chili, Mushroom Onion, Bacon Chipotle), the chicken
+sandwiches, the Tex-Mex line, the salads and soups, the fried apps, shakes, desserts, kids — each routed to the
+station that actually makes it (grill · fry · shake bar · a new **Salad & Prep** line), with the Toast-style
+**"make it a combo — fries & drink"** upsell on every main. *(Prices in the template are sensible estimates;
+the shop confirms its own in the builder — nobody knows a menu's prices like the people ringing it.)*
+
+Fifty-eight items is where a real lesson landed: a single flat wall of tiles is how you *lose* the rush. Toast
+tabs its menu by category, so the engine now does too — a generic **category-tab bar** on the ordering screen,
+driven straight off each item's `category` (labels from an optional `catLabels` map, else the category
+title-cased), showing only when a menu is big enough to need it. The dry cleaner's short list stays a plain
+grid; a fifty-item burger menu becomes Burgers / Chicken / Tex-Mex / Salads / Shakes / … at a tap. Search and
+the category filter share one path so they never fight. It's a restaurant-shaped need that turned into an
+engine primitive every vertical gets — the recurring shape of this whole project.
+
+`tests/burgerbarn.js` now pins all of it: the full 58-item, 13-category build; the routing (burger→grill,
+rings→fry, shake→shakes, salad→prep, chimi→fry, fajita→grill); the combo upsell and category labels; and the
+live preview actually rendering the category tabs and fanning one order out to the grill and the fry station.
+
 *— to be continued —*

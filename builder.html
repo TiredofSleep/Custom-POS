@@ -340,54 +340,111 @@ const TEMPLATES = {
     welcome:{ message:"Make someone's day today ✂️", specials:["Ask about the color special"] },
     catalog:[ {id:"s1",name:"Haircut",price:35,category:"service",path:["chair"],performer:true}, {id:"s2",name:"Color",price:85,category:"service",path:["chair"],performer:true}, {id:"s3",name:"Product",price:22,category:"retail",path:[]} ],
     stations:[ {id:"desk",type:"central",label:"Front Desk",view:{money:true}}, {id:"chair",type:"production",label:"Chair",view:{money:false}}, {id:"book",type:"booking",label:"Appointments",view:{}}, {id:"clock",type:"timeclock",label:"Time Clock",view:{}}, {id:"sched",type:"schedule",label:"Schedule",view:{}}, {id:"office",type:"report",label:"Back Office",view:{money:true}} ] },
-  // A REAL restaurant template — the Hamburger Barn menu (Arkadelphia, AR). Public menu; prices are
-  // sensible estimates the owner edits. One order fans out to the grill, the fry station, and the shake bar.
-  burgerbarn: { flowId:"burgerbarn", label:"Hamburger Barn (burger joint)", topology:"hub-and-spoke", blurb:"A real burger-joint menu — grill · fry · shakes",
+  // A REAL restaurant template — the full Hamburger Barn menu (Arkadelphia, AR), laid out Toast-style: the Front
+  // Counter menu tabs by category, and one order fans out to the grill, fry, shake bar, and salad/prep line.
+  // The public menu (hamburgerbarn.com) gives the items and sections; ⚠️ PRICES ARE SENSIBLE ESTIMATES the owner
+  // confirms in the builder — the shop knows its own prices. "Make it a combo" is the Toast-style fries+drink upsell.
+  burgerbarn: { flowId:"burgerbarn", label:"Hamburger Barn (burger joint)", topology:"hub-and-spoke", blurb:"The real Hamburger Barn menu — grill · fry · shakes · salad line",
     branding:{ name:"Hamburger Barn", brandColor:"#a3312a" },
-    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}, split:true} },
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[15,18,20]}, split:true}, orderTypes:["Dine-in","To-go","Drive-thru"] },
     timer:{ mode:"aging", warnSec:360, badSec:720, label:"ticket" }, capacity:{ perOrderMins:6, max:15 }, kds:{warnSec:360,badSec:720},
+    // Toast-style category tabs on the ordering screen (order = first appearance below)
+    catLabels:{ burger:"Burgers", chicken:"Chicken", sandwich:"Sandwiches", plate:"Plates", texmex:"Tex-Mex", app:"Appetizers", salad:"Salads", soup:"Soups & Potatoes", side:"Sides", shake:"Shakes", dessert:"Desserts", kids:"Kids", drink:"Drinks" },
     catalog:[
-      // ---- BURGERS → grill ----
-      {id:"bubba",name:"Bubba Burger",price:13,category:"burger",path:["grill"],
+      // ---- BURGERS → grill (all can "make it a combo") ----
+      {id:"bubba",name:"Bubba Burger",price:13,category:"burger",path:["grill"],suggest:["fries","shake","drink"],
         modifiers:[{group:"Patty",required:true,options:[{name:"Single",price:0},{name:"Double",price:3}]}],
-        addons:[{name:"Bacon",price:1.5},{name:"Extra cheese",price:1},{name:"Jalapeños",price:0.5},{name:"Grilled onions",price:0.5}],
+        addons:[{name:"Bacon",price:1.5},{name:"Extra cheese",price:1,reveal:{group:"Which cheese",required:true,options:[{name:"American",price:0},{name:"Swiss",price:0},{name:"Cheddar",price:0},{name:"Pepper Jack",price:0}]}},{name:"Jalapeños",price:0.5},{name:"Grilled onions",price:0.5},{name:"Make it a combo — fries & drink",price:3.5}],
         flags:["Allergy note"]},
-      {id:"mushswiss",name:"Mushroom Swiss Burger",price:12.5,category:"burger",path:["grill"],addons:[{name:"Bacon",price:1.5}]},
-      {id:"gouda",name:"Gouda Burger",price:12.5,category:"burger",path:["grill"]},
-      {id:"chipotle",name:"Chipotle Burger",price:12.5,category:"burger",path:["grill"]},
+      {id:"bachick",name:"Bacon Hickory Burger",price:12.5,category:"burger",path:["grill"],addons:[{name:"Extra bacon",price:1.5},{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"chiliburg",name:"Chili Burger",price:11.5,category:"burger",path:["grill"],addons:[{name:"Extra cheese",price:1},{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"mushonion",name:"Mushroom Onion Burger",price:12,category:"burger",path:["grill"],addons:[{name:"Bacon",price:1.5},{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"bacchip",name:"Bacon Chipotle Burger",price:12.5,category:"burger",path:["grill"],addons:[{name:"Extra cheese",price:1},{name:"Make it a combo — fries & drink",price:3.5}]},
       {id:"cheeseburger",name:"Cheeseburger",price:9,category:"burger",path:["grill"],
-        modifiers:[{group:"Cheese",required:true,options:[{name:"American",price:0},{name:"Swiss",price:0},{name:"Cheddar",price:0},{name:"Pepper Jack",price:0}]}]},
+        modifiers:[{group:"Cheese",required:true,options:[{name:"American",price:0},{name:"Swiss",price:0},{name:"Cheddar",price:0},{name:"Pepper Jack",price:0}]}],
+        addons:[{name:"Bacon",price:1.5},{name:"Make it a combo — fries & drink",price:3.5}]},
+      // ---- CHICKEN SANDWICHES → grill (fried ones to fry); grilled/fried where it applies ----
+      {id:"grillchick",name:"Grilled Chicken",price:10,category:"chicken",path:["grill"],addons:[{name:"Bacon",price:1.5},{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"cajunchick",name:"Cajun Chicken",price:10.5,category:"chicken",path:["grill"],addons:[{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"honeymust",name:"Honey Mustard Chicken",price:10.5,category:"chicken",path:["grill"],addons:[{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"chipjack",name:"Chipotle Jack Chicken",price:11,category:"chicken",path:["grill"],addons:[{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"petitjean",name:"Petit Jean Mountain Chicken",price:11.5,category:"chicken",path:["grill"],addons:[{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"cfc",name:"Chicken Fried Chicken",price:11,category:"chicken",path:["fry"],addons:[{name:"Make it a combo — fries & drink",price:3.5}]},
+      // ---- OTHER SANDWICHES ----
+      {id:"dagwood",name:"Dagwood",price:11,category:"sandwich",path:["prep"],addons:[{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"hamcheese",name:"Ham & Cheese",price:9,category:"sandwich",path:["prep"],addons:[{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"angus",name:"Angus Steak Sandwich",price:13,category:"sandwich",path:["grill"],addons:[{name:"Grilled onions",price:0.5},{name:"Make it a combo — fries & drink",price:3.5}]},
+      {id:"turkey",name:"Turkey Bistro",price:10,category:"sandwich",path:["prep"],addons:[{name:"Make it a combo — fries & drink",price:3.5}]},
+      // ---- PLATES ----
       {id:"cfs",name:"Chicken Fried Steak",price:13,category:"plate",path:["grill"]},
-      {id:"grillchick",name:"Grilled Chicken Sandwich",price:10,category:"sandwich",path:["grill"]},
-      // ---- FRIED APPS & PLATES → fry ----
+      {id:"catfish",name:"3-pc Catfish Plate",price:13,category:"plate",path:["fry"]},
+      {id:"special",name:"Blue Plate Special",price:10,category:"plate",path:["grill"],par:10},   // daily special, 86 count
+      // ---- TEX-MEX ----
+      {id:"fajitas",name:"Flaming Fajitas",price:15,category:"texmex",path:["grill"],
+        modifiers:[{group:"Protein",required:true,options:[{name:"Chicken",price:0},{name:"Steak",price:2},{name:"Combo",price:2}]}]},
+      {id:"quesadilla",name:"Mesquite Chicken Quesadilla",price:11,category:"texmex",path:["grill"]},
+      {id:"tenders",name:"Chicken Tenders",price:10,category:"texmex",path:["fry"]},
+      {id:"chimi",name:"Chicken Chimichanga",price:11,category:"texmex",path:["fry"]},
+      {id:"tamales",name:"Hot Tamales",price:8,category:"texmex",path:["grill"]},
+      {id:"enchilada",name:"Chicken Enchilada",price:10,category:"texmex",path:["grill"]},
+      {id:"nachos",name:"Macho Nachos",price:10,category:"texmex",path:["prep"]},
+      {id:"fritopie",name:"Frito Chili Pie",price:8,category:"texmex",path:["prep"]},
+      {id:"bigdog",name:"The Big Dog (chili cheese dog)",price:7,category:"texmex",path:["grill"]},
+      {id:"chili",name:"Soon-To-Be-Famous Chili",price:6,category:"texmex",path:["prep"]},
+      // ---- APPETIZERS → fry (fried) / prep (cold) ----
       {id:"onionrings",name:"Onion Rings",price:6,category:"app",path:["fry"]},
       {id:"friedpickles",name:"Fried Pickles",price:6,category:"app",path:["fry"]},
       {id:"greenbeans",name:"Fried Green Beans",price:6,category:"app",path:["fry"]},
       {id:"cheesesticks",name:"Big Cheese Sticks",price:7,category:"app",path:["fry"]},
       {id:"friedmush",name:"Fried Mushrooms",price:6,category:"app",path:["fry"]},
       {id:"trio",name:"Big Teaser Trio",price:9,category:"app",path:["fry"]},
-      {id:"catfish",name:"3-pc Catfish Plate",price:13,category:"plate",path:["fry"]},
+      {id:"appcombo",name:"Appetizer Combo",price:10,category:"app",path:["fry"]},
+      {id:"queso",name:"Queso with Chips & Salsa",price:7,category:"app",path:["prep"]},
+      {id:"guac",name:"Guac with Chips & Salsa",price:7,category:"app",path:["prep"]},
+      {id:"chipsalsa",name:"Chips & Salsa",price:4,category:"app",path:["prep"]},
+      // ---- SALADS → salad/prep line (dressing choice, add chicken) ----
+      {id:"housesalad",name:"House Salad",price:6,category:"salad",path:["prep"],
+        modifiers:[{group:"Dressing",required:true,options:[{name:"Ranch",price:0},{name:"Petit Jean Ranch",price:0},{name:"Honey Mustard",price:0},{name:"Italian",price:0},{name:"Bleu Cheese",price:0}]}],
+        addons:[{name:"Add grilled chicken",price:3}]},
+      {id:"clubsalad",name:"Club Salad",price:10,category:"salad",path:["prep"]},
+      {id:"mesquitesalad",name:"Mesquite Chicken Salad",price:11,category:"salad",path:["prep"]},
+      {id:"ranchsalad",name:"Petit Jean Ranch Salad",price:10,category:"salad",path:["prep"]},
+      // ---- SOUPS & POTATOES → prep ----
+      {id:"broccoli",name:"Broccoli Cheese Soup",price:5,category:"soup",path:["prep"]},
+      {id:"bisque",name:"Tomato Bisque",price:5,category:"soup",path:["prep"]},
+      {id:"soupsalad",name:"Soup & Salad Combo",price:9,category:"soup",path:["prep"]},
+      {id:"bakedpotato",name:"Loaded Baked Potato",price:6,category:"soup",path:["prep"]},
+      // ---- SIDES → fry ----
       {id:"fries",name:"Fries",price:3,category:"side",path:["fry"]},
       // ---- SHAKES → shake bar ----
       {id:"shake",name:"Milkshake",price:5,category:"shake",path:["shakes"],
-        modifiers:[{group:"Flavor",required:true,options:[{name:"Vanilla",price:0},{name:"Chocolate",price:0},{name:"Strawberry",price:0}]}]},
-      // ---- DRINKS → handed over at the counter (no path) ----
+        modifiers:[{group:"Flavor",required:true,options:[{name:"Vanilla",price:0},{name:"Chocolate",price:0},{name:"Strawberry",price:0},{name:"Cookies & Cream",price:0.5},{name:"Caramel",price:0.5}]}]},
+      // ---- DESSERTS → prep ----
+      {id:"breadpudding",name:"Apple Bread Pudding",price:6,category:"dessert",path:["prep"]},
+      {id:"moltencake",name:"Chocolate Turtle Molten Cake",price:7,category:"dessert",path:["prep"]},
+      // ---- KIDS ----
+      {id:"babybubba",name:"Baby Bubba",price:6,category:"kids",path:["grill"]},
+      {id:"chickenbites",name:"Chicken Bites",price:6,category:"kids",path:["fry"]},
+      {id:"cornpups",name:"Corn Pups",price:6,category:"kids",path:["fry"]},
+      {id:"macncheese",name:"Mac & Cheese",price:5,category:"kids",path:["prep"]},
+      {id:"grilledcheese",name:"Grilled Cheese",price:5,category:"kids",path:["grill"]},
+      // ---- DRINKS → handed over at the counter (no prep) ----
       {id:"drink",name:"Fountain Drink",price:2.5,category:"drink",path:[]},
-      {id:"tea",name:"Sweet Tea",price:2.5,category:"drink",path:[]},
-      // ---- daily special with an 86 count ----
-      {id:"special",name:"Blue Plate Special",price:10,category:"plate",path:["grill"],par:10}
+      {id:"tea",name:"Sweet Tea",price:2.5,category:"drink",path:[]}
     ],
     stations:[
       {id:"counter",type:"central",label:"Front Counter",view:{money:true}},
       {id:"grill",type:"production",label:"Grill",view:{money:false}},
       {id:"fry",type:"production",label:"Fry Station",view:{money:false}},
       {id:"shakes",type:"production",label:"Shake Bar",view:{money:false}},
+      {id:"prep",type:"production",label:"Salad & Prep",view:{money:false}},
       {id:"kds",type:"kds",label:"Kitchen Display",view:{money:false}},
       {id:"office",type:"report",label:"Office",view:{money:true}}
     ] },
   bistro: { flowId:"bistro", label:"Full-service restaurant", topology:"hub-and-spoke", blurb:"Dine-in — tables, floor plan, kitchen & bar",
     branding:{ name:"My Bistro", brandColor:"#7a1f2b" },
-    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[18,20,22]}, split:true}, coursing:true },
+    staff:[ {id:"own",name:"Owner",pin:"1111",role:"owner"}, {id:"mgr",name:"Manager",pin:"2222",role:"manager"}, {id:"srv1",name:"Riley",pin:"3333"}, {id:"srv2",name:"Sam",pin:"4444"} ],   // servers own tables; owner/manager approve comps
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[18,20,22], tipOut:[{role:"Kitchen",pct:5},{role:"Bussers",pct:10}]}, split:true}, approvals:{comp:true,refund:true}, happyHour:{from:"15:00", to:"18:00"}, orderTypes:["Dine-in","To-go"], coursing:true },   // happy hour 3–6pm
     courses:["Appetizers","Entrées","Desserts"],
     timer:{ mode:"aging", warnSec:600, badSec:1200, label:"ticket" }, kds:{warnSec:420,badSec:900},
     floor:{ label:"Dining Room", warnSec:900, sections:["Main","Patio","Bar"], tables:[
@@ -401,8 +458,8 @@ const TEMPLATES = {
       {id:"steak",name:"Ribeye",price:34,category:"entree",path:["line"],course:2,modifiers:[{group:"Temp",required:true,options:[{name:"Rare",price:0},{name:"Med rare",price:0},{name:"Medium",price:0},{name:"Well",price:0}]}]},
       {id:"salmon",name:"Salmon",price:26,category:"entree",path:["line"],course:2},
       {id:"burger",name:"Bistro Burger",price:16,category:"entree",path:["line"],course:2},
-      {id:"wine",name:"House Wine",price:11,category:"drink",path:["bar"],course:1},
-      {id:"beer",name:"Draft Beer",price:7,category:"drink",path:["bar"],course:1},
+      {id:"wine",name:"House Wine",price:11,category:"drink",path:["bar"],course:1,ageRestricted:21,happyPrice:6},
+      {id:"beer",name:"Draft Beer",price:7,category:"drink",path:["bar"],course:1,ageRestricted:21,happyPrice:4},
       {id:"cake",name:"Chocolate Cake",price:10,category:"dessert",path:["cold"],course:3}
     ],
     stations:[
