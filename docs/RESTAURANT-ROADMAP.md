@@ -20,7 +20,7 @@ plan — not spelled out feature by feature.*
 | **Order by SEAT number** (seat 2's ribeye) | ✅ | seat picker at intake; seat rides the line → KDS/station/ticket/check (`seat-order.js`) |
 | Split the check | ✅ | even 2/3/4-way **and by seat** (`split.js`, `split-seat.js`) |
 | **Per-seat checks** (each guest pays their own) | ✅ | "By seat" at payment; tenders tagged to the seat (`split-seat.js`) |
-| Transfer / merge tables, move a guest | ❌ | |
+| Transfer / merge tables, move a guest | ✅ | move a check to another table (transfer/merge); per-line seat move (`table-transfer.js`) |
 | Server assignment (sections → a server, "my tables") | ✅ | assign a server to a table; "my tables" floor filter (`server-assign.js`) |
 | Reservations + waitlist | ❌ | `booking.js` is appointment-style, not restaurant reso/waitlist |
 
@@ -121,8 +121,8 @@ Sequenced by daily value to a sit-down burger place like Hamburger Barn, and by 
   3. ✅ Comps with reason (+ opt-in manager approval) — *shipped*
 - **P2 — runs a real dining room**
   4. ✅ Server assignment + "my tables" — *shipped*
-  5. Transfer / merge tables, move a guest — *next*
-  6. Day-part menus + happy-hour pricing
+  5. ✅ Transfer / merge tables, move a guest — *shipped*
+  6. Day-part menus + happy-hour pricing — *next*
 - **P3 — reservations & the door**
   7. Reservations + waitlist
 - **P4 — off-premise & self-serve**
