@@ -443,7 +443,8 @@ const TEMPLATES = {
     ] },
   bistro: { flowId:"bistro", label:"Full-service restaurant", topology:"hub-and-spoke", blurb:"Dine-in — tables, floor plan, kitchen & bar",
     branding:{ name:"My Bistro", brandColor:"#7a1f2b" },
-    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[18,20,22]}, split:true}, coursing:true },
+    staff:[ {id:"own",name:"Owner",pin:"1111",role:"owner"}, {id:"mgr",name:"Manager",pin:"2222",role:"manager"}, {id:"srv1",name:"Riley",pin:"3333"}, {id:"srv2",name:"Sam",pin:"4444"} ],   // servers own tables; owner/manager approve comps
+    endpoints:{ customer:{persist:false}, payment:{tenders:["cash","card"], closeGate:"balanceLE0", tip:{presets:[18,20,22]}, split:true}, approvals:{comp:true,refund:true}, coursing:true },
     courses:["Appetizers","Entrées","Desserts"],
     timer:{ mode:"aging", warnSec:600, badSec:1200, label:"ticket" }, kds:{warnSec:420,badSec:900},
     floor:{ label:"Dining Room", warnSec:900, sections:["Main","Patio","Bar"], tables:[
