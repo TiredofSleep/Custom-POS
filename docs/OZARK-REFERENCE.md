@@ -1,8 +1,17 @@
 # The reference implementation — what "generalized enough to build Ozark" actually means
 
-> **The whole origin app is now in this repo, at [`reference/ozark-pos/`](../reference/ozark-pos/).**
-> Name-free, MIT, and it runs: 1,498 money assertions, 745 render assertions, 328 hub assertions, all green.
+> **The whole origin app is in this repo, at [`reference/ozark-pos/`](../reference/ozark-pos/) — and it is now the
+> FINAL v1.** The shop ran on it from June 2026 until 30 September 2026, when it moved to its multi-computer successor
+> (v2, not in this repo) and v1 was frozen. The copy here is that frozen version, refreshed 2026-10-10.
+> Name-free, MIT, and it runs: **2,608 money assertions, 749 render assertions (31 screens × 3 data states), 597 hub
+> assertions**, a syntax check and a dead-button check, all green on this copy.
 > Nothing here is a summary you have to trust — the source is beside it.
+>
+> **And you can run it.** The same app, as one file for one computer with everything that needs a server switched
+> off and labelled: the **Single-PC Edition** — [`single-pc/`](../single-pc/) ·
+> [custompos.org/single-pc.html](https://custompos.org/single-pc.html).
+>
+> *(The earlier copy, from 2026-08-15, ran 1,498 money, 745 render and 328 hub assertions.)*
 
 **Why it is here.** `OZARK-PARITY-ROADMAP.md` closed on 2026-07-08 with every stage shipped and
 `tests/ozark-grade.js` proving the plant loop from config alone. That was true, and it was measured against a

@@ -22,10 +22,10 @@
 
 ---
 
-> **Status: working product, active build.** The public home of customPOS — generalized from a real,
-> in-production single-file POS running a two-location wet cleaner. A landing page, a builder wizard, a
+> **Status: working product, active build.** The public home of customPOS — generalized from a real
+> single-file POS that ran a two-location wet cleaner (now runnable here as the [Single-PC Edition](#the-single-pc-edition--the-real-one-in-one-file)). A landing page, a builder wizard, a
 > [gallery of 24 ready-to-run trade templates](docs/TEMPLATES.md), a full-featured engine, a sync hub, and a
-> payments seam are all live and tested (**98 test suites, zero console errors**). Star/watch to follow along.
+> payments seam are all live and tested (**103 test suites, zero console errors**). Star/watch to follow along.
 > New here? [**The road here**](docs/HISTORY.md) is the honest history + a whole-platform snapshot.
 
 ## What this is
@@ -71,6 +71,28 @@ Small businesses that want a real POS without a monthly bill or a vendor holding
 **service shops** (dry cleaners, laundromats, alterations, repair), **food** (cafés, a real burger joint with a
 kitchen display), **retail** (inventory, barcodes, receipts), and **appointment/service** businesses (salons with
 staff, commission, and a booking calendar). More business types to come.
+
+## The Single-PC Edition — the real one, in one file
+
+customPOS was generalized from a real point of sale that ran a two-store wet cleaner from June to September 2026.
+When that shop moved to its multi-computer successor on 30 September, the old version wasn't thrown away: it lives on as the
+**Single-PC Edition** — [`single-pc/ozark-pos-single-pc.html`](single-pc/ozark-pos-single-pc.html), one file that runs
+a dry-cleaning counter on one computer. Landing page: [custompos.org/single-pc.html](https://custompos.org/single-pc.html).
+
+- **Download it, double-click it.** No server, no account, no install, no internet — it makes **zero network
+  requests**, from disk or hosted (a test proves both: [`tests/single-pc.js`](tests/single-pc.js)).
+- **It is the app that ran the shop**, not a rewrite: drop-off → detail → assemble → rack → pickup, house accounts and
+  statements, cash drawers, route board, time clock and payroll. Cash, check, and cards run on your own stand-alone
+  terminal (you type its approval code).
+- **Honest limits.** Texting, emailed statements, a connected card reader, pay links, the customer tracker, photos,
+  QuickBooks and multi-computer sync need a server — they are hidden and labelled, never faked. Data lives only in
+  that browser on that computer; there is a full backup to one file, but **no one-click restore**.
+- Starts empty: no customers, sample staff (PINs in [the read-me](single-pc/README.md)), placeholder store details and
+  a sample dry-cleaner price book. MIT.
+- **Next:** a modular multi-station edition built from the shop's newer system.
+
+Its readable source and its own test gates are in [`reference/ozark-pos/`](reference/ozark-pos/) — see
+[docs/OZARK-REFERENCE.md](docs/OZARK-REFERENCE.md).
 
 ## What's built
 
@@ -128,6 +150,8 @@ The whole build story is in [JOURNAL.md](JOURNAL.md).
 - **Just the builder, no server:** `node build.js` then open `dist/custompos.html`.
 - **Builder + engine over http:** `python3 -m http.server 8000` → visit `http://localhost:8000/builder.html`.
 - **The demo engine:** open [`pos.html`](pos.html) directly to play with the demo trades.
+- **The Single-PC Edition:** open [`single-pc/ozark-pos-single-pc.html`](single-pc/ozark-pos-single-pc.html) directly
+  (Chrome or Edge) — a real dry cleaner's POS, one file, one computer.
 - **Share a POS across devices:** `node hub.js` then open `http://<host>:8090/pos.html?hub=http://<host>:8090`
   on each device.
 

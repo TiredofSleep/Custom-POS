@@ -63,6 +63,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `cash-change.js` | cash change-making — "Make change" opens an amount-tendered pad with quick-cash chips and live change-due; the tender records amount/tendered/change; one-tap exact cash still works |
 | `templates.js` | every builder starter template boots through the engine with zero console errors and rings a sale — the guarantee that picking any template gives a working POS (16 templates: counter, food truck, market, mobile, bar, dispensary, convenience/gas, retail, café, cleaner, ozark, repair, salon, burgerbarn, bistro, blank) |
 | `custom-price.js` | custom-price items + line editing — a customPrice item prompts for a price, +/− quantity steppers, and a ✎$ per-line price override (haggling / made-a-deal), with − removing the line at qty 1 |
+| `single-pc.js` | the Single-PC Edition (`single-pc/ozark-pos-single-pc.html`) is standalone — from disk, no request but the file itself; served over http, the server sees exactly one hit (the page), no `/api`, `syncOn()` false, no service worker; 0 console/page errors; boots to Home with the "Single-PC Edition" marker and About box. Plus its landing page: FAQ structured data equals the visible FAQ word for word, Download/Try buttons, canonical, no sideways scroll on a phone |
 | `age-check.js` | age-restricted items (gas / convenience / liquor) — a 21+/18+ item blocks payment until a photo-ID check is confirmed; unrestricted orders ring straight through |
 
 ## Running

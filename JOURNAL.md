@@ -1116,3 +1116,65 @@ The point was never the cleaner. The point was that the cleaner was never specia
 proves it.
 
 *— to be continued —*
+
+## 2026-10-10 — Not retired: the real one, in one file
+
+### The shop moved on; the software didn't have to
+On the last night of September, the wet cleaner this whole project grew out of switched to its successor — a newer
+system built for several computers sharing one shop. The old version, one HTML file that had run two stores, a plant
+and a van since June, was frozen that night. The tidy thing would have been to retire it. The owner said the opposite:
+*"custom pos needs to have v1 as a standalone 'single pc POS' file... not fully retired."* He was right. Most shops
+aren't two stores and a van. A one-counter cleaner doesn't need a server humming in a data centre; it needs the
+counter to work. So the frozen v1 became the **Single-PC Edition**: download one file, double-click it, run a shop
+on one computer.
+
+### Switching the server off — honestly
+Making it run without a server was the easy half. The hard half was making sure it never *pretends* to have one.
+v1 decided whether to sync by asking "was I loaded over the web?" — and on custompos.org the answer is yes, so a
+hosted copy would have reached for the shop's sync API on our own site. Now one flag tells the app's own checks it is
+alone, and a guard at the very top refuses every road out — fetch, XHR, sockets, beacons, service workers — before the
+app runs. Everything that needs a server (texting, emailed statements, a connected card reader, pay links, the
+customer tracker, photos, QuickBooks) is hidden and named, not left to fail. Texting starts **off**, so a drop-off
+can never say "Text sent" when nothing was sent. That is the oldest rule the origin shop learned: *an error must never
+render as good news.*
+
+Two calls worth writing down. **Cards:** v1 had deliberately removed hand-keyed card entry — at a shop with a
+connected terminal, it was a theft risk. On one computer the stand-alone terminal is the only reader there is, so the
+POS asks for the approval code the terminal printed; no code, no payment, and "declined" records nothing.
+**Restore:** v1 never had a "load a backup" button, because its server held the copies. Building one in a hurry is
+how data gets eaten, so instead the limit is stated plainly in the app, the read-me and the landing page: full backup
+to one file, yes; one-click restore, not yet.
+
+### Whose data is in it: nobody's
+It starts with no customers, three sample staff, placeholder store details and a sample price book. The readable
+reference copy of the app was refreshed to this final v1 at the same time, and before any of it was allowed near this
+public repo it was checked again — not just against the exporter's list of known names, but against the shop's own
+records: every customer and staff name, phone number, house-number-and-street and payment reference, compared with
+everything about to be published. Whatever that turned up went into the exporter itself, so it is replaced at the
+source on every build rather than patched by hand in one copy, and the gates were re-run on the result: 2,608 money
+assertions, 0 failed. The lesson is the one the origin codebase keeps teaching: *measure before you narrate.* "The
+scan passed" is a claim about the scan.
+
+### Proving "zero network"
+A promise like "this file never talks to a server" is only worth the test behind it. `tests/single-pc.js` opens the
+file from disk and records every request: the only one is the file itself. Then it serves the folder over http, the
+way custompos.org does, and the server writes down every hit: exactly one, the page. To make sure the test could
+fail, it was pointed at the multi-computer copy of the same app, served the same way — and within four seconds that
+one asked for the database, the payment status, a key rotation, an activity trail, a crash report, a script and its
+logo images. Same code, one flag,
+opposite result. A test that cannot fail is not evidence; this one fails on exactly the thing it guards.
+
+### Getting found
+The edition got its own front door, `single-pc.html`, aimed at the search a small cleaner actually types — *free
+offline dry cleaner POS* — with the usual honest metadata and structured data, including FAQ markup that a test
+holds to the visible FAQ word for word (search engines read one, people read the other; they should never disagree).
+It's linked from the home page, the dry-cleaner page and every trade page. One small trap found on the way: the site
+is assembled file by file by the Pages workflow, so a new page that isn't on its copy list would sit in the repo and
+404 on the live site. It's on the list now.
+
+What's next is the other half of the owner's sentence: the shop's newer system, brought here as a **modular**
+multi-station edition — the server-backed pieces as parts you switch on. The single file is the floor; that will be
+the ceiling. All 103 suites green.
+
+### The plan for the ceiling
+The modular edition has a written plan now, [docs/V2-MODULAR-IMPORT.md](docs/V2-MODULAR-IMPORT.md), and the first decision in it is what *not* to do: copy the shop's newer system in whole. It is full of one shop's rules and money history. Instead its engine — every device writes small permanent notes, one hub keeps the official copy, every screen is worked out from the notes — comes in first, behind the same kind of scrubber that guards this release, and then each ability is rebuilt as a module that brings its own screens, rules and tests, with the shop's working code as the answer key. The first module planned is the time clock, because it fixes a real gap here: a clock-in made on one tablet never reaches the others today.

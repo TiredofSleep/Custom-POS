@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<!-- Same lockdown as card.html (the hub also sends it as real headers, incl. frame-ancestors): only Fiserv's
+     tokenizer may be framed; only same-origin fetches; no external scripts/styles/images ever. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-src https://*.cardconnect.com; connect-src 'self'; img-src data:; form-action 'none'; base-uri 'none'">
+<title>Pay your balance — Ozark Cleaners</title>
+<style>
+  :root{ --blue:#1666b0; --green:#2e8b57; --ink:#1c2733; --muted:#667685; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif; color:var(--ink); background:#eef3f8; }
+  .wrap{ max-width:440px; margin:0 auto; padding:18px 16px 40px; }
+  .card{ background:#fff; border-radius:16px; box-shadow:0 6px 22px rgba(20,50,90,.10); padding:20px 18px; }
+  h1{ font-size:20px; margin:0 0 2px; }
+  .brand{ text-align:center; margin:8px 0 14px; }
+  .brand .name{ font-size:22px; font-weight:800; color:var(--blue); letter-spacing:.2px; }
+  .lead{ color:var(--muted); font-size:14.5px; line-height:1.5; margin:0 0 14px; }
+  .amount{ text-align:center; font-size:38px; font-weight:800; color:var(--ink); margin:6px 0 2px; }
+  .desc{ text-align:center; color:var(--muted); font-size:13px; margin-bottom:12px; }
+  label{ display:block; font-weight:700; font-size:13px; margin:12px 0 3px; }
+  iframe{ width:100%; border:0; height:172px; }
+  .row2{ display:flex; gap:10px; }
+  .row2 input{ width:100%; font-size:17px; padding:13px; border:1px solid #cfd8e3; border-radius:10px; }
+  button{ width:100%; margin-top:16px; padding:15px; font-size:17px; font-weight:800; color:#fff; background:var(--green); border:0; border-radius:12px; cursor:pointer; }
+  button[disabled]{ opacity:.45; cursor:default; }
+  .status{ text-align:center; font-size:13.5px; margin-top:10px; min-height:18px; color:#a86412; }
+  .secure{ display:flex; align-items:center; gap:8px; justify-content:center; color:var(--muted); font-size:12.5px; margin-top:16px; }
+  .agree{ display:flex; gap:9px; align-items:flex-start; font-size:13px; line-height:1.5; margin-top:16px; cursor:pointer; }
+  .agree input{ width:19px; height:19px; flex:none; margin-top:1px; }
+  .legal{ margin-top:20px; border-top:1px solid #e2e9f1; padding-top:14px; font-size:11.5px; color:#4a5866; line-height:1.6; }
+  .legal p{ margin:0 0 8px; }
+  .legal h2{ font-size:13.5px; margin:0 0 10px; color:var(--ink); letter-spacing:.02em; }
+  .legal h3{ font-size:11px; margin:13px 0 3px; color:var(--ink); text-transform:uppercase; letter-spacing:.06em; }
+  .fee{ text-align:center; color:var(--muted); font-size:13px; margin:-2px 0 6px; }
+  .big{ text-align:center; padding:26px 8px; }
+  .big .ic{ font-size:52px; }
+  .hide{ display:none; }
+  .err{ color:#c0392b; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="name">Ozark Cleaners &amp; Laundry</span></div>
+  <div class="card">
+    <div class="big" id="loading"><div class="ic">🔒</div><p class="lead" style="text-align:center">Loading your secure payment form…</p></div>
+
+    <div id="form" class="hide">
+      <h1 id="hi">Pay your balance</h1>
+      <div class="amount" id="amt">$0.00</div>
+      <div class="fee hide" id="feeLine"></div>
+      <div class="desc" id="desc"></div>
+      <p class="lead">Enter your card below. Your card details go <b>straight to our card processor's secure system</b> — Ozark Cleaners never sees or stores your card number, and <b>your card is not saved</b>. It is charged this amount <b>once</b>.</p>
+      <label>Card number &amp; security code (CVV)</label>
+      <iframe id="tok" title="Secure card entry" allow="payment"></iframe>
+      <div class="row2">
+        <div style="flex:1"><label>Expiration (MM/YY)</label><input id="exp" inputmode="numeric" placeholder="MM/YY" maxlength="5" autocomplete="cc-exp"></div>
+        <div style="flex:1"><label>Billing ZIP</label><input id="zip" inputmode="numeric" placeholder="ZIP" maxlength="5" autocomplete="postal-code"></div>
+      </div>
+      <label class="agree"><input type="checkbox" id="agree"><span id="agreeText">I have read and agree to the <b>One-Time Payment Terms &amp; Disclosures</b> below, and I authorize Ozark Cleaners and Laundry to charge this card once for the amount shown to pay my balance.</span></label>
+      <button id="pay" disabled>Pay securely</button>
+      <div class="status" id="status">Enter your card above…</div>
+      <div class="secure">🔒 Card entry secured by CardPointe® / Fiserv · PCI DSS</div>
+      <div class="legal">
+        <h2>One-Time Payment Terms &amp; Disclosures</h2>
+        <h3>1. Authorization</h3>
+        <p>By checking the authorization box and selecting <b>"Pay securely,"</b> you authorize Bross Inc., doing business as <b>Ozark Cleaners and Laundry</b> ("Ozark Cleaners," "we," "us"), to charge the payment card you enter <b>one time</b>, for the amount shown above, as payment toward the balance on your account for cleaning, laundry, alteration, and related services you have already received from us.</p>
+        <h3>2. How your card information is protected</h3>
+        <p>Your card details are entered directly with our payment processor, <b>Fiserv (CardPointe®)</b>, inside the secure entry form above — they are transmitted to the processor over an encrypted connection. <b>Ozark Cleaners never sees, receives, or stores your full card number or security code.</b> We keep only the card brand, the last four digits, and the processor's transaction reference, so we can record your payment. Card processing is protected under the Payment Card Industry Data Security Standard (PCI DSS).</p>
+        <h3>3. One charge only — your card is not saved</h3>
+        <p>This page charges your card once and <b>does not keep your card on file</b> or authorize any future charges. If you would like a card on file for future orders, ask us for a separate card-on-file link.<span id="feeLegal"></span></p>
+        <h3>4. Receipts &amp; statements</h3>
+        <p>This payment appears on your account history and statement, and a receipt is available at either store on request.</p>
+        <h3>5. Declined cards</h3>
+        <p>If your card is declined, nothing is charged and your balance remains due. You may try another card, or pay in store or by phone.</p>
+        <h3>6. Questions, errors &amp; disputes</h3>
+        <p>If you believe the amount is wrong or you were charged in error, call either store and we will review your account and correct any error. You may also contact the bank that issued your card.</p>
+        <h3>7. This link</h3>
+        <p>This link can be paid once and expires 7 days after it was sent. If your balance changes before you pay — for example, if you pay in store — the link stops working so you are never charged twice; call us for an updated link.</p>
+        <h3>8. Electronic consent</h3>
+        <p>Checking the authorization box and paying acts as your electronic signature and agreement to these terms. You may print or save this page for your records; a copy of these terms is available at either store on request.</p>
+        <h3>9. Who we are</h3>
+        <p>Bross Inc. d/b/a Ozark Cleaners and Laundry &nbsp;·&nbsp; Arkadelphia (870)&nbsp;555-0032 &nbsp;·&nbsp; Hot Springs (501)&nbsp;555-0030 &nbsp;·&nbsp; Pickup &amp; Delivery (501)&nbsp;555-0031. These terms are governed by the laws of the State of Arkansas. <i>Last updated September 17, 2026.</i></p>
+      </div>
+    </div>
+
+    <div id="done" class="big hide"><div class="ic">✅</div><h1 style="color:var(--green)">Payment received — thank you!</h1><p class="lead" style="text-align:center" id="donemsg">Your balance is paid. You can close this page.</p></div>
+    <div id="failed" class="big hide"><div class="ic">⚠️</div><h1 class="err" id="failmsg">Something went wrong</h1><p class="lead" style="text-align:center">Please call us and we'll help.</p></div>
+  </div>
+</div>
+<script>
+/* PCI DSS 4.0 req 6.4.3 — script inventory for this payment page (keep current):
+   1) THIS inline script — validates the link with our hub, embeds Fiserv's tokenizer iframe, receives the
+      one-way token, posts token + expiry + ZIP to our hub, which charges the fixed amount once.
+   2) Fiserv's Hosted iFrame Tokenizer (inside the <iframe>, served from *.cardconnect.com).
+   NO other scripts. The CSP + the hub's response headers enforce this; the hub hashes this file every 6h and
+   emails the owner if it changes (req 11.6.1). */
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function qs(n){ try{ return new URLSearchParams(location.search).get(n)||''; }catch(e){ return ''; } }
+  var K = qs('k'), TOKEN=null, EXP='', TOKORIGIN='', AMT='';
+  function show(id){ ['loading','form','done','failed'].forEach(function(x){ $(x).classList.toggle('hide', x!==id); }); }
+  function fail(msg){ if(msg) $('failmsg').textContent=msg; show('failed'); }
+  function money(c){ return '$' + (Math.round(Number(c)||0)/100).toFixed(2); }
+
+  if(!K){ fail('This link is not valid.'); return; }
+
+  fetch('/api/paylink/info?k='+encodeURIComponent(K)).then(function(r){ return r.json(); }).then(function(j){
+    if(!j || !j.ok){ if(j && j.paid){ $('donemsg').textContent=j.error; show('done'); return; } fail((j&&j.error)||'This link is not valid.'); return; }
+    AMT = money(j.amount);
+    $('amt').textContent = AMT;
+    if(j.name) $('hi').textContent = 'Pay your balance, ' + j.name;
+    if(j.desc) $('desc').textContent = j.desc;
+    if(j.fee > 0){ var F = money(j.fee); $('feeLine').textContent = 'Includes a ' + F + ' card processing fee'; $('feeLine').classList.remove('hide'); $('feeLegal').textContent = ' The amount shown includes a card processing fee of ' + F + ', which you would not pay by cash or check in store.'; }
+    $('agreeText').textContent = 'I have read and agree to the One-Time Payment Terms & Disclosures below, and I authorize Ozark Cleaners and Laundry to charge this card once for ' + AMT + ' to pay my balance.';
+    $('pay').textContent = 'Pay ' + AMT + ' securely';
+    try{ TOKORIGIN = new URL(j.tokenizer).origin; }catch(e){ TOKORIGIN=''; }
+    if(!TOKORIGIN || !/\.cardconnect\.com$/.test(new URL(j.tokenizer).hostname)){ fail('Card system unavailable.'); return; }
+    $('tok').src = j.tokenizer;
+    show('form');
+  }).catch(function(){ fail('We could not reach our system. Please try again.'); });
+
+  window.addEventListener('message', function(ev){
+    if(!TOKORIGIN || ev.origin !== TOKORIGIN) return;
+    if(ev.source && $('tok').contentWindow && ev.source !== $('tok').contentWindow) return;
+    var d = ev.data; if(typeof d==='string'){ try{ d=JSON.parse(d); }catch(e){ return; } }
+    if(!d || typeof d!=='object') return;
+    var tok = d.token || d.message || '';
+    var err = d.validationError || ((d.errorCode && d.errorCode!=='0') ? (d.errorMessage||'') : '');
+    if(tok && !d.validationError){ TOKEN=tok; if(d.expiry) EXP=String(d.expiry); refresh('✓ Card looks good'); }
+    else { TOKEN=null; refresh(err ? ('⏳ '+err) : 'Enter your card above…'); }
+  }, false);
+
+  $('exp').addEventListener('input', function(){ var v=this.value.replace(/\D/g,'').slice(0,4); if(v.length>=3) v=v.slice(0,2)+'/'+v.slice(2); this.value=v; refresh(); });
+  $('zip').addEventListener('input', function(){ this.value=this.value.replace(/\D/g,'').slice(0,5); });
+  $('agree').addEventListener('change', function(){ refresh(); });
+
+  function expDigits(){ return ($('exp').value||'').replace(/\D/g,''); }
+  function refresh(msg){ var ok = !!TOKEN && (EXP.length>=4 || expDigits().length===4) && $('agree').checked; $('pay').disabled = !ok; if(msg!=null) $('status').textContent = ok ? '✓ Ready to pay' : msg; }
+
+  $('pay').addEventListener('click', function(){
+    if(!TOKEN){ $('status').textContent='Please enter your card first.'; return; }
+    var exp = expDigits() || EXP.replace(/\D/g,'');
+    if(exp.length!==4){ $('status').textContent='Please enter the expiration as MM/YY.'; return; }
+    if(!$('agree').checked){ $('status').textContent='Please check the authorization box above.'; return; }
+    $('pay').disabled=true; $('status').textContent='Paying securely — please don\'t close this page…';
+    fetch('/api/paylink/submit', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ k:K, token:TOKEN, expiry:exp, postal:($('zip').value||''), consent:true }) })
+      .then(function(r){ return r.json(); }).then(function(j){
+        if(j && j.ok){ $('donemsg').textContent = AMT + ' was charged' + (j.last4 ? ' to the card ending ' + j.last4 : '') + '. Your balance is paid — you can close this page.'; show('done'); }
+        else if(j && j.paid){ $('donemsg').textContent=j.error; show('done'); }
+        else { $('pay').disabled=false; $('status').innerHTML='<span class="err"></span>'; $('status').firstChild.textContent=((j&&j.error)||'Could not complete the payment — please try again.'); }
+      }).catch(function(){ $('pay').disabled=false; $('status').innerHTML='<span class="err">Network error — nothing was charged. Please try again.</span>'; });
+  });
+})();
+</script>
+</body>
+</html>

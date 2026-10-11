@@ -58,7 +58,11 @@ const TRADES = [
       ['House accounts & A/R','Commercial accounts with aging and statements.'],
       ['Customer tracker','A sanitized status page customers can check themselves.'],
       ['Ready texts','Auto-text when an order is racked and ready.'],
-      ['Built in a real plant','Battle-tested at a working two-location cleaner.']] },
+      ['Built in a real plant','Battle-tested at a working two-location cleaner.']],
+    /* the origin app itself, runnable: a cleaner can skip the builder and run the real one on one PC */
+    extra:{ h2:'Or run the real one, on one computer',
+      p:'The point of sale that ran a two-store wet cleaner from June to September 2026 is now a free, single file: the <b>Single-PC Edition</b>. Download it, double-click it, and run a one-counter shop — drop-off to pickup, house accounts, cash drawers, payroll. No server, no account, no internet. Texting, a connected card reader and sharing across computers need a server, so that edition hides them and says so.',
+      href:'single-pc.html', cta:'See the Single-PC Edition' } },
   { slug:'jewelry', tmpl:'retail', name:'Jewelry Store', h1:'Jewelry Store POS',
     title:'Free Jewelry Store POS Software',
     kw:'jewelry POS, free jewelry store POS software, jewelry point of sale, jeweler POS, layaway POS, repair intake POS, high-value inventory POS',
@@ -113,6 +117,19 @@ section h2{font-size:clamp(23px,4vw,31px);letter-spacing:-.02em;margin:0 0 22px;
 .pill{display:inline-block;font-size:13px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:5px 13px;margin:4px}
 .free{text-align:center;color:var(--dim);max-width:640px;margin:0 auto}
 footer{padding:40px 0 60px;border-top:1px solid var(--line);color:var(--dim);font-size:14px;text-align:center}`;
+
+/* @render — one optional trade-specific section (t.extra), placed after the feature grid; empty when a trade has none */
+function extraSection(t){
+  if(!t.extra) return '';
+  const e = t.extra;
+  return `
+<section><div class="wrap">
+  <h2>${e.h2}</h2>
+  <p class="free">${e.p}</p>
+  <div class="cta" style="margin-top:20px"><a class="btn primary" href="${e.href}">${e.cta}</a></div>
+</div></section>
+`;
+}
 
 function page(t){
   const feats = t.feats.map(f=>`<div class="card"><h3>${f[0]}</h3><p>${f[1]}</p></div>`).join('\n    ');
@@ -170,7 +187,7 @@ function page(t){
     ${feats}
   </div>
 </div></section>
-
+${extraSection(t)}
 <section><div class="wrap">
   <h2>Free software, forever</h2>
   <p class="free">The software is <b>$0</b> — no subscription, no per-terminal fee, no upsell. Download one self-contained file, run it in any browser, and it keeps working even offline. Card processing (optional) is the only place we earn, and it is a fee you already pay. <a href="/">How it works →</a></p>
@@ -184,7 +201,7 @@ function page(t){
 
 <footer><div class="wrap">
   <p>customPOS — a free, open-source POS builder for any business. MIT-licensed.</p>
-  <p style="margin-top:6px"><a href="/">Home</a> · <a href="builder.html?guided">Guided setup</a> · <a href="https://github.com/TiredofSleep/Custom-POS">Source on GitHub</a></p>
+  <p style="margin-top:6px"><a href="/">Home</a> · <a href="builder.html?guided">Guided setup</a> · <a href="single-pc.html">Single-PC POS (one file)</a> · <a href="https://github.com/TiredofSleep/Custom-POS">Source on GitHub</a></p>
 </div></footer>
 </body>
 </html>

@@ -83,6 +83,12 @@
   .faq p{ margin:0 0 14px; color:var(--dim); font-size:14.5px; }
   footer{ padding:40px 0 60px; border-top:1px solid var(--line); color:var(--dim); font-size:14px; text-align:center; }
   .tag{ display:inline-block; font-size:12.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--good); margin-bottom:14px; }
+  /* the real one: the Single-PC Edition card, and a nav link that steps aside on a phone (the card and footer still link it) */
+  .realone{ background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--good); border-radius:16px; padding:24px 26px; }
+  .realone h3{ margin:0 0 8px; font-size:19px; }
+  .realone p{ margin:0 0 16px; color:var(--dim); font-size:15px; max-width:720px; }
+  .realone .cta{ justify-content:flex-start; }
+  @media (max-width:560px){ header.nav .navopt{ display:none; } }
 </style>
 <script type="application/ld+json">
 {
@@ -129,6 +135,7 @@
   <span class="brand"><span class="dot"></span>customPOS</span>
   <span class="spacer"></span>
   <button class="themetog" id="themeToggle" type="button" aria-label="Toggle light or dark theme" title="Light / dark">🌗</button>
+  <a class="navopt" href="single-pc.html">Single-PC POS</a>
   <a href="pos.html">Live demo</a>
   <a class="btn primary" href="builder.html?guided">Build yours</a>
 </div></header>
@@ -155,6 +162,14 @@
     <div class="step"><h3>Pick your trade</h3><p>Start from a template that already thinks like your business — the lifecycle, the stations, a sensible menu.</p></div>
     <div class="step"><h3>Make it yours</h3><p>Click workstations and items to set prices, routes, modifiers, taxes, tips, staff, inventory — no code.</p></div>
     <div class="step"><h3>Download &amp; own</h3><p>Get one HTML file plus a CLAUDE.md guide. Open it in a browser to run it, or in Claude Code to change anything in plain English.</p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="realone">
+    <h3>Or run the real one: the Single-PC Edition</h3>
+    <p>The point of sale that ran a two-store wet cleaner from June to September 2026 is now one free file for one computer. Download it, double-click it, and run a dry-cleaning counter — no server, no account, no internet. It stores everything in that one browser, and it says plainly what it can't do without a server.</p>
+    <div class="cta"><a class="btn primary" href="single-pc.html">See the Single-PC Edition</a><a class="btn" href="single-pc/ozark-pos-single-pc.html" target="_blank" rel="noopener">Try it in your browser</a></div>
   </div>
 </div></section>
 
@@ -255,6 +270,7 @@
   <nav style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px 18px">
     <a href="builder.html?guided">Build your POS</a>
     <a href="pos.html">Try the demo</a>
+    <a href="single-pc.html">Single-PC POS (one file)</a>
     <a href="https://github.com/TiredofSleep/Custom-POS/blob/main/docs/TEMPLATES.md">Template gallery</a>
     <a href="https://github.com/TiredofSleep/Custom-POS/blob/main/CONTRIBUTING.md">Contribute</a>
     <a href="https://github.com/TiredofSleep/Custom-POS#readme">Docs</a>

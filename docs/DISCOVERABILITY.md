@@ -36,6 +36,14 @@ traffic sources measure three different windows; don't quote them side by side a
   property is claimable/claimed.
 - **The trade pages target real high-intent searches** — e.g. the dry-cleaner page is built around
   *"SPOT alternative"* and *"free dry cleaner POS software,"* which is exactly what a shop owner types.
+- **2026-10-10: a page for the real one — [`single-pc.html`](../single-pc.html).** The Single-PC Edition (the origin
+  shop's own POS, one file for one computer) gets its own front door aimed at *"free offline dry cleaner POS"* and
+  *"single computer POS"*: title, description, canonical, Open Graph/Twitter, `SoftwareApplication` +
+  `BreadcrumbList` + `FAQPage` structured data (the FAQ markup is the visible FAQ word for word — a test checks it),
+  a "Try it in your browser" and a "Download the file" button. Linked from the home page (nav, a card, the footer),
+  the dry-cleaner page, and every trade page's footer; in the sitemap. The app file itself is deliberately **not** in
+  the sitemap — the landing page is the thing to rank. **After it is pushed:** Search Console → URL Inspection →
+  `https://custompos.org/single-pc.html` → Request indexing, and resubmit `sitemap.xml`.
 
 ---
 
