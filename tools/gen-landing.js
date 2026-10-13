@@ -201,7 +201,7 @@ ${extraSection(t)}
 
 <footer><div class="wrap">
   <p>customPOS — a free, open-source POS builder for any business. MIT-licensed.</p>
-  <p style="margin-top:6px"><a href="/">Home</a> · <a href="builder.html?guided">Guided setup</a> · <a href="single-pc.html">Single-PC POS (one file)</a> · <a href="https://github.com/TiredofSleep/Custom-POS">Source on GitHub</a></p>
+  <p style="margin-top:6px"><a href="/">Home</a> · <a href="builder.html?guided">Guided setup</a> · <a href="single-pc.html">Single-PC POS (one file)</a> · <a href="built-with-claude.html">Built with Claude</a> · <a href="https://github.com/TiredofSleep/Custom-POS">Source on GitHub</a></p>
 </div></footer>
 </body>
 </html>

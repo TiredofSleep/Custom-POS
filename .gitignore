@@ -6,3 +6,5 @@ node_modules/
 dist/
 # editor / OS
 .DS_Store
+# local test word lists that name private details (never commit; tests/claude-spotlight.js reads it when present)
+tests/*.local.txt

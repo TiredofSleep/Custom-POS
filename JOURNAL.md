@@ -1178,3 +1178,81 @@ the ceiling. All 103 suites green.
 
 ### The plan for the ceiling
 The modular edition has a written plan now, [docs/V2-MODULAR-IMPORT.md](docs/V2-MODULAR-IMPORT.md), and the first decision in it is what *not* to do: copy the shop's newer system in whole. It is full of one shop's rules and money history. Instead its engine — every device writes small permanent notes, one hub keeps the official copy, every screen is worked out from the notes — comes in first, behind the same kind of scrubber that guards this release, and then each ability is rebuilt as a module that brings its own screens, rules and tests, with the shop's working code as the answer key. The first module planned is the time clock, because it fixes a real gap here: a clock-in made on one tablet never reaches the others today.
+
+## 2026-10-12 — Built with Claude: putting the real method on the front page
+
+### The part the site wasn't saying
+The owner looked at the site and said it plainly: customPOS *"is not highlighting claude enough for building it and being
+able to customize it based on prompts"*, and it needed *"a spotlight on the page about how this works, and how we are
+editing a live shop with customizations every day."* He was right. The site mentioned Claude Code twice, in a FAQ answer and
+a step card, as if it were a footnote. In the shop this project came from, it is the method: the owner says what he wants
+at the counter, Claude Code changes the live system, a proof named after his words is written, and the build goes live
+only if every proof passes on the server.
+
+### Measure before you narrate
+The first rule was that every claim on the page had to be traceable to a file or the git history, so the numbers were
+counted before a word was written, all of it read-only against the shop's private repositories. Since the switch to the
+shop's multi-station system on the night of September 30: 94 commits to the live system from Oct 1 to Oct 12, on 9 of the 12
+days (13 on Oct 12 alone); 1,226 proofs passing on Oct 12, up 147 since the build that went live the morning of Oct 1; at
+least 48 builds named live in the desk logs; at least 6 deploys the server refused. Across the whole history, 2,082 of 2,128 commits carry a Claude co-author
+line. Each figure is dated, because they grow most days.
+
+Counting turned up two traps. Git reads a bare date like *2026-10-01* as "that date at the current time of day", so a
+late-evening count first showed one commit on Oct 1 instead of 36; the counts were re-run from midnight. And the honest
+version of the owner's "every day" is "9 of the 12 days": three days were quiet, and the page says which. The "live"
+label on each example was checked too, by asking git whether that commit sits inside a build the logs call live, not by
+assuming.
+
+### Real words, no names
+The heart of the page is a wall of real requests in the owner's own words (typos kept) beside what changed and when: the
+double Rush charge, the card-on-file button, asking which store a customer will pick up at, the $1 drawer-alert rule, a
+frozen card reader, a Happy Bag change that was written, held back because the records showed a person and his company
+account, and re-done after Claude asked. The sources are full of customer and staff names, ticket and tag numbers, and the
+shop's server details, so every quote was taken from a cleaned list with brackets where a name was, and nothing was copied
+from a raw commit message. A new test, `tests/claude-spotlight.js`, guards the page against phone-shaped numbers, e-mails,
+ticket-, tag- and IP-shaped numbers and a list of private words. One slip was caught on the way: the guard's own
+negative control had been given a ticket number seen while fact-checking. It was swapped for an obviously fake one before
+anything was committed. The lesson is the usual one, aimed at ourselves: the guard is only as clean as its test data.
+
+### Saying the limits out loud
+A page about letting an AI touch a live business is only believable if it says where that goes wrong, so the limits are
+on it with dates: a "dry run" that actually sent its changes, a build that went live at 4:26 PM instead of 7 PM because of
+a time-zone trap, a customer merge stopped only by its dry run. It also says that the 7 PM rule is a discipline rather than
+a lock, that AI usage costs money, that the shop's own code is private, and that the multi-station system it runs is not in
+customPOS yet. It says once, plainly, that Claude is made by Anthropic and customPOS is independent and not affiliated
+with Anthropic. No logos were used.
+
+### Wiring
+The page is `built-with-claude.html`, with a spotlight band right under the home page's hero carrying three real requests
+and the four headline numbers. It is in the sitemap, linked from the home page's nav and footer, from single-pc.html, and
+from every trade page through the generator, and it is on the Pages workflow's copy list, since a page left off that list
+sits in the repo and 404s live. The test checks that too. Along the way the home page's header, which wrapped onto two
+lines on a phone, was put back on one. 104 suites.
+
+### What the second look caught
+Before anything was pushed, three separate checks read the page again: one re-counted every claim against the shop's
+repositories, one looked for anything private, and one looked at it on screens from 320px to 1440px. They found real
+problems, and they are worth writing down:
+
+- **Words that went past the record.** "43 of the 50 sections" was 43 of 50 *headings*; the proof file actually gained 91
+  sections. "1,079 at the first deploy after the switch" was wrong: an earlier build was already live by 7:45 that morning,
+  so it now says "the build that went live the morning of Oct 1". "19 carry his words in the title" was really 19 that
+  *name* him there and 5 that quote him. The section label "Every day, live" said what the owner hoped, not what the
+  record shows (9 of 12 days). The $1 drawer-alert card said the morning count was left alone until he asked; the morning
+  alert was in the first change, and what Claude asked about was the morning count's on-screen flag and the theft watch.
+  "The owner asked Claude to compare prices" could not be traced; "Claude compared the prices" can. "One session at a
+  time" was wrong too: each desk has its own session, and the rule is that each one works alone by default.
+- **A hash is not a hiding place.** The guard had kept the words that would point at the shop's server as SHA-256 hashes,
+  and the first draft of this entry said that meant the public file named none of them. A hash of a short word is reversed by guessing
+  in milliseconds, so in effect it did name them. The hashes are gone, and they never reached a pushed commit: the
+  unpushed commit that carried them was replaced rather than patched, because a fix on top would still have published
+  them. The public test now lists only words that are already public; any private words live in a git-ignored local
+  file that the guard reads when it is there. The IP-shaped check still catches any hostname built from an address.
+- **Seen, but not seen.** The request-to-change animation ran in the first four seconds, below the fold on most screens,
+  so it was over before anyone scrolled to it. It now starts when it scrolls into view (and a reader who asks for less
+  motion still gets every line at once). Several light-theme colors were under the contrast a reader needs, the home
+  page's focus ring had got weaker than the browser's own, and single cards were stranded on their own rows at tablet
+  width. All fixed, and the home band's "since the switch", which the home page never explains, now says "Oct 1–12".
+
+The counts themselves held up. What was wrong was what some of them were said to mean, which is the part a reader can't
+check.

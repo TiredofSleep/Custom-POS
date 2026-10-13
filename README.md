@@ -25,8 +25,9 @@
 > **Status: working product, active build.** The public home of customPOS — generalized from a real
 > single-file POS that ran a two-location wet cleaner (now runnable here as the [Single-PC Edition](#the-single-pc-edition--the-real-one-in-one-file)). A landing page, a builder wizard, a
 > [gallery of 24 ready-to-run trade templates](docs/TEMPLATES.md), a full-featured engine, a sync hub, and a
-> payments seam are all live and tested (**103 test suites, zero console errors**). Star/watch to follow along.
+> payments seam are all live and tested (**104 test suites, zero console errors**). Star/watch to follow along.
 > New here? [**The road here**](docs/HISTORY.md) is the honest history + a whole-platform snapshot.
+> How the origin shop still changes its live POS by asking Claude: [**Built with Claude**](#built-with-claude--a-live-shop-changed-by-asking).
 
 ## What this is
 
@@ -93,6 +94,32 @@ a dry-cleaning counter on one computer. Landing page: [custompos.org/single-pc.h
 
 Its readable source and its own test gates are in [`reference/ozark-pos/`](reference/ozark-pos/) — see
 [docs/OZARK-REFERENCE.md](docs/OZARK-REFERENCE.md).
+
+## Built with Claude — a live shop, changed by asking
+
+The shop customPOS grew out of, Ozark Cleaners (a two-store wet cleaner in Arkadelphia and Hot Springs, Arkansas), runs
+on point-of-sale software built with Claude, the AI made by Anthropic, and still changes it this way. The owner says what
+he wants in plain words; [Claude Code](https://claude.com/claude-code) changes the live system, writes a proof named after
+the request, and the deploy goes live only if the whole suite passes on the server. The full story, with the real
+requests, the safety rails and the honest limits: **[custompos.org/built-with-claude.html](https://custompos.org/built-with-claude.html)**
+([`built-with-claude.html`](built-with-claude.html)).
+
+As of Oct 12, 2026, counted from the shop's git history, desk logs and test file:
+
+- **94 commits** to the live system since Oct 1, on **9 of the 12 days** (13 on Oct 12 alone).
+- **1,226 proofs, 0 failed** on Oct 12. Since the Sept 30 switch, 91 proof sections have been added, and 43 of the 50
+  headings that group them quote the owner's request.
+- **48+ builds** named live in the desk logs since the switch, and **at least 6 deploys refused** by the server's full
+  test run, with the shop keeping its running build each time.
+- **2,082 of 2,128** commits since June 20, 2026 carry a `Co-Authored-By: Claude` line.
+
+Money stays with the owner (refunds, voids and credits are owner-only on the shop's server, store credit needs a PIN the
+server checks, and Claude can only suggest a credit), every data fix goes through the app's own functions onto its activity log, and the rule is that builds
+go live at 7 PM Central unless the owner says go (a discipline the sessions follow, not a lock). The shop's own repositories are private, and its current multi-station system is
+not in customPOS yet ([the plan](docs/V2-MODULAR-IMPORT.md)). A test, [`tests/claude-spotlight.js`](tests/claude-spotlight.js),
+holds the page's FAQ markup to its visible FAQ, checks every link, and guards it against private details.
+
+*Claude is made by Anthropic. customPOS is independent and not affiliated with Anthropic.*
 
 ## What's built
 

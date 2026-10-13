@@ -38,6 +38,8 @@ jobs:
           cp restaurant.html retail.html salon.html repair-shop.html dry-cleaner.html jewelry.html _site/
           # the Single-PC Edition: its landing page, the one-file app (Try it / Download), and the page's screenshot
           cp single-pc.html _site/
+          # the Claude spotlight: how the origin shop changes its live POS by asking (a page not on this list 404s live)
+          cp built-with-claude.html _site/
           mkdir -p _site/single-pc _site/press
           cp single-pc/ozark-pos-single-pc.html single-pc/README.md single-pc/LICENSE _site/single-pc/
           cp press/07-single-pc.png _site/press/

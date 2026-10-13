@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Built with Claude — A POS You Change by Asking | customPOS</title>
+<meta name="description" content="A real two-store wet cleaner changes its live point of sale by telling Claude what it wants. How a change happens, the safety rails, the record, and the limits.">
+<meta name="keywords" content="AI customized POS, Claude Code POS, built with Claude, customize point of sale with AI, change your POS in plain English, AI software for small business, dry cleaner POS, custom POS">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="author" content="customPOS">
+<link rel="canonical" href="https://custompos.org/built-with-claude.html">
+<meta name="theme-color" content="#1f6feb">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f6feb'/%3E%3Crect x='9' y='9' width='14' height='14' rx='3' fill='white'/%3E%3C/svg%3E">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="customPOS">
+<meta property="og:locale" content="en_US">
+<meta property="og:url" content="https://custompos.org/built-with-claude.html">
+<meta property="og:title" content="Built with Claude: a real shop changes its live POS by asking">
+<meta property="og:description" content="A two-store wet cleaner says what it wants in plain words; Claude Code changes the live system, proves it with tests, and it goes live only if every test passes.">
+<meta property="og:image" content="https://custompos.org/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="customPOS — free point-of-sale software you download and own">
+<meta property="article:published_time" content="2026-10-12">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Built with Claude: a real shop changes its live POS by asking">
+<meta name="twitter:description" content="The owner says what he wants; Claude Code changes the live system, proves it with tests, and it goes live only if every test passes.">
+<meta name="twitter:image" content="https://custompos.org/og.png">
+<meta name="twitter:image:alt" content="customPOS — free point-of-sale software you download and own">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Built with Claude",
+  "headline": "Change your POS by saying what you want",
+  "url": "https://custompos.org/built-with-claude.html",
+  "description": "How a real two-store wet cleaner changes its live point of sale by describing what it wants to Claude: the steps, the safety rails, the measured record and the honest limits.",
+  "inLanguage": "en",
+  "datePublished": "2026-10-12",
+  "dateModified": "2026-10-12",
+  "isPartOf": { "@type": "WebSite", "name": "customPOS", "url": "https://custompos.org/" },
+  "about": { "@type": "Thing", "name": "Changing point-of-sale software by describing the change to an AI coding tool" },
+  "publisher": { "@type": "Organization", "name": "customPOS", "url": "https://custompos.org/" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "customPOS", "item": "https://custompos.org/" },
+    { "@type": "ListItem", "position": 2, "name": "Built with Claude", "item": "https://custompos.org/built-with-claude.html" }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "Is a real shop actually running on this?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Ozark Cleaners, a two-store wet cleaner in Arkadelphia and Hot Springs, Arkansas, has run on its own software since summer 2026; the first commit was on June 20. It moved to its current multi-computer system on September 30, and that system's code changed on 9 of the 12 days that followed." } },
+    { "@type": "Question", "name": "Does Claude run the shop?", "acceptedAnswer": { "@type": "Answer", "text": "No. Staff run the counter. Claude changes code and data only when someone asks, and a person decides anything that involves money, customers or the public." } },
+    { "@type": "Question", "name": "Can Claude move money?", "acceptedAnswer": { "@type": "Answer", "text": "No. Refunds, voids and credits are the owner's. On the shop's server those actions are owner-only, privileged ones need a PIN that the server checks, and Claude cannot hold or type a PIN. Claude can suggest a store credit; the owner approves it with his own PIN." } },
+    { "@type": "Question", "name": "What happens if a change breaks something?", "acceptedAnswer": { "@type": "Answer", "text": "Most problems are caught before they go live: every change gets a proof, the whole suite runs on the shop's computer and again on the server, and the deploy is refused on any failure. If a new build does not answer within 30 seconds, the previous build goes back live by itself. Some mistakes still get through and are found at the counter; the fix then takes the same path." } },
+    { "@type": "Question", "name": "Do I need to know how to code?", "acceptedAnswer": { "@type": "Answer", "text": "The shop's owner describes what he wants in plain words, and Claude Code writes the code and the tests. You do need to say clearly what you want, check the result before you rely on it, and keep backups." } },
+    { "@type": "Question", "name": "Is the shop's code public?", "acceptedAnswer": { "@type": "Answer", "text": "Not all of it. The shop's own repositories are private. customPOS publishes scrubbed exports with no customer or staff data: the Single-PC Edition is the shop's first system as one file. The multi-station system the shop runs today is not in customPOS yet." } },
+    { "@type": "Question", "name": "What does the AI cost?", "acceptedAnswer": { "@type": "Answer", "text": "customPOS is free. Claude is not: AI usage is paid to Anthropic under its own pricing. The shop keeps the cost down by having each desk's Claude work alone by default and saving large multi-agent runs for build work, with the cost stated first." } },
+    { "@type": "Question", "name": "Is customPOS part of Anthropic?", "acceptedAnswer": { "@type": "Answer", "text": "No. Claude is made by Anthropic. customPOS is independent and not affiliated with Anthropic." } }
+  ]
+}
+</script>
+<style>
+  :root{ --brand:#1f6feb; --brand2:#7aa2ff; --bg:#0f1115; --panel:#161922; --card:#1b1f28; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; --good:#2ea043; --warn:#e3893c; --accent-ink:#7aa2ff; --focus:#7aa2ff;
+         --term:#0b0d12; --termline:#232836; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; }
+  /* auto-follow the OS, unless the visitor picks a theme (data-theme wins by specificity) — the home page's rule */
+  @media (prefers-color-scheme: light){ :root{ --bg:#f6f8fb; --panel:#fff; --card:#fff; --line:#e3e8ef; --ink:#12161d; --dim:#5b6675; --term:#11151c; --termline:#262c38; --good:#1a7f37; --warn:#b45309; --accent-ink:#175cd3; --focus:#1f6feb; } }
+  :root[data-theme="light"]{ --bg:#f6f8fb; --panel:#fff; --card:#fff; --line:#e3e8ef; --ink:#12161d; --dim:#5b6675; --term:#11151c; --termline:#262c38; --good:#1a7f37; --warn:#b45309; --accent-ink:#175cd3; --focus:#1f6feb; }
+  :root[data-theme="dark"]{ --bg:#0f1115; --panel:#161922; --card:#1b1f28; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; --term:#0b0d12; --termline:#232836; --good:#2ea043; --warn:#e3893c; --accent-ink:#7aa2ff; --focus:#7aa2ff; }
+  *{ box-sizing:border-box; }
+  html{ scroll-padding-top:72px; }
+  body{ margin:0; font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); overflow-wrap:break-word; }
+  a{ color:var(--brand); text-decoration:none; }
+  a:hover{ text-decoration:underline; }
+  a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-visible{ outline:3px solid var(--focus); outline-offset:3px; border-radius:6px; }
+  .skip{ position:absolute; left:12px; top:-60px; z-index:20; background:var(--brand); color:#fff; padding:10px 14px; border-radius:8px; font-weight:600; }
+  .skip:focus{ top:10px; }
+  .nw{ white-space:nowrap; }
+  .wrap{ max-width:1040px; margin:0 auto; padding:0 20px; }
+  @media (max-width:420px){ .wrap{ padding:0 16px; } }
+
+  header.nav{ position:sticky; top:0; z-index:10; backdrop-filter:blur(8px); background:color-mix(in srgb, var(--bg) 82%, transparent); border-bottom:1px solid var(--line); }
+  header.nav .wrap{ display:flex; align-items:center; gap:12px; height:58px; }
+  .brand{ font-weight:800; letter-spacing:-.02em; font-size:19px; color:var(--ink); white-space:nowrap; }
+  .brand:hover{ text-decoration:none; }
+  .brand .dot{ display:inline-block; width:11px; height:11px; border-radius:3px; background:var(--brand); margin-right:8px; }
+  .spacer{ flex:1; }
+  .themetog{ display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; padding:0; font-size:17px; line-height:1; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); cursor:pointer; flex:none; }
+  .themetog:hover{ border-color:var(--brand); }
+  @media (max-width:600px){ header.nav .navopt{ display:none; } }
+  .btn{ display:inline-block; padding:11px 18px; border-radius:10px; border:1px solid var(--line); font-weight:600; cursor:pointer; background:var(--card); color:var(--ink); text-align:center; }
+  .btn:hover{ text-decoration:none; border-color:var(--brand); }
+  .btn.primary{ background:var(--brand); border-color:var(--brand); color:#fff; }
+  .btn.big{ padding:15px 26px; font-size:17px; }
+  header.nav .btn{ padding:9px 14px; white-space:nowrap; }
+  @media (max-width:420px){ header.nav .wrap{ gap:8px; } .brand{ font-size:17px; } header.nav .btn{ padding:8px 12px; font-size:15px; } }
+  .cta{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .tag{ display:inline-block; font-size:12.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--good); margin-bottom:14px; }
+
+  /* hero */
+  .hero{ padding:68px 0 26px; text-align:center; }
+  .hero h1{ font-size:clamp(34px,6.2vw,58px); line-height:1.04; letter-spacing:-.03em; margin:0 auto 18px; max-width:820px; }
+  .hero h1 .g{ background:linear-gradient(90deg,var(--brand),var(--brand2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero p.sub{ font-size:clamp(17px,2.5vw,20px); color:var(--dim); max-width:700px; margin:0 auto 28px; }
+  .hero p.sub b{ color:var(--ink); font-weight:600; }
+  @media (max-width:560px){ .hero p.sub{ text-align:left; } }
+  .hero .pulse{ margin:20px auto 0; font-size:14.5px; color:var(--dim); max-width:640px; }
+  .hero .pulse b{ color:var(--ink); }
+
+  /* the one visual moment: a request turning into a change */
+  .convo{ margin:34px auto 56px; max-width:660px; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:22px; text-align:left; }
+  .convo .who{ font-size:12.5px; color:var(--dim); text-align:right; margin:0 4px 6px; }
+  .convo .bubble{ margin:0 0 0 auto; max-width:440px; background:var(--brand); color:#fff; border-radius:18px 18px 4px 18px; padding:12px 16px; font-size:16.5px; line-height:1.45; }
+  .convo .hand{ display:flex; align-items:center; gap:10px; margin:16px 4px 10px; font-size:12.5px; color:var(--dim); font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+  .convo .hand::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .term{ background:var(--term); border:1px solid var(--termline); border-radius:12px; padding:14px 16px; font-family:var(--mono); font-size:13.5px; line-height:1.55; color:#e6e9ef; }
+  .term .ln{ display:grid; grid-template-columns:7.2em 1fr; gap:10px; padding:3px 0; }
+  .term .k{ font-weight:700; white-space:nowrap; }
+  .term .k.chg{ color:#7aa2ff; } .term .k.add{ color:#3fb950; } .term .k.ok{ color:#3fb950; } .term .k.live{ color:#f2cc60; }
+  .term .v{ color:#d5dae3; min-width:0; }
+  .convo figcaption{ margin:12px 4px 0; font-size:13px; color:var(--dim); }
+  @media (max-width:420px){ .convo{ padding:16px; } .term{ font-size:12.5px; padding:12px; } .term .ln{ grid-template-columns:1fr; gap:0; padding:5px 0; } }
+  /* the owner's request is always shown; Claude's lines arrive one after another once the terminal itself is in view (the
+     script right after the figure adds .wait, then .play). A reader who asks for less motion, or a browser without
+     IntersectionObserver, sees every line at once */
+  @media (prefers-reduced-motion: no-preference){
+    .convo.wait .hand, .convo.wait .term .ln{ opacity:0; }
+    .convo.play .hand{ animation:fade .5s ease-out both .1s; }
+    .convo.play .term .ln{ animation:rise .5s ease-out both; animation-delay:calc(.45s + var(--i) * .55s); }
+  }
+  @keyframes rise{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
+  @keyframes fade{ from{ opacity:0; } to{ opacity:1; } }
+
+  /* sections */
+  section{ padding:56px 0; border-top:1px solid var(--line); }
+  section h2{ font-size:clamp(25px,4vw,34px); line-height:1.15; letter-spacing:-.02em; margin:0 0 10px; }
+  section .lede{ color:var(--dim); max-width:700px; margin:0 0 30px; font-size:17px; }
+  .eyebrow{ font-size:12.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-ink); margin:0 0 8px; }
+
+  /* how a change happens: a real sequence */
+  .flow{ list-style:none; margin:0; padding:0; counter-reset:f; display:grid; gap:0; max-width:820px; }
+  .flow li{ counter-increment:f; position:relative; padding:0 0 26px 58px; }
+  .flow li::before{ content:counter(f); position:absolute; left:0; top:0; width:38px; height:38px; border-radius:10px; background:var(--brand); color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .flow li:not(:last-child)::after{ content:""; position:absolute; left:18px; top:44px; bottom:6px; width:2px; background:var(--line); }
+  .flow h3{ margin:5px 0 4px; font-size:18px; letter-spacing:-.01em; }
+  .flow p{ margin:0; color:var(--dim); font-size:15.5px; max-width:680px; }
+  .flow code, .mono{ font-family:var(--mono); font-size:.9em; }
+  .flow .quote{ color:var(--ink); }
+  .desks{ margin-top:8px; background:var(--card); border:1px solid var(--line); border-left:4px solid var(--brand); border-radius:14px; padding:18px 20px; max-width:820px; }
+  .desks h3{ margin:0 0 6px; font-size:16.5px; }
+  .desks p{ margin:0; color:var(--dim); font-size:15px; }
+
+  /* one day */
+  .day{ display:grid; gap:28px; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:start; }
+  @media (max-width:820px){ .day{ grid-template-columns:1fr; } }
+  .tl{ list-style:none; margin:0; padding:0; border-left:2px solid var(--line); }
+  .tl li{ position:relative; display:grid; grid-template-columns:5.6em 1fr; gap:12px; padding:7px 0 7px 18px; font-size:15px; }
+  .tl li::before{ content:""; position:absolute; left:-6px; top:15px; width:10px; height:10px; border-radius:50%; background:var(--bg); border:2px solid var(--brand); }
+  .tl li.live::before{ background:var(--good); border-color:var(--good); }
+  .tl time{ font-family:var(--mono); font-size:13px; color:var(--dim); padding-top:2px; white-space:nowrap; }
+  .tl .held{ color:var(--warn); font-weight:600; }
+  .daynote{ font-size:14px; color:var(--dim); margin:12px 0 0; }
+  .daynote .dotlive{ display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--good); vertical-align:middle; margin-right:4px; }
+
+  /* the day-by-day chart: one series, so the title names it and there is no legend box */
+  .chart{ margin:0; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 18px 12px; }
+  .chart figcaption b{ display:block; font-size:16px; }
+  .chart figcaption span{ font-size:13.5px; color:var(--dim); }
+  .bars{ position:relative; display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); align-items:end; height:190px; margin:40px 0 0; border-bottom:1px solid var(--line); }
+  .bar{ position:relative; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; outline:none; cursor:default; }
+  .bar i{ display:block; width:min(22px,70%); height:calc(var(--v) / 36 * 100%); min-height:2px; background:var(--brand); border-radius:4px 4px 0 0; }
+  .bar.zero i{ background:var(--line); border-radius:0; }
+  .bar .cap{ font-size:12.5px; font-weight:700; color:var(--ink); margin-bottom:4px; }
+  .bar:hover i{ background:var(--brand2); }
+  .bar::after{ content:attr(data-tip); position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); font-size:12.5px; font-weight:600; padding:5px 9px; border-radius:7px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .12s; z-index:2; }
+  .bar:nth-child(-n+2)::after{ left:0; transform:none; }
+  .bar:nth-last-child(-n+2)::after{ left:auto; right:0; transform:none; }
+  .bar:hover::after{ opacity:1; }
+  .xaxis{ display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); text-align:center; font-size:12px; color:var(--dim); margin-top:6px; font-variant-numeric:tabular-nums; }
+  .chart details{ margin-top:10px; font-size:13.5px; color:var(--dim); }
+  .chart summary{ cursor:pointer; color:var(--accent-ink); font-weight:600; }
+  .chart table{ border-collapse:collapse; margin-top:8px; font-variant-numeric:tabular-nums; }
+  .chart th, .chart td{ text-align:left; padding:3px 14px 3px 0; border-bottom:1px solid var(--line); font-weight:400; }
+  .chart th{ color:var(--ink); font-weight:600; }
+
+  /* from the shop floor */
+  .wall{ display:grid; gap:16px; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); }
+  @media (max-width:420px){ .wall{ grid-template-columns:1fr; } }
+  .req{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; }
+  .req header{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  .req time{ font-family:var(--mono); font-size:12.5px; color:var(--dim); }
+  .chip{ font-size:12px; font-weight:600; color:var(--dim); border:1px solid var(--line); border-radius:999px; padding:2px 9px; white-space:nowrap; }
+  .req blockquote{ margin:0; font-size:16.5px; line-height:1.45; color:var(--ink); padding-left:14px; border-left:3px solid var(--brand); }
+  .req blockquote::before{ content:"\201C"; } .req blockquote::after{ content:"\201D"; }
+  .req .by{ font-size:12.5px; color:var(--dim); margin:-4px 0 0 17px; }
+  .req p{ margin:0; font-size:14.5px; color:var(--dim); }
+  .req p b{ color:var(--ink); font-weight:600; }
+  .req .when{ margin-top:auto; padding-top:4px; font-size:13px; font-weight:600; color:var(--good); }
+  .req .when.data{ color:var(--dim); }
+
+  /* the numbers */
+  .stats{ display:grid; gap:14px; grid-template-columns:minmax(0,1fr); }
+  @media (min-width:560px){ .stats{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (min-width:980px){ .stats{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
+  .stat{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .stat .val{ font-size:38px; font-weight:800; letter-spacing:-.02em; line-height:1.05; }
+  .stat .val .of{ font-size:16px; font-weight:600; color:var(--dim); letter-spacing:0; margin-left:6px; }
+  .stat .lab{ margin:8px 0 6px; font-size:15px; color:var(--ink); line-height:1.4; }
+  .stat .how{ margin:0; font-size:13px; color:var(--dim); line-height:1.45; }
+  .asof{ display:inline-block; font-size:13px; font-weight:600; color:var(--ink); background:color-mix(in srgb,var(--brand) 14%,transparent); border-radius:8px; padding:4px 10px; margin:0 0 22px; }
+  .counted{ margin-top:18px; border:1px solid var(--line); border-radius:12px; background:var(--card); padding:2px 18px; }
+  .counted summary{ cursor:pointer; font-weight:600; padding:13px 0; }
+  .counted ul{ margin:0 0 14px; padding-left:20px; color:var(--dim); font-size:14px; }
+  .counted li{ margin:4px 0; }
+  .numgrid{ display:grid; gap:20px; grid-template-columns:minmax(0,1fr); margin-top:20px; }
+
+  /* safety */
+  .charter{ margin:0 0 28px; padding:22px 24px; background:var(--panel); border:1px solid var(--line); border-radius:16px; max-width:820px; }
+  .charter blockquote{ margin:0 0 8px; font-size:clamp(22px,3.4vw,28px); font-weight:800; letter-spacing:-.02em; line-height:1.2; }
+  .charter p{ margin:0; color:var(--dim); font-size:15px; }
+  .rails{ display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+  @media (min-width:640px){ .rails{ grid-template-columns:repeat(2,minmax(0,1fr)); } .rail:last-child:nth-child(odd){ grid-column:1 / -1; } }
+  @media (min-width:980px){ .rails{ grid-template-columns:repeat(3,minmax(0,1fr)); } .rail:last-child:nth-child(odd){ grid-column:auto; } }
+  .rail{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  .rail h3{ margin:0 0 6px; font-size:17px; letter-spacing:-.01em; }
+  .rail p{ margin:0; color:var(--dim); font-size:14.5px; }
+  .rail p + p{ margin-top:8px; }
+  .rail .quote{ color:var(--ink); }
+
+  /* limits */
+  .limits{ background:var(--card); border:1px solid var(--line); border-left:4px solid var(--warn); border-radius:14px; padding:6px 22px; max-width:860px; }
+  .limits ul{ list-style:none; margin:0; padding:0; }
+  .limits li{ padding:14px 0; border-bottom:1px solid var(--line); color:var(--dim); font-size:15px; }
+  .limits li:last-child{ border-bottom:0; }
+  .limits li b{ color:var(--ink); display:block; font-size:16px; margin-bottom:2px; }
+
+  /* do it yourself */
+  .steps{ counter-reset:s; display:grid; gap:16px; grid-template-columns:minmax(0,1fr); }
+  @media (min-width:700px){ .steps{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+  .step{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; }
+  .step::before{ counter-increment:s; content:counter(s); display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:9px; background:var(--brand); color:#fff; font-weight:800; margin-bottom:12px; }
+  .step h3{ margin:0 0 6px; font-size:17px; }
+  .step p{ margin:0; color:var(--dim); font-size:14.5px; }
+  .step p + p{ margin-top:8px; }
+  .say{ display:block; margin-top:10px; font-size:14px; color:var(--ink); background:color-mix(in srgb,var(--brand) 12%,transparent); border-radius:10px 10px 10px 3px; padding:8px 12px; }
+  .note{ margin:20px 0 0; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 20px; color:var(--dim); font-size:15px; max-width:860px; }
+  .note b{ color:var(--ink); }
+  .indep{ margin:22px 0 0; font-size:14.5px; color:var(--dim); }
+  .indep b{ color:var(--ink); font-weight:600; }
+
+  /* faq */
+  .faq{ max-width:800px; }
+  .faq details{ border:1px solid var(--line); border-radius:12px; background:var(--card); padding:2px 18px; margin-bottom:10px; }
+  .faq summary{ cursor:pointer; font-weight:600; padding:14px 0; list-style:none; display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  .faq summary::-webkit-details-marker{ display:none; }
+  .faq summary::after{ content:"+"; flex:none; color:var(--dim); font-weight:700; }
+  .faq details[open] summary::after{ content:"\2013"; }
+  .faq p{ margin:0 0 14px; color:var(--dim); font-size:15px; }
+
+  .end{ text-align:center; }
+  .end .lede{ margin:0 auto 26px; }
+  footer{ padding:40px 0 60px; border-top:1px solid var(--line); color:var(--dim); font-size:14px; text-align:center; }
+  footer nav{ margin-top:10px; display:flex; flex-wrap:wrap; justify-content:center; gap:8px 18px; }
+  footer p{ margin:0 0 6px; }
+</style>
+<script>(function(){try{var t=localStorage.getItem('cpos_theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+<header class="nav"><div class="wrap">
+  <a class="brand" href="/"><span class="dot"></span>customPOS</a>
+  <span class="spacer"></span>
+  <button class="themetog" id="themeToggle" type="button" aria-label="Toggle light or dark theme" title="Light / dark">🌗</button>
+  <a class="navopt" href="single-pc.html">Single-PC POS</a>
+  <a class="btn primary" href="builder.html?guided">Build yours</a>
+</div></header>
+
+<main id="main">
+<div class="wrap">
+  <div class="hero">
+    <div class="tag">Built with Claude · <span class="nw">changed by asking</span></div>
+    <h1>Change your POS by <span class="g">saying what you want.</span></h1>
+    <p class="sub">A real two-store shop does it on its live system. <b>Ozark Cleaners</b>, a wet cleaner in Arkadelphia and Hot Springs, Arkansas, runs on point-of-sale software built with <b>Claude</b>, the AI made by Anthropic. When the owner, Brayden, hits something at the counter, he says what he wants in plain words. <b>Claude Code</b> changes the code, writes a test named after his request, and the change goes live only if every test passes.</p>
+    <div class="cta">
+      <a class="btn primary big" href="#how">See how a change happens</a>
+      <a class="btn big" href="#floor">Read the real requests</a>
+    </div>
+    <p class="pulse"><b>94 commits</b> to the live system since Oct 1, on <b>9 of the 12 days</b> — <b>13 on Oct 12</b> alone. <span class="nw">As of Oct 12, 2026.</span></p>
+  </div>
+
+  <figure class="convo" aria-labelledby="convo-cap">
+    <div class="who">Brayden, owner · Oct 9, 2026</div>
+    <p class="bubble">after clocking in or out the screen should return home, not back to the hub</p>
+    <div class="hand">Claude Code</div>
+    <div class="term">
+      <div class="ln" style="--i:0"><span class="k chg">~ changed</span><span class="v">after the clock, the tablet goes to Home; Cancel stays put</span></div>
+      <div class="ln" style="--i:1"><span class="k add">+ proof</span><span class="v">§692 AFTER THE CLOCK, HOME</span></div>
+      <div class="ln" style="--i:2"><span class="k ok">✓ suite</span><span class="v">the whole suite passed on the server: 1,209 proofs that day</span></div>
+      <div class="ln" style="--i:3"><span class="k live">● live</span><span class="v">that evening</span></div>
+    </div>
+    <figcaption id="convo-cap">A real request, word for word, and what happened to it. From the shop's change history, its desk log and its proof file.</figcaption>
+  </figure>
+  <script>(function(){
+    /* start Claude's lines when the terminal scrolls into view; without IntersectionObserver nothing is hidden */
+    var c=document.querySelector('.convo'), t=c&&c.querySelector('.term'); if(!t||!('IntersectionObserver' in window)) return;
+    c.classList.add('wait');
+    var io=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ c.classList.add('play'); c.classList.remove('wait'); io.disconnect(); } }); }, { threshold:0.6 });
+    io.observe(t);
+  })();</script>
+</div>
+
+<section id="how" aria-labelledby="how-h"><div class="wrap">
+  <p class="eyebrow">The pipeline</p>
+  <h2 id="how-h">How a change happens</h2>
+  <p class="lede">This is the real sequence the shop's Claude sessions follow, written down in its repositories. Each step is a rule, a file or a script you could point to.</p>
+  <ol class="flow">
+    <li><h3>He says what he wants, in his own words</h3><p>The owner types into the Claude session on the computer in front of him: the plant PC during the shop day, his home PC in the evening. His words are copied into the desk log, the commit message and the test's heading, typos and all.</p></li>
+    <li><h3>Claude searches the code instead of reading all of it</h3><p>Every one of the live system's 3,973 functions carries a keyword label from one shared list, so a search returns the function, its file and line, and a one-line purpose. Past work is found the same way, by searching the desks' logs.</p></li>
+    <li><h3>It changes the live system's code, in place</h3><p>The change goes into the existing functions on the live system's branch. Customer and money records are never changed by editing code; those go through the app's own functions, on its activity log.</p></li>
+    <li><h3>It writes a proof named after the request</h3><p>A new numbered section goes at the end of the test file, and its heading quotes the request, like <span class="quote">§695 — A DRAWER ALERT IS $1 OR MORE</span>, from the owner's "i don't want to get cash drawer alerts for any amount less than $1". Every proof needs a negative control: a check that shows it would catch the old behavior. Since the switch, 91 proof sections have been added (§616 to §706), and 43 of the 50 headings that group them quote the owner.</p></li>
+    <li><h3>It runs every proof, then commits</h3><p>The whole suite takes about 10 minutes and must end "0 failed"; on Oct 12 that was 1,226 passed. It also fails if the code's search index is out of date. The commit carries the request, the proof number and a Claude co-author line. Helper agents in a multi-agent run never push or deploy.</p></li>
+    <li><h3>The server checks it again, and undoes it if needed</h3><p>The deploy script refuses unless the change is committed and pushed. It runs the whole suite again on the server, in the live system's time zone, and refuses on any failure with nothing changed. Then it puts the build live; if the new build doesn't answer as itself within 30 seconds, the previous one goes back live by itself. The 5 newest previous builds are kept for a one-line rollback, and a last check confirms the public address is serving this exact build.</p></li>
+    <li><h3>It goes live at 7 PM Central, unless the owner says "now"</h3><p>The rule is that new builds go live after the shop day, and when the counter needs a fix right away, the owner says so. It is a rule the sessions follow, not something the script enforces, and many fixes since the switch have gone live during the day.</p></li>
+    <li><h3>It writes down what happened</h3><p>A new entry goes at the top of that desk's log: what the owner asked, what changed, which build is live, what was checked, and what is still waiting on him. It is committed, so the next session at any desk can find it.</p></li>
+  </ol>
+  <div class="desks">
+    <h3>One Claude session per shop computer</h3>
+    <p>Four desks: the owner's PC, the plant, the Hot Springs counter and the Arkadelphia counter. Each keeps a short file of facts about that machine, a log with the newest entry first, and a to-do folder. Finished to-dos are moved to a done folder, never deleted. All four have logged since the switch.</p>
+  </div>
+</div></section>
+
+<section id="day" aria-labelledby="day-h"><div class="wrap">
+  <p class="eyebrow">One day, start to finish</p>
+  <h2 id="day-h">One day in the shop's code: Oct&nbsp;12</h2>
+  <p class="lede">13 commits between 9:14 AM and 9:05 PM, most of them answers to something the owner ran into or asked for that day. 5 builds were named live in the desk logs.</p>
+  <div class="day">
+    <div>
+      <ol class="tl">
+        <li class="live"><time datetime="2026-10-12T09:14">9:14 AM</time><span>Leaving the Detail screen saves what was typed</span></li>
+        <li><time datetime="2026-10-12T09:41">9:41 AM</time><span>Drawer alerts, morning and evening, only at $1 or more</span></li>
+        <li class="live"><time datetime="2026-10-12T10:13">10:13 AM</time><span>A running tab of the drawer over/short, by month and store</span></li>
+        <li class="live"><time datetime="2026-10-12T10:53">10:53 AM</time><span>The down arrow picks the highlighted customer</span></li>
+        <li><time datetime="2026-10-12T12:09">12:09 PM</time><span>A month report for the owner, and a fix to it at 12:39</span></li>
+        <li><time datetime="2026-10-12T14:56">2:56 PM</time><span>A special-attention reminder at assembly no longer waits behind another box</span></li>
+        <li class="live"><time datetime="2026-10-12T15:44">3:44 PM</time><span>Leaving the screen stops a waiting card read</span></li>
+        <li><time datetime="2026-10-12T16:01">4:01 PM</time><span>One Happy Bag piece per bag: <span class="held">held at 4:09</span>, re-done by bag number at 4:58</span></li>
+        <li><time datetime="2026-10-12T18:14">6:14 PM</time><span>One tag, one piece</span></li>
+        <li class="live"><time datetime="2026-10-12T21:05">9:05 PM</time><span>The $1 rule reaches the morning count's on-screen flag and the theft watch</span></li>
+      </ol>
+      <p class="daynote"><span class="dotlive" aria-hidden="true"></span> A build named live in the desk logs. Each one carries every commit before it.</p>
+    </div>
+    <figure class="chart" aria-labelledby="chart-t">
+      <figcaption id="chart-t"><b>Commits to the live system, day by day</b><span>Oct 1–12, 2026 · 94 in all · the shop switched systems the night of Sept 30</span></figcaption>
+      <div class="bars" role="list">
+        <div class="bar" role="listitem" style="--v:36" data-tip="Oct 1 · 36" aria-label="Oct 1: 36 commits"><span class="cap">36</span><i></i></div>
+        <div class="bar" role="listitem" style="--v:2" data-tip="Oct 2 · 2" aria-label="Oct 2: 2 commits"><span class="cap">2</span><i></i></div>
+        <div class="bar zero" role="listitem" style="--v:0" data-tip="Oct 3 · none" aria-label="Oct 3: no commits"><i></i></div>
+        <div class="bar" role="listitem" style="--v:1" data-tip="Oct 4 · 1" aria-label="Oct 4: 1 commit"><span class="cap">1</span><i></i></div>
+        <div class="bar" role="listitem" style="--v:13" data-tip="Oct 5 · 13" aria-label="Oct 5: 13 commits"><span class="cap">13</span><i></i></div>
+        <div class="bar" role="listitem" style="--v:10" data-tip="Oct 6 · 10" aria-label="Oct 6: 10 commits"><span class="cap">10</span><i></i></div>
+        <div class="bar" role="listitem" style="--v:5" data-tip="Oct 7 · 5" aria-label="Oct 7: 5 commits"><span class="cap">5</span><i></i></div>
+        <div class="bar" role="listitem" style="--v:10" data-tip="Oct 8 · 10" aria-label="Oct 8: 10 commits"><span class="cap">10</span><i></i></div>
+        <div class="bar" role="listitem" style="--v:4" data-tip="Oct 9 · 4" aria-label="Oct 9: 4 commits"><span class="cap">4</span><i></i></div>
+        <div class="bar zero" role="listitem" style="--v:0" data-tip="Oct 10 · none" aria-label="Oct 10: no commits"><i></i></div>
+        <div class="bar zero" role="listitem" style="--v:0" data-tip="Oct 11 · none" aria-label="Oct 11: no commits"><i></i></div>
+        <div class="bar" role="listitem" style="--v:13" data-tip="Oct 12 · 13" aria-label="Oct 12: 13 commits"><span class="cap">13</span><i></i></div>
+      </div>
+      <div class="xaxis" aria-hidden="true"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span></div>
+      <details>
+        <summary>The same numbers as a table</summary>
+        <table>
+          <thead><tr><th scope="col">Day</th><th scope="col">Commits</th></tr></thead>
+          <tbody>
+            <tr><td>Oct 1</td><td>36</td></tr><tr><td>Oct 2</td><td>2</td></tr><tr><td>Oct 3</td><td>0</td></tr><tr><td>Oct 4</td><td>1</td></tr>
+            <tr><td>Oct 5</td><td>13</td></tr><tr><td>Oct 6</td><td>10</td></tr><tr><td>Oct 7</td><td>5</td></tr><tr><td>Oct 8</td><td>10</td></tr>
+            <tr><td>Oct 9</td><td>4</td></tr><tr><td>Oct 10</td><td>0</td></tr><tr><td>Oct 11</td><td>0</td></tr><tr><td>Oct 12</td><td>13</td></tr>
+          </tbody>
+        </table>
+      </details>
+    </figure>
+  </div>
+</div></section>
+
+<section id="floor" aria-labelledby="floor-h"><div class="wrap">
+  <p class="eyebrow">From the shop floor</p>
+  <h2 id="floor-h">What he asked for, and what changed</h2>
+  <p class="lede">Real requests, in the owner's own words, newest first. Where a customer's name or a tag number was in the request, it is shown in brackets.</p>
+  <div class="wall">
+    <article class="req">
+      <header><time datetime="2026-10-12T18:14">Oct 12 · 6:14 PM</time><span class="chip">Proof §704</span></header>
+      <blockquote>detail just let me scan [a tag] onto the order twice</blockquote>
+      <p><b>What changed.</b> A garment tag already on another piece of the same ticket is now refused at the tag box, which opens the piece that has it, and a ticket wearing one tag twice can't be saved. A check of the shop's data found no saved ticket carrying a tag twice, so any duplicate could only have been in an unsaved draft.</p>
+      <p class="when">Live that night</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-12T16:01">Oct 12 · 4:01 PM</time><span class="chip">Proof §702</span></header>
+      <blockquote>all orders quicked as a happy bag are supposed to add the happy bag to the first order's piece count... it seems like it is putting a happy bag on every order</blockquote>
+      <p><b>What changed.</b> The $0 Happy Bag piece now goes on once per physical bag, and only on orders rung in as a Happy Bag. The first version was written, then held back before it ever went live, because the records showed one "customer" was really a person and his company account. Claude asked the owner how bags are shared and re-did it by bag number.</p>
+      <p class="when">Live that night</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-12T15:44">Oct 12 · 3:44 PM</time><span class="chip">Proof §701</span></header>
+      <blockquote>i just froze the reader up trying to run [a customer]... it said 'free the reader'</blockquote>
+      <p><b>What changed.</b> The money was checked first: the customer had been charged once, and a stray read was approved and then voided by a guard already in place. The cause was leaving the pickup screen while the card reader was waiting. Now leaving the screen any way stops the waiting read at the terminal and logs it.</p>
+      <p class="when">Live that day</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-12T09:41">Oct 12 · 9:41 AM</time><span class="chip">Proofs §695 · §705</span></header>
+      <blockquote>i don't want to get cash drawer alerts for any amount less than $1</blockquote>
+      <p><b>What changed.</b> The drawer alerts for the morning count and the evening over/short now fire only at $1.00 or more, and the cents are still kept on the drawer and the slip. Two other places, the morning count's on-screen flag and the theft watch, Claude did not change on its own; it asked. When the owner said "apply the $1 rule too", those followed at 9:05 PM: under a dollar is still shown to the cent but not flagged, and the theft watch still sums every cent.</p>
+      <p class="when">Live that day, and the rest that night</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-12T09:14">Oct 12 · 9:14 AM</time><span class="chip">Proof §693</span></header>
+      <blockquote>there should be no way to get out of a detail screen that information has been put into without it saving</blockquote>
+      <p><b>What changed.</b> Leaving the Detail screen any way (a tab, Home, Back, another ticket, the next clerk's PIN) now saves what was typed. First, Claude checked every Detail visit since Oct 1: 115 ended without a save. Nearly all were finished minutes later by the same person; one was truly lost.</p>
+      <p class="when">Live that morning</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-12">Oct 12 · morning</time><span class="chip">A data change</span></header>
+      <blockquote>move the price up for sweater, comforter, and down comforter.. make the down $45, not 50</blockquote>
+      <p><b>What changed.</b> After Claude compared the prices Arkansas cleaners publish, and found the shop below a Little Rock cleaner on sweaters and comforters, he raised three: Sweater $6.75 to $7.25, Comforter $32 to $35, Down Comforter $36.75 to $45. They were set through the app's own price book from a temporary Claude station, with the owner as the deciding person, then read back. Pieces already detailed keep their price.</p>
+      <p class="when data">No code changed, so no proof: it was read back instead</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-09T19:02">Oct 9 · 7:02 PM</time><span class="chip">Proof §692</span></header>
+      <blockquote>after clocking in or out the screen should return home, not back to the hub</blockquote>
+      <p><b>What changed.</b> After clocking in or out, the tablet goes to the Home screen instead of back to whatever screen was under the clock. Cancel stays put. It is the request in the conversation at the top of this page.</p>
+      <p class="when">Live that evening</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-09">Oct 9 · evening</time><span class="chip">The shop's website</span></header>
+      <blockquote>our site needs a FAQ's page... · make sure our meta data is good and we are being found · i say yes, get all this right for me</blockquote>
+      <p><b>What changed.</b> Not only the POS: the shop's public website got a FAQ page with 14 answers (turnaround, Rush, pickup limits) drawn from the site's own facts and the owner's words, new page titles and descriptions, structured data for both stores, and a sitemap. Old backup copies, one still promising free pickup across five towns, were moved out of the public folder. The site was backed up first, and the answers were fact-checked by a 6-agent run.</p>
+      <p class="when">Live that evening, on his yes</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-08T15:30">Oct 8 · 3:30 PM</time><span class="chip">Proof §683</span></header>
+      <blockquote>i can't even ring in a wash and fold... we had a great process in v1 where i scanned the quick and just filled in the weight... i need to ring an order in</blockquote>
+      <p><b>What changed.</b> A Wash &amp; Fold quick ticket opens straight on its bag with the cursor in the weight box, the way the old system did. This repaired a dead end that a change made the day before had created.</p>
+      <p class="when">Live that afternoon</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-06T22:08">Oct 6 · 10:08 PM</time><span class="chip">Proof §656</span></header>
+      <blockquote>the law is that wherever they pick it up is what the tax is charged... an alert should popup if an arkadelphia customer goes into hot springs, and ask which store they will pickup at</blockquote>
+      <p><b>What changed.</b> When a customer from the other store is rung in, the screen asks "which store will they pick it up at?" The answer sets the order's store, its tax rate, and where its tickets send the clothes after assembly. Moving a finished order to the other store re-taxes it, unless money is already on it.</p>
+      <p class="when">Live that night</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-05T11:36">Oct 5 · 11:36 AM</time><span class="chip">Proof §642</span></header>
+      <blockquote>when we run a pickup on an order with a card on file, i need the card on file button to be bigger, like it's the main option to use... the other's are there still as backups</blockquote>
+      <p><b>What changed.</b> With a card on file, "charge the card on file" is a big full-width button at the top of the pickup, with Cash, Check, Card and Split below as backups. It uses the same single charge path: confirm, charged once.</p>
+      <p class="when">Live that day</p>
+    </article>
+    <article class="req">
+      <header><time datetime="2026-10-01T15:03">Oct 1 · 3:03 PM</time><span class="chip">Proof §624</span></header>
+      <blockquote>we got a double rush charge on [a customer], please fix it and make sure there are no more and it can't happen again</blockquote>
+      <p><b>What changed.</b> A percentage charge like Rush is now charged once: every Detail save keeps one, and the server refuses an order carrying it twice. Open tickets were re-priced. Refunds for orders already paid were left as the owner's decision, with the exact amounts listed for him.</p>
+      <p class="when">Live that afternoon</p>
+    </article>
+  </div>
+</div></section>
+
+<section id="numbers" aria-labelledby="numbers-h"><div class="wrap">
+  <p class="eyebrow">The record</p>
+  <h2 id="numbers-h">The numbers, measured</h2>
+  <p class="lede">Every figure below was counted from the shop's git history, its desk logs or its test file. They grow most days, so each one is dated.</p>
+  <p class="asof">As of Oct 12, 2026</p>
+  <div class="stats">
+    <div class="stat" data-stat="commits"><div class="val">94</div><p class="lab">commits to the live system's code since Oct 1</p><p class="how">96 counting from the switch itself, the night of Sept 30. 93 without the one merge.</p></div>
+    <div class="stat" data-stat="days"><div class="val">9<span class="of">of 12</span></div><p class="lab">days from Oct 1 to Oct 12 on which the live system's code changed</p><p class="how">The quiet days were Oct 3, 10 and 11. Counting the desks' log entries too, something was committed on 11 of the 12.</p></div>
+    <div class="stat" data-stat="builds"><div class="val">48+</div><p class="lab">builds put live since the switch</p><p class="how">Named live in the desk logs, Oct 1–12, on 9 different days. A floor: a few late builds are logged only as "deploying".</p></div>
+    <div class="stat" data-stat="proofs"><div class="val">1,226</div><p class="lab">proofs in the test suite: 1,226 passed, 0 failed on Oct 12</p><p class="how">26 at this system's first commit on Sept 16, 1,079 in the build that went live the morning of Oct 1, and 147 more since.</p></div>
+    <div class="stat" data-stat="owner-words"><div class="val">62<span class="of">of 93</span></div><p class="lab">changes since Oct 1 that quote the owner's own words in the commit message</p><p class="how">Each message was checked by eye. 19 name him right in the title, like <span class="nw">"(owner 10/12)"</span>, and 5 quote him there.</p></div>
+    <div class="stat" data-stat="refused"><div class="val">6+</div><p class="lab">deploys the server refused because the full test run failed</p><p class="how">Since the switch. Each time, the shop kept the build it was already running.</p></div>
+    <div class="stat" data-stat="coauthor"><div class="val">2,082<span class="of">of 2,128</span></div><p class="lab">commits in the whole history that carry a "Co-Authored-By: Claude" line</p><p class="how">From June 20 to Oct 12, 2026, on 89 different days. All 93 changes since Oct 1 carry it.</p></div>
+    <div class="stat" data-stat="labelled"><div class="val">3,973<span class="of">of 3,973</span></div><p class="lab">functions with a keyword label, so Claude can search the code instead of reading it</p><p class="how">Across 284 files. The app itself, not counting tools and tests, is about 41,000 lines.</p></div>
+  </div>
+  <details class="counted">
+    <summary>How each number was counted</summary>
+    <ul>
+      <li><b>Commits and days:</b> the git history of the live system's branch from Oct 1, midnight Central, grouped by day. "Since the switch" starts Sept 30 at 10:30 PM.</li>
+      <li><b>Builds put live:</b> every commit since the switch was searched for in the desk logs next to "live" or "deployed". Builds marked "never deployed", or live only inside a later build, were left out.</li>
+      <li><b>Proofs:</b> the Oct 12 run (1,226 of 1,226), confirmed by counting the test entries in the proof file. The earlier counts are in a commit title (Sept 16) and the plant desk's log (Oct 1).</li>
+      <li><b>The owner's words:</b> every non-merge commit message since Oct 1 was searched for a quote from the owner, and each match was read.</li>
+      <li><b>Refused deploys:</b> the refusals written in the plant and owner desk logs (Oct 1 twice, Oct 5 twice, Oct 6, Oct 12) and in a comment in the deploy script.</li>
+      <li><b>Co-author lines:</b> the "Co-Authored-By" trailer on every commit, in both the first system's history and the current one's.</li>
+      <li><b>Labelled functions:</b> the header of the generated code index; the test suite fails while that index is out of date.</li>
+    </ul>
+  </details>
+</div></section>
+
+<section id="safety" aria-labelledby="safety-h"><div class="wrap">
+  <p class="eyebrow">Guardrails</p>
+  <h2 id="safety-h">Why it's safe to let an AI touch a live business</h2>
+  <p class="lede">The rules below are written into the shop's repositories, and every Claude session starts from them. Several are also enforced by the software itself.</p>
+  <div class="charter">
+    <blockquote>&ldquo;The live shop wins, always.&rdquo;</blockquote>
+    <p>The prime directive of the safety charter the owner asked for on Sept 12, 2026 ("build the claude intro that keeps the AI safe working on a live production environment"). It also says a plain-English request is a spec, not a merge to live.</p>
+  </div>
+  <div class="rails">
+    <div class="rail"><h3>Money stays with the owner</h3><p>No refund, void or re-charge from a guess: the card log, the processor's funding and the POS records are checked first. On the shop's server, refunds, voids, write-offs and account credits are owner-only, and store credit, clock edits and staff changes need a PIN the server checks. Claude can't hold or type a PIN.</p><p>When the owner asked Claude to credit back repeat fees, Claude built it so its desk can only suggest each credit; he approves each one with his own PIN, and a proof shows a desk that tries to give credit itself is refused.</p></div>
+    <div class="rail"><h3>A proof on every change, and proof the proof works</h3><p>"A test that cannot fail is not evidence." Every new proof carries a negative control showing it would catch the old behavior. The phrase "negative control" appears on 914 lines of the 26,333-line proof file.</p></div>
+    <div class="rail"><h3>The server checks again, and rolls itself back</h3><p>Deploys go only through the deploy script. It refuses a stale, uncommitted or failing build, keeps the previous builds, and puts the last one back by itself if the new one doesn't answer. At least 6 deploys have been refused since the switch; the shop kept its running build each time.</p></div>
+    <div class="rail"><h3>Live at 7 PM, after the shop day</h3><p>Unless the owner says go. To be plain about it: this is a discipline, not a lock. Many fixes have gone live during the day while the counter waited on them, and the logs record his go for some, not every one. One went live by accident: on Oct 7 a build went live at 4:26 PM because of a time-zone trap.</p></div>
+    <div class="rail"><h3>Data fixes go through the app, on the record</h3><p>Customer and money data change only through the app's own functions, so every change lands on its activity log. Each fix is a script with a savepoint, a dry run, the change and a read-back. Claude's changes are recorded as Claude's desk, a temporary station revoked afterward, because the owner asked for exactly that: <span class="quote">"you should be using your own access that says claude did it, not brayden"</span>.</p></div>
+    <div class="rail"><h3>Nothing is deleted, and nobody is merged on a guess</h3><p>In the live system every change is a fact recorded once, never edited or erased. A record is retired, never hard-deleted, and a mistake is fixed by adding a new fact.</p><p>Customers who share a phone are never merged. On Oct 12 a merge the owner had approved, based on a wrong description, was stopped when the dry run showed a person and his company account. Nothing was merged.</p></div>
+    <div class="rail"><h3>Secrets never go in the code</h3><p>Keys live only on the server and are never printed, pasted, committed or typed. Card numbers never reach the POS; it holds the processor's tokens only.</p></div>
+    <div class="rail"><h3>Anything Claude would send to customers or the public waits for a yes</h3><p>Texts or e-mails Claude would send to customers, public web pages, DNS, scheduled tasks and lasting settings need the owner's explicit yes first. DNS changes are add-only.</p></div>
+    <div class="rail"><h3>The old system is one flip away</h3><p>The shop's first system is frozen and locked, so it can't charge, text or e-mail, but it still runs for looking up history, and the steps to flip back are written down.</p></div>
+  </div>
+</div></section>
+
+<section id="limits" aria-labelledby="limits-h"><div class="wrap">
+  <p class="eyebrow">Honest limits</p>
+  <h2 id="limits-h">What this doesn't do</h2>
+  <p class="lede">If you're deciding whether to work this way, these matter as much as the numbers.</p>
+  <div class="limits"><ul>
+    <li><b>A person still decides.</b>The owner approves money (refunds, and store credit with his own PIN), anything sent to customers, and anything public. The server refuses Claude's desk on privileged money actions.</li>
+    <li><b>It needs someone who will say what they want.</b>Almost every change since the switch began with the owner hitting something at the counter and saying so. Fixes Claude found on its own are the minority.</li>
+    <li><b>Claude makes mistakes, and the rails catch many but not all.</b>From the logs: on Oct 1 a "dry run" actually sent its changes; on Oct 5 a change sent wash-and-fold tickets to the wrong screen (fixed Oct 6); on Oct 7 a build went live at 4:26 PM instead of 7 PM; on Oct 12 a customer merge asked for on a wrong description was stopped only by the dry run.</li>
+    <li><b>The 7 PM rule is a discipline, not a lock.</b>Many fixes since the switch went live during the day, while the counter waited on them. The logs record the owner's go for some (Oct 1, Oct 7), not for every one.</li>
+    <li><b>Checking is slow, and sometimes noisy.</b>The suite takes about 10 minutes, then runs again on the server for every deploy. Timing proofs on the busy server have refused some deploys over noise, not faults.</li>
+    <li><b>The system the shop runs today isn't in customPOS yet.</b>Its plan is written, but none of its code is here. Today customPOS offers the builder and the Single-PC Edition, which is the shop's first system.</li>
+    <li><b>The shop's own code is private.</b>customPOS publishes only scrubbed exports, with no customer or staff data.</li>
+    <li><b>It isn't free.</b>AI usage costs money. The owner keeps large multi-agent runs for build work and hears the cost first; the Oct 10 Single-PC build, for example, used a 7-agent run of about 2.3 million tokens.</li>
+    <li><b>Staff run the counter.</b>Claude edits code and data only when asked, and never runs the shop by itself.</li>
+  </ul></div>
+</div></section>
+
+<section id="yours" aria-labelledby="yours-h"><div class="wrap">
+  <p class="eyebrow">Your turn</p>
+  <h2 id="yours-h">Do it with your own POS</h2>
+  <p class="lede">customPOS gives you the starting point: a point of sale you download and own, in a form Claude Code can read and change.</p>
+  <div class="steps">
+    <div class="step"><h3>Get a POS you own</h3><p>Build one for your trade in the builder: you download one HTML file and a CLAUDE.md guide written for it. Or download the Single-PC Edition, the shop's first system as one file.</p></div>
+    <div class="step"><h3>Open it in Claude Code</h3><p>Claude Code is Anthropic's coding tool. Put your POS file and its guide in a folder and open that folder in Claude Code on your own computer.</p></div>
+    <div class="step"><h3>Say what you want, the way you'd say it at the counter</h3><p>Ask Claude to show you what it changed and to test it, and keep a backup before you use the new version.</p><span class="say">"Make the card-on-file button the big one at pickup."</span></div>
+  </div>
+  <p class="note"><b>What you get today, honestly:</b> your POS is a single file, plus its CLAUDE.md guide. It doesn't come with the shop's 1,226-proof suite, its server checks or its automatic rollback; those belong to the shop's own multi-station system, which isn't in customPOS yet. So start small, keep backups, and try each change before your counter depends on it.</p>
+  <div class="cta" style="justify-content:flex-start;margin-top:22px">
+    <a class="btn primary" href="builder.html?guided">Build my POS — guided setup</a>
+    <a class="btn" href="single-pc.html">See the Single-PC Edition</a>
+    <a class="btn" href="https://claude.com/claude-code" rel="noopener">About Claude Code</a>
+  </div>
+  <p class="indep"><b>Claude is made by Anthropic. customPOS is independent and not affiliated with Anthropic.</b></p>
+</div></section>
+
+<section id="faq" aria-labelledby="faq-h"><div class="wrap">
+  <h2 id="faq-h">Questions, answered plainly</h2>
+  <div class="faq">
+    <details open><summary>Is a real shop actually running on this?</summary><p>Yes. Ozark Cleaners, a two-store wet cleaner in Arkadelphia and Hot Springs, Arkansas, has run on its own software since summer 2026; the first commit was on June 20. It moved to its current multi-computer system on September 30, and that system's code changed on 9 of the 12 days that followed.</p></details>
+    <details><summary>Does Claude run the shop?</summary><p>No. Staff run the counter. Claude changes code and data only when someone asks, and a person decides anything that involves money, customers or the public.</p></details>
+    <details><summary>Can Claude move money?</summary><p>No. Refunds, voids and credits are the owner's. On the shop's server those actions are owner-only, privileged ones need a PIN that the server checks, and Claude cannot hold or type a PIN. Claude can suggest a store credit; the owner approves it with his own PIN.</p></details>
+    <details><summary>What happens if a change breaks something?</summary><p>Most problems are caught before they go live: every change gets a proof, the whole suite runs on the shop's computer and again on the server, and the deploy is refused on any failure. If a new build does not answer within 30 seconds, the previous build goes back live by itself. Some mistakes still get through and are found at the counter; the fix then takes the same path.</p></details>
+    <details><summary>Do I need to know how to code?</summary><p>The shop's owner describes what he wants in plain words, and Claude Code writes the code and the tests. You do need to say clearly what you want, check the result before you rely on it, and keep backups.</p></details>
+    <details><summary>Is the shop's code public?</summary><p>Not all of it. The shop's own repositories are private. customPOS publishes scrubbed exports with no customer or staff data: the Single-PC Edition is the shop's first system as one file. The multi-station system the shop runs today is not in customPOS yet.</p></details>
+    <details><summary>What does the AI cost?</summary><p>customPOS is free. Claude is not: AI usage is paid to Anthropic under its own pricing. The shop keeps the cost down by having each desk's Claude work alone by default and saving large multi-agent runs for build work, with the cost stated first.</p></details>
+    <details><summary>Is customPOS part of Anthropic?</summary><p>No. Claude is made by Anthropic. customPOS is independent and not affiliated with Anthropic.</p></details>
+  </div>
+</div></section>
+
+<section class="end"><div class="wrap">
+  <h2>Start with a POS you own</h2>
+  <p class="lede">Build it in a few minutes, download it, and change it by saying what you want.</p>
+  <div class="cta"><a class="btn primary big" href="builder.html?guided">Build my POS — guided setup</a><a class="btn big" href="single-pc.html">Run the Single-PC Edition</a></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <p>customPOS — software is free, knowledge is free, and this code is yours. MIT-licensed.</p>
+  <p>Claude is made by Anthropic. customPOS is independent and not affiliated with Anthropic.</p>
+  <nav aria-label="Site">
+    <a href="/">Home</a>
+    <a href="builder.html?guided">Build your POS</a>
+    <a href="pos.html">Try the demo</a>
+    <a href="single-pc.html">Single-PC POS</a>
+    <a href="built-with-claude.html">Built with Claude</a>
+    <a href="dry-cleaner.html">Dry cleaner POS</a>
+    <a href="https://github.com/TiredofSleep/Custom-POS">★ Star on GitHub</a>
+  </nav>
+</div></footer>
+<script>(function(){
+  var btn=document.getElementById('themeToggle'); if(!btn) return;
+  var mq=window.matchMedia&&matchMedia('(prefers-color-scheme: light)');
+  function cur(){ return document.documentElement.getAttribute('data-theme') || (mq&&mq.matches?'light':'dark'); }
+  function paint(){ var d=cur()==='dark'; btn.textContent=d?'☀️':'🌙'; btn.setAttribute('aria-label', d?'Switch to light theme':'Switch to dark theme'); btn.setAttribute('title', d?'Switch to light':'Switch to dark'); }
+  paint();
+  btn.addEventListener('click', function(){ var next=cur()==='dark'?'light':'dark'; document.documentElement.setAttribute('data-theme',next); try{ localStorage.setItem('cpos_theme',next); }catch(e){} paint(); });
+  try{ mq.addEventListener('change', function(){ var s=null; try{ s=localStorage.getItem('cpos_theme'); }catch(e){} if(!s) paint(); }); }catch(e){}
+})();</script>
+</body>
+</html>

@@ -30,12 +30,12 @@
 <meta name="twitter:image" content="https://custompos.org/og.png">
 <meta name="twitter:image:alt" content="customPOS — the free POS builder for any business">
 <style>
-  :root{ --brand:#1f6feb; --bg:#0f1115; --panel:#161922; --card:#1b1f28; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; --good:#2ea043; --warn:#e3893c; }
+  :root{ --brand:#1f6feb; --bg:#0f1115; --panel:#161922; --card:#1b1f28; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; --good:#2ea043; --warn:#e3893c; --focus:#7aa2ff; }
   /* auto-follow the OS, unless the visitor picks a theme (data-theme wins by specificity) */
-  @media (prefers-color-scheme: light){ :root{ --bg:#f6f8fb; --panel:#fff; --card:#fff; --line:#e3e8ef; --ink:#12161d; --dim:#5b6675; } }
-  :root[data-theme="light"]{ --bg:#f6f8fb; --panel:#fff; --card:#fff; --line:#e3e8ef; --ink:#12161d; --dim:#5b6675; }
-  :root[data-theme="dark"]{ --bg:#0f1115; --panel:#161922; --card:#1b1f28; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; }
-  .themetog{ display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; padding:0; font-size:17px; line-height:1; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); cursor:pointer; }
+  @media (prefers-color-scheme: light){ :root{ --bg:#f6f8fb; --panel:#fff; --card:#fff; --line:#e3e8ef; --ink:#12161d; --dim:#5b6675; --good:#1a7f37; --focus:#1f6feb; } }
+  :root[data-theme="light"]{ --bg:#f6f8fb; --panel:#fff; --card:#fff; --line:#e3e8ef; --ink:#12161d; --dim:#5b6675; --good:#1a7f37; --focus:#1f6feb; }
+  :root[data-theme="dark"]{ --bg:#0f1115; --panel:#161922; --card:#1b1f28; --line:#272b33; --ink:#e6e9ef; --dim:#9aa4b2; --good:#2ea043; --focus:#7aa2ff; }
+  .themetog{ display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; padding:0; font-size:17px; line-height:1; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); cursor:pointer; flex:none; }
   .themetog:hover{ border-color:var(--brand); }
   *{ box-sizing:border-box; }
   body{ margin:0; font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); }
@@ -89,6 +89,34 @@
   .realone p{ margin:0 0 16px; color:var(--dim); font-size:15px; max-width:720px; }
   .realone .cta{ justify-content:flex-start; }
   @media (max-width:560px){ header.nav .navopt{ display:none; } }
+  @media (max-width:760px){ header.nav .navopt2{ display:none; } }
+  /* a phone: one line of nav (the hero right below carries the demo link) */
+  header.nav .brand, header.nav a{ white-space:nowrap; }
+  @media (max-width:420px){ header.nav .wrap{ gap:8px; } header.nav .navdemo{ display:none; } .brand{ font-size:17px; } header.nav .btn{ padding:9px 13px; font-size:15px; } }
+  a:focus-visible, button:focus-visible, summary:focus-visible{ outline:3px solid var(--focus); outline-offset:3px; border-radius:6px; }
+  /* the Claude spotlight: a live shop changes its POS by asking (the full story is built-with-claude.html) */
+  .spot{ border-top:0; padding:6px 0 56px; }
+  .spot-in{ position:relative; background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:32px 30px 26px; overflow:hidden; }
+  .spot-in::before{ content:""; position:absolute; left:0; right:0; top:0; height:4px; background:linear-gradient(90deg,var(--brand),#7aa2ff); }
+  .spot h2{ margin:0 0 10px; max-width:760px; line-height:1.15; }
+  .spot .lede{ margin:0 0 24px; }
+  .spot-ex{ display:grid; gap:14px; grid-template-columns:minmax(0,1fr); margin:0 0 26px; }
+  @media (min-width:740px){ .spot-ex{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+  /* a phone shows one request (the page has all twelve), so the band stays about one screen */
+  @media (max-width:559px){ .spot-ex figure:nth-child(n+2){ display:none; } }
+  .spot-ex figure{ margin:0; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:12px; }
+  .spot-ex blockquote{ margin:0; background:var(--brand); color:#fff; border-radius:14px 14px 14px 4px; padding:10px 13px; font-size:15px; line-height:1.45; }
+  .spot-ex blockquote::before{ content:"\201C"; } .spot-ex blockquote::after{ content:"\201D"; }
+  .spot-ex figcaption{ font-size:14px; color:var(--dim); line-height:1.5; }
+  .spot-ex figcaption b{ display:block; color:var(--ink); font-size:12.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; margin-bottom:3px; }
+  .spot-nums{ display:grid; gap:14px 18px; grid-template-columns:repeat(2,minmax(0,1fr)); margin:0 0 22px; }
+  @media (min-width:900px){ .spot-nums{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
+  .spot-nums div{ border-left:3px solid var(--brand); padding:2px 0 2px 12px; }
+  .spot-nums dt{ font-size:28px; font-weight:800; letter-spacing:-.02em; line-height:1.1; }
+  .spot-nums dd{ margin:3px 0 0; font-size:13.5px; color:var(--dim); line-height:1.4; }
+  .spot .more{ display:flex; flex-wrap:wrap; gap:12px 18px; align-items:center; margin:0; font-size:14px; color:var(--dim); }
+  .spot .more .btn{ font-size:16px; }
+  @media (max-width:420px){ .spot-in{ padding:26px 18px 20px; } }
 </style>
 <script type="application/ld+json">
 {
@@ -135,8 +163,9 @@
   <span class="brand"><span class="dot"></span>customPOS</span>
   <span class="spacer"></span>
   <button class="themetog" id="themeToggle" type="button" aria-label="Toggle light or dark theme" title="Light / dark">🌗</button>
+  <a class="navopt2" href="built-with-claude.html">Built with Claude</a>
   <a class="navopt" href="single-pc.html">Single-PC POS</a>
-  <a href="pos.html">Live demo</a>
+  <a class="navdemo" href="pos.html">Live demo</a>
   <a class="btn primary" href="builder.html?guided">Build yours</a>
 </div></header>
 
@@ -154,6 +183,26 @@
     </div>
   </div>
 </div>
+
+<section class="spot" id="built-with-claude" aria-labelledby="spot-h"><div class="wrap">
+  <div class="spot-in">
+    <div class="tag">Built with Claude · <span style="white-space:nowrap">changed by asking</span></div>
+    <h2 id="spot-h">Change your POS by saying what you want. A real shop does, live.</h2>
+    <p class="lede">The shop customPOS grew out of, Ozark Cleaners (two stores in Arkansas), runs on software built with Claude, the AI made by Anthropic. Its owner says what he needs in plain words; Claude Code changes the live system, writes a test named after the request, and the change goes live only if every test passes.</p>
+    <div class="spot-ex">
+      <figure><blockquote>i don't want to get cash drawer alerts for any amount less than $1</blockquote><figcaption><b>Oct 12</b>Drawer alerts now fire only at $1.00 or more. The cents still show on the drawer and the slip.</figcaption></figure>
+      <figure><blockquote>an alert should popup if an arkadelphia customer goes into hot springs, and ask which store they will pickup at</blockquote><figcaption><b>Oct 6</b>Ringing in the other store's customer now asks where they'll pick up, and the order takes that store's tax rate.</figcaption></figure>
+      <figure><blockquote>we got a double rush charge on [a customer], please fix it and make sure there are no more and it can't happen again</blockquote><figcaption><b>Oct 1</b>Rush is charged once, and the server refuses an order carrying it twice. Refunds stayed the owner's decision.</figcaption></figure>
+    </div>
+    <dl class="spot-nums">
+      <div data-stat="commits"><dt>94</dt><dd>commits to the live system since Oct&nbsp;1</dd></div>
+      <div data-stat="days"><dt>9 of 12</dt><dd>days with a code change, <span style="white-space:nowrap">Oct 1–12</span></dd></div>
+      <div data-stat="proofs"><dt>1,226</dt><dd>proofs: 1,226 passed, 0 failed</dd></div>
+      <div data-stat="builds"><dt>48+</dt><dd>builds put live, <span style="white-space:nowrap">Oct 1–12</span></dd></div>
+    </dl>
+    <p class="more"><a class="btn primary" href="built-with-claude.html">How a change happens, and why it's safe</a><span>Numbers as of Oct 12, 2026.</span></p>
+  </div>
+</div></section>
 
 <section><div class="wrap">
   <h2>How it works</h2>
@@ -271,12 +320,14 @@
     <a href="builder.html?guided">Build your POS</a>
     <a href="pos.html">Try the demo</a>
     <a href="single-pc.html">Single-PC POS (one file)</a>
+    <a href="built-with-claude.html">Built with Claude</a>
     <a href="https://github.com/TiredofSleep/Custom-POS/blob/main/docs/TEMPLATES.md">Template gallery</a>
     <a href="https://github.com/TiredofSleep/Custom-POS/blob/main/CONTRIBUTING.md">Contribute</a>
     <a href="https://github.com/TiredofSleep/Custom-POS#readme">Docs</a>
     <a href="https://github.com/TiredofSleep/Custom-POS/blob/main/LICENSE">License (MIT)</a>
     <a href="https://github.com/TiredofSleep/Custom-POS">★ Star on GitHub</a>
   </nav>
+  <p style="margin-top:10px">Claude is made by Anthropic. customPOS is independent and not affiliated with Anthropic.</p>
   <p style="margin-top:10px;opacity:.75">A community project — every trade template is a starting point someone shared. <a href="https://github.com/TiredofSleep/Custom-POS/blob/main/docs/TEMPLATES.md#contribute-a-template">Add yours →</a></p>
 </div></footer>
 <script>(function(){
