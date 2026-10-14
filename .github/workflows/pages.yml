@@ -45,6 +45,8 @@ jobs:
           cp press/07-single-pc.png _site/press/
           # SEO assets: crawler rules, sitemap, and the social-share image
           cp robots.txt sitemap.xml og.png _site/
+          # IndexNow key (public by design): lets Bing and other IndexNow engines be told the moment a page changes (tools/indexnow.js)
+          cp 0d8cbe071e79fcbb9507176cfb254f5a.txt _site/
           # land on the marketing page by default
           cp index.html _site/index.html
           # custom domain (apex): serve the site at custompos.org
