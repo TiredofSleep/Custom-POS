@@ -168,7 +168,7 @@ change it by asking an AI coding assistant; an optional self-hosted hub links se
 **Not yet eligible, and it must be written by you.** Their rules (checked 2026-10-14, awesome-selfhosted-data CONTRIBUTING.md):
 the software's **first release must be more than 4 months old** (the count starts at a GitHub release — customPOS has none yet), and
 **machine- or LLM-generated contributions are not allowed**: the entry and the PR text must be written by a person, with an attestation.
-So: cut a first GitHub release when you're ready (that starts the clock), and about 4 months later add
+**The first release, v0.39.0, was cut on 2026-10-14**, so it becomes eligible after **2027-02-14**. Then add
 `software/custompos.yml` to awesome-selfhosted/awesome-selfhosted-data yourself, in your own words. Claude should not draft it.
 
 ---
