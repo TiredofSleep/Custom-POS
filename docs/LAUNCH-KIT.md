@@ -164,13 +164,12 @@ self-contained HTML file on a single PC — no subscription, no account, works o
 change it by asking an AI coding assistant; an optional self-hosted hub links several stations.
 ```
 
-### awesome-selfhosted (a merged PR here is a trusted, permanent backlink)
-Repo: github.com/awesome-selfhosted/awesome-selfhosted — add under **Point of Sale / ERP**. Entry line:
-```
-- [customPOS](https://custompos.org) - Build a point-of-sale from a few questions, or run a real shop's Single-PC Edition, as one self-contained HTML file; optional zero-dependency sync hub for multiple stations. ([Source Code](https://github.com/TiredofSleep/Custom-POS)) `MIT` `HTML/Nodejs`
-```
-> **I can open this PR for you** from a fork of your account — say the word and I'll prepare it and hand you the link to review
-> before it's submitted. (It posts under your GitHub identity, so it goes only on your go.)
+### awesome-selfhosted (a trusted, permanent backlink — later, and in your own words)
+**Not yet eligible, and it must be written by you.** Their rules (checked 2026-10-14, awesome-selfhosted-data CONTRIBUTING.md):
+the software's **first release must be more than 4 months old** (the count starts at a GitHub release — customPOS has none yet), and
+**machine- or LLM-generated contributions are not allowed**: the entry and the PR text must be written by a person, with an attestation.
+So: cut a first GitHub release when you're ready (that starts the clock), and about 4 months later add
+`software/custompos.yml` to awesome-selfhosted/awesome-selfhosted-data yourself, in your own words. Claude should not draft it.
 
 ---
 
