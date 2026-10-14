@@ -1,146 +1,189 @@
 # Launch kit — put customPOS out there (copy-paste, in order)
 
 > This is the *do-it-now* companion to [DISCOVERABILITY.md](DISCOVERABILITY.md) (which is the why/strategy).
-> Everything below is ready to paste. Two product screenshots are in `press/` — **attach them to every post**,
-> they roughly double how a launch performs: `press/02-dashboard.png` (the money dashboard) and
-> `press/01-register.png` (the register).
+> **Refreshed 2026-10-14** around the three things that are new and true: the **Single-PC Edition** (the real POS as one free
+> file), **a live shop changed by asking Claude** ([custompos.org/built-with-claude.html](https://custompos.org/built-with-claude.html)),
+> and the honest numbers behind both. Every number below is the one on the live site, dated **as of Oct 12, 2026** — keep it that
+> way: a post that overclaims gets picked apart in the first hour and the real-shop story is the whole advantage.
 
-## ⏱️ The next 20 minutes — four things, in order
-1. **GitHub “About” (2 min).** Repo page → the ⚙️ next to **About** → paste the description + topics from §1 below.
-2. **Google Search Console (2 min).** [search.google.com/search-console](https://search.google.com/search-console) →
-   `custompos.org` → **Sitemaps** → enter `sitemap.xml` → Submit. Then **URL Inspection** → paste
-   `https://custompos.org/` → **Request indexing**.
-3. **Post to ONE launch venue (10 min).** Start with **r/selfhosted** *or* **Show HN** (§2). Attach a screenshot.
-   Then stay for a couple of hours and answer every reply — that’s what keeps a post alive.
-4. **AlternativeTo (5 min).** Add customPOS as an alternative to SPOT / Square / Toast (§3).
+**Attach a screenshot to every post that allows one** (they roughly double how a launch performs):
+- `press/08-built-with-claude.png` — three real requests in the owner's words, what changed, and the numbers. Best for the Claude angle.
+- `press/07-single-pc.png` — the Single-PC Edition's home screen. Best for the "free, one file" angle.
+- `press/02-dashboard.png` — the money dashboard. Best for small-business readers.
 
-Do the other venues over the following days — one at a time, so you can answer comments while they’re warm.
+## ⏱️ Where things stand, and the next step
+- ✅ **Search engines:** custompos.org is verified in **Google Search Console** and **Bing Webmaster Tools**; sitemap submitted; the
+  home, builder, trade, Single-PC and Built-with-Claude pages were sent for indexing (Oct 10–13). Nothing to do here.
+- ✅ **GitHub "About":** description, website and 20 topics are set.
+- 👉 **Next: post to ONE venue** (§2), attach a screenshot, then stay a couple of hours and answer every reply. Best first picks:
+  **Show HN** (the Claude angle, Tue–Thu ~8–10 AM US Eastern) or **r/selfhosted** (the one-file angle).
+- Then one venue every day or two, and the two directory listings (§3), which are permanent backlinks.
 
 ---
 
-## §1 — GitHub repo “About” (paste-ready)
-**Description:**
-```
-Build your own point-of-sale, download one self-contained file, and own the code. Free, open-source, offline-first, no subscription. Generalized from a real in-production wet-cleaner POS.
-```
-**Website:** `https://custompos.org`
-
-**Topics** (add each as a tag):
-```
-pos  point-of-sale  pos-system  open-source  self-hosted  offline-first  small-business  retail  restaurant-pos  dry-cleaner  no-lock-in  single-file  vanilla-javascript  local-first  pos-builder
-```
+## §1 — The facts every post may use (and nothing else)
+- The owner runs a **two-store wet cleaner** in Arkansas (Ozark Cleaners). The shop has run on its own POS since **June 2026**.
+- The POS is **built and changed with Claude Code**: the owner says what he needs in plain words; Claude changes the code, writes a
+  test named after the request, and the change goes live only if every test passes.
+- **Oct 1–12:** 94 changes to the live system, on 9 of those 12 days (13 on Oct 12 alone); 48+ builds put live; the shop's test suite
+  stands at **1,226 tests, all passing**. (As of Oct 12, 2026.)
+- Money stays the owner's decision (no refunds or charges by the AI), every data fix lands on an activity log, secrets never in code,
+  and a deploy is refused if any test fails.
+- customPOS is **free and MIT**. The **builder** makes a POS from a few questions; the **Single-PC Edition** is the shop's own first
+  system as one HTML file (~2 MB) that runs on one computer with zero network requests. ~100 automated test suites in the repo.
+- Next: a **multi-station edition** built from the shop's newer, event-sourced system, brought in as modules — the first module set
+  is for **auctions** (lots, consignors, bidders, settlement; the fee math is already in the repo).
+- customPOS is **independent and not affiliated with Anthropic**.
 
 ---
 
 ## §2 — The launch posts (final, paste-ready)
-Your one unfakeable edge: **it’s the real system running your two stores.** Lead with that every time.
+Your one unfakeable edge: **it's the real system running your two stores, changed by asking.** Lead with that every time.
 
 ### Show HN (news.ycombinator.com/submit)
-**Title** (HN allows no image in the post; put the site as the URL):
+**Title** (pick one; HN rewards plain titles):
 ```
-Show HN: customPOS – build a point-of-sale, download one file, own the code
+Show HN: How my shop changes its live POS by asking Claude Code (and a free version)
 ```
-**URL:** `https://custompos.org`
-**First comment** (post this yourself right after submitting):
 ```
-I run a two-location wet cleaner and got tired of renting our point-of-sale — a monthly
-subscription, our customer data on someone else's server, and no way to change how it works.
-So I built our own, then generalized it into a free builder anyone can use.
+Show HN: customPOS – a free POS builder from a shop that edits its own POS with Claude Code
+```
+**URL:** `https://custompos.org/built-with-claude.html`
+**First comment** (post it yourself right after submitting):
+```
+I run a two-store wet cleaner in Arkansas. Since June our point-of-sale has been our own
+software, built with Claude Code. When something bugs me at the counter, I say it in plain
+words; Claude changes the code, writes a test named after what I asked, and the change only
+goes live if every test passes.
 
-You answer a few questions about your business (restaurant, retail, salon, dry cleaner,
-repair shop, jewelry…) and it generates a single self-contained HTML file that IS your POS.
-No install, no account, no backend required — it runs in a browser and stores data locally.
-If you want several stations to share data, there's an optional zero-dependency sync hub.
-MIT-licensed; you own the code and can change it (I use Claude Code to customize ours).
+Some real ones from the last two weeks: "after clocking in or out the screen should return
+home", "i don't want to get cash drawer alerts for any amount less than $1", "detail just let
+me scan [a tag] onto the order twice". Each became a change plus a test the same day.
 
-It's the actual system running our shop — intake, garment tracking, assembly, house accounts,
-"text when ready," a cash drawer, payroll, an owner dashboard that goes all the way to net
-profit — not a mock-up. ~100 automated test suites, and the whole sync/backup layer is built
-around lessons learned running it live for real money.
+The numbers, as of Oct 12: 94 changes to the live system in 12 days, on 9 of those days;
+1,226 tests, all passing; the deploy refuses anything that fails one. Money stays my call –
+the AI never refunds or charges – and every data fix lands on an activity log.
+
+customPOS is the free, MIT version of that idea: a builder that makes a POS from a few
+questions, plus our shop's own first system as a single HTML file you can run on one PC
+(no server, no account, no network requests). The page linked above walks through exactly
+how a change happens and why we think it's safe to let an AI touch a live business.
 
 Site: https://custompos.org  ·  Code: https://github.com/TiredofSleep/Custom-POS
-Happy to answer anything about the architecture or how it holds up on a real shop floor.
+Not affiliated with Anthropic – just a shop owner who uses their tools. Happy to answer anything.
 ```
-*(Best window: Tue–Thu, ~8–10am US Eastern.)*
 
 ### r/selfhosted
 **Title:**
 ```
-I generalized the POS that runs my dry cleaner into a free, self-hostable builder — one file, own your data
+The POS that ran my wet cleaner, now free as one HTML file you run on your own PC – no server, no account
 ```
-**Body:** (attach `press/02-dashboard.png`)
+**Body:** (attach `press/07-single-pc.png`)
 ```
-After years of paying a subscription for point-of-sale software that kept our customer data
-on someone else's server, I built our own for our two-store wet cleaner — then turned it into
-a free builder anyone can use.
+I run a two-store wet cleaner. Our first in-house point-of-sale was one big HTML file, and it
+ran the shop from June to September 2026. I've now published it as a free "Single-PC Edition":
 
-- One self-contained HTML file is your whole POS. Runs in a browser, stores data locally, works offline.
-- Optional sync hub (one small Node file, zero dependencies) so multiple stations share live data.
-  Self-host it anywhere — a $5 droplet runs ours.
-- MIT-licensed. No subscription, no account, no lock-in. Your code, your machine, your data.
-- Not a toy: it's the real system running our shop, ~100 automated test suites, encrypted
-  self-verifying backups, an owner dashboard down to net profit.
+- One self-contained HTML file. Download it, double-click, run a one-counter shop on one PC.
+- Zero network requests – the data lives in your browser on your machine. (A test proves it:
+  served over http it makes exactly one request, for itself.)
+- Cash, check, and cards on your own terminal (you type the approval). Backups to a file.
+- MIT. No subscription, no account, no telemetry.
 
-Builder + templates: https://custompos.org — Code: https://github.com/TiredofSleep/Custom-POS
-Would love feedback from folks who self-host business tools — especially on the sync/backup side.
+There's also a builder that makes a POS for other kinds of shops from a few questions, and an
+optional zero-dependency sync hub if you want several stations. The shop itself has moved to a
+newer multi-station system that I'm bringing into the project as modules.
+
+Single-PC Edition: https://custompos.org/single-pc.html
+Code: https://github.com/TiredofSleep/Custom-POS
+Honest limits are on the page (no one-click restore yet, texting and card readers need a hub).
+Feedback from people who self-host business tools is very welcome.
 ```
 
-### r/smallbusiness (lead with money/ownership, less technical)
+### r/ClaudeAI (the "how we use it" angle)
 **Title:**
 ```
-Tired of paying monthly for POS software, I built a free one you download and own — sharing it
+I let Claude Code change the POS of my real two-store shop every day – here's the process that keeps it safe
+```
+**Body:** (attach `press/08-built-with-claude.png`)
+```
+I own a wet cleaner with two stores. Our point-of-sale is our own software, built and changed
+with Claude Code – one Claude session per shop computer, each with its own notes and log.
+
+How a change happens: I say what I want in plain words. Claude finds the code (every function
+carries a searchable label), changes it, writes a test named after my request – usually with a check
+that the test really fails without the fix – runs all 1,226 tests, and deploys only if they all pass.
+The previous build is kept for rollback. Money (refunds, charges) stays my decision, every data
+fix is written to an activity log as "Claude", and secrets never go in the code.
+
+Oct 1–12: 94 changes to the live system, on 9 of 12 days. Not every day is smooth, and the page is honest
+about the limits.
+
+I wrote it all up, with the real requests in my own words:
+https://custompos.org/built-with-claude.html
+The free, open-source version is at https://custompos.org (not affiliated with Anthropic).
+```
+
+### r/smallbusiness (lead with money and ownership, less technical)
+**Title:**
+```
+I stopped renting my POS: my shop's own system, free for other small businesses
 ```
 **Body:** (attach `press/02-dashboard.png`)
 ```
-I own a dry cleaner and the point-of-sale subscriptions never stop — and you never actually own
-anything. I built our own and made it free for other small businesses. You pick your type of shop,
-download one file, and it's yours — no monthly fee, no company holding your data hostage. Works for
-restaurants, retail, salons, cleaners, repair shops and more, and the back-office view goes all the
-way to what you actually kept after costs.
+I own a two-store wet cleaner. Point-of-sale subscriptions never stop, and you never own anything,
+so we built our own – and when something about it bugs me, I just say what I want and it gets
+changed, usually the same day.
 
-It's the same system running my two stores every day: https://custompos.org
-Not selling anything — genuinely just sharing it. Happy to help anyone set it up.
+I've made it free for other small businesses: pick your type of shop and download one file, or
+run our shop's own first system on a single computer. No monthly fee, no company holding your
+data, and the back-office view goes all the way to what you actually kept after costs.
+
+https://custompos.org – not selling anything, genuinely sharing it. Happy to help anyone set it up.
 ```
-*(Check the sub’s self-promotion rule first — r/smallbusiness has a promo-day convention. Being the
-real owner-operator, not a vendor, is your pass. Say so plainly.)*
+*(Check the sub's self-promotion rule first — r/smallbusiness has a promo-day convention. Being the real owner-operator,
+not a vendor, is your pass. Say so plainly.)*
 
 ### Product Hunt (optional, higher effort)
-- **Tagline:** `The free POS you download and own — one file, no subscription`
-- **Gallery:** both `press/` images. **First comment:** the Show-HN first comment, trimmed.
+- **Tagline:** `The free POS you download and own — and change by asking`
+- **Gallery:** `press/08-built-with-claude.png`, `press/07-single-pc.png`, `press/02-dashboard.png`.
+- **First comment:** the Show HN first comment, trimmed.
 
-### Indie Hackers (“I built this” / Product page)
-- Reuse the Show HN first comment. IH loves the “generalized my own real business tool” angle.
+### Indie Hackers ("I built this" / product page)
+- Reuse the Show HN first comment. IH likes the "generalized my own real business tool" angle; add one line on what's next
+  (the multi-station edition, starting with auctions).
 
 ---
 
 ## §3 — Directory submissions (permanent backlinks)
 ### AlternativeTo.net
 Add **customPOS** (URL `https://custompos.org`, license Open Source / Free) as an alternative to:
-**SPOT**, **Xplor / DryClean POS**, **Square POS**, **Toast**, **Clover**. Suggested blurb:
+**SPOT**, **Xplor / DryClean POS**, **Square POS**, **Toast**, **Clover**, **Loyverse**. Suggested blurb:
 ```
-Free, open-source point-of-sale you build from a few questions and download as one self-contained
-file — no subscription, no account, works offline, with an optional self-hosted sync hub. Own the code.
+Free, open-source point-of-sale. Build one from a few questions, or run a real shop's own system as one
+self-contained HTML file on a single PC — no subscription, no account, works offline. Own the code and
+change it by asking an AI coding assistant; an optional self-hosted hub links several stations.
 ```
 
 ### awesome-selfhosted (a merged PR here is a trusted, permanent backlink)
 Repo: github.com/awesome-selfhosted/awesome-selfhosted — add under **Point of Sale / ERP**. Entry line:
 ```
-- [customPOS](https://custompos.org) - Build a point-of-sale from a few questions and download it as one self-contained HTML file; optional zero-dependency sync hub for multiple stations. Own the code, works offline. ([Source Code](https://github.com/TiredofSleep/Custom-POS)) `MIT` `HTML/Nodejs`
+- [customPOS](https://custompos.org) - Build a point-of-sale from a few questions, or run a real shop's Single-PC Edition, as one self-contained HTML file; optional zero-dependency sync hub for multiple stations. ([Source Code](https://github.com/TiredofSleep/Custom-POS)) `MIT` `HTML/Nodejs`
 ```
-> **I can open this PR for you** from a fork of your account — just say the word and I’ll prepare it and
-> hand you the link to review before it’s submitted. (It posts under your GitHub identity, so I’ll only send
-> it on your go.)
+> **I can open this PR for you** from a fork of your account — say the word and I'll prepare it and hand you the link to review
+> before it's submitted. (It posts under your GitHub identity, so it goes only on your go.)
 
 ---
 
 ## Etiquette that keeps you from getting flagged
-- **One venue at a time.** Don’t cross-post the same hour; you can’t be present in five threads at once.
-- **Be the owner, not a marketer.** Every community here rewards “I built this for my own shop” and punishes
-  ad-speak. No superlatives, no “revolutionary.”
+- **One venue at a time.** Don't cross-post the same hour; you can't be present in five threads at once.
+- **Be the owner, not a marketer.** Every community here rewards "I built this for my own shop" and punishes ad-speak. No
+  superlatives, no "revolutionary", no "fully autonomous" — a person decides, and the page says so.
 - **Answer everything** for the first few hours — questions, skepticism, feature asks. Replies > the post.
-- **Never fake it.** No sock-puppet upvotes, no invented reviews. The real-shop story is the whole advantage;
-  don’t dilute it.
+- **Never fake it.** No sock-puppet upvotes, no invented reviews, no customer names. The real-shop story is the whole advantage.
+- **Numbers carry their date** ("as of Oct 12, 2026"). Refresh them from the live page before reusing a post later.
 
 ## Measuring it (without fooling yourself)
-Search Console (impressions/clicks by query) is the honest search signal; GitHub Insights → Traffic shows the
-launch’s echo. Quote **content served / real visitors**, not raw request counts — most raw hits are bots.
+Baseline before any launch post (Oct 14, 2026): Google showed custompos.org **192 times with 10 clicks in 28 days** (average position
+18; only 2 pages indexed), and the GitHub repo had **2 views in 14 days, 0 stars**. Search Console (impressions and clicks by query)
+is the honest search signal; GitHub Insights → Traffic shows a launch's echo (ignore clones — most are automated). Quote **real
+visitors**, not raw request counts — most raw hits are bots.
