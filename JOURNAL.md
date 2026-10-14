@@ -1256,3 +1256,55 @@ problems, and they are worth writing down:
 
 The counts themselves held up. What was wrong was what some of them were said to mean, which is the part a reader can't
 check.
+
+## 2026-10-13 — Auction fee math: the first piece for an auction customer
+
+### Why the math comes first
+The multi-station edition has its first real customer: an auction company that runs live and online sales and settles
+them on paper today. The plan for them starts with the money math rather than the engine or the screens. That is the
+one place where a mistake costs a consignor real money. It needs no hub, and it can be right before the customer has
+answered a single question. Every answer they give later (which commission basis, whether the premium is taxed, what a
+lot fee covers) becomes a setting, not a rewrite.
+
+So the first piece is a library, `packs/auction/feemath.js`. It works out a consignor's commission and fees, a buyer's
+premium and tax, the buyer's invoice and the consignor's statement, and nothing else. It stores nothing and moves
+nothing. Every result carries its working as plain text ("$100.00 x 30.00% + $10.00 x 20.00% = $32.00"), so a person
+can check any number against a calculator.
+
+### Ten dollars on a $110 lot
+The plan picked one example to anchor everything. Take the rates "30% up to $100, 20% above" and a lot that sells for
+$110. Read *sliding*, the whole $110 sits in the upper bracket: $22.00. Read *incremental*, the first $100 pays 30% and
+the last $10 pays 20%: $32.00. Same words, a $10 argument with a consignor. The library makes the schedule say which one
+it means, and the first proof pins both answers.
+
+The same idea runs all the way through. Money is whole cents. Rates are whole basis points. Rounding is half up and
+happens once, at the level the rule names. Anything the math cannot compute exactly is refused with the field's name
+instead of being fixed up: a fraction of a cent, a number written as text, an amount over the $10,000,000 ceiling, a
+misspelt field, a tax class with no rule. A misspelt `capcents` would otherwise drop the cap without a word, so a typo
+is refused like any other bad input.
+
+### Writing the choices down
+Some rules had more than one fair reading. Each time the library takes the cautious one, says so in the code and the
+pack's README, and makes it a setting where the customer may decide otherwise. A lot fee is charged on sold lots unless
+the schedule says every lot offered. An exemption certificate on its expiry day counts as expired. A certificate with
+no expiry date does not count, a premium with two tiers must say which kind it is, and phone bids pay the floor
+premium. The biggest choice is the paid rule. A consignor is paid for a line only when that buyer's *whole* invoice
+for the sale is paid. A buyer who has paid more than this lot's price but still owes on the invoice has not paid for it
+yet. Splitting payments line by line can come later. Guessing at it now could pay a consignor money the house never
+collected.
+
+### Proofs that can fail
+Each of the 17 proofs names the failure it prevents and has negative controls. A control is a copy of the library
+with one rule deliberately broken, such as the half-up rounding, the minimum, the certificate expiry, or the line in
+the paid rule. The proof has to fail on that copy. 70 broken copies, each one seen failing. Each break has to land on
+text that appears exactly once in the source, so a later edit cannot quietly turn a control into a no-op. Each broken
+copy also has to still do plain arithmetic, so it fails for the rule and not because it crashed.
+
+That second look found two weak controls. The proofs for "a premium with two tiers must name its kind" and "nothing over
+the ceiling" did fail on their broken copies, but only because a second guard caught the same input under another field's
+name. The money was still safe, but the control proved less than it claimed. Now the first broken copy really guesses a
+kind, and the refusal proof reports every case a broken copy lets through, not just the first.
+
+The plan suggested pinning a software vendor's published worked example as well. It isn't pinned, because nobody has
+yet checked that the example states all of its inputs, and a number with half its inputs missing proves nothing. Every
+figure in the proofs is worked by hand in the test's comments instead. 105 suites.

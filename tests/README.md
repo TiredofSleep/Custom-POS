@@ -65,6 +65,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `custom-price.js` | custom-price items + line editing — a customPrice item prompts for a price, +/− quantity steppers, and a ✎$ per-line price override (haggling / made-a-deal), with − removing the line at qty 1 |
 | `single-pc.js` | the Single-PC Edition (`single-pc/ozark-pos-single-pc.html`) is standalone — from disk, no request but the file itself; served over http, the server sees exactly one hit (the page), no `/api`, `syncOn()` false, no service worker; 0 console/page errors; boots to Home with the "Single-PC Edition" marker and About box. Plus its landing page: FAQ structured data equals the visible FAQ word for word, Download/Try buttons, canonical, no sideways scroll on a phone |
 | `age-check.js` | age-restricted items (gas / convenience / liquor) — a 21+/18+ item blocks payment until a photo-ID check is confirmed; unrestricted orders ring straight through |
+| `auction-feemath.js` | auction fee math (pure Node, no browser): sliding vs incremental commission ($22.00 vs $32.00 on $110.00), the item / line / consignor bases, minimum and cap, lot / no-sale / buyback fees, premium by channel, tax by class with certificates, rounding once, refusals, an invoice and a consignor statement to the cent, and the conservative paid rule; 17 proofs, each with negative controls (broken copies of the library that must fail) |
 
 ## Running
 Needs `playwright-core` and a Chromium binary. Each script reads `CHROMIUM_EXE` (falling back to a default path);
