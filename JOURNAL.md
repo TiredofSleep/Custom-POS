@@ -1308,3 +1308,53 @@ kind, and the refusal proof reports every case a broken copy lets through, not j
 The plan suggested pinning a software vendor's published worked example as well. It isn't pinned, because nobody has
 yet checked that the example states all of its inputs, and a number with half its inputs missing proves nothing. Every
 figure in the proofs is worked by hand in the test's comments instead. 105 suites.
+
+## 2026-10-13 — Auction fee math, second look: what three checkers found
+
+### Three ways of checking the same math
+After the first version of the auction fee math, three separate checks went over it. One built an independent reference
+version of the same rules from the plan alone, without reading the library. One fed both versions hundreds of thousands
+of random sales and compared every number. One read the code looking for ways to lose money. None of them found a
+consignor or buyer charged a wrong cent. They did find places where the house could pay out money it had never
+collected, rules nobody had pinned with a proof, and a few inputs that could mean two things.
+
+### Paying out money that never came in
+The biggest find was in the holdback. When a buyer hasn't paid, the consignor's line waits, and commission is charged on
+every sold line so the release is exact once the buyer pays. But some held lines never clear: a hammer gets voided, a lot
+comes back unsold. Then the consignor is owed commission and fees on what is left, and that can be *more* than what was
+taken. With a sliding rate that falls as the total rises, a consignor who sold $1,000.00 that cleared and $0.01 that didn't
+would have been paid $100.00 too much. A no-sale fee larger than the lot fee, or a per-item minimum, does the same thing
+on a smaller scale. The statement now holds back that difference as well, worked out over every way the held lines could
+end. A proof re-runs each example statement for every one of those endings, by brute force, and checks the net paid now
+is never above the worst of them.
+
+The second find was write-offs. A buyer who paid $600 of a $1,100 invoice and had the rest written off is at a $0.00
+balance, so the old rule called the consignor's $1,000 lot paid, though the house had received $600. Forgiveness is not
+payment now: each statement line also carries how much of the buyer's invoice was written off or waived, and the line
+waits. If an auction company wants forgiveness to count as paid, that is a contract setting, and it's one of the
+questions for them. A write-off can also no longer be bigger than what is owed, because past $0.00 it would turn into a
+refund claim, and a refund is a person's decision.
+
+### Proofs that hadn't been pinned
+The review broke one rule at a time in copies of the library and ran the whole suite against each copy. Seven broken
+copies passed. One charged a buyer an uncapped premium when the invoice rounds once, one rounded the taxed premium twice,
+one truncated a half-cent buyback fee, one charged a no-sale fee per choice taking instead of per lot, and one allowed a
+refund on a voided payment. The code was right on every one of those paths. Nothing *proved* it. Each now has a
+hand-worked proof, and the copy that slipped through is its negative control. There are 24 proofs now, with 104 broken
+copies, each seen failing.
+
+### Inputs that could mean two things
+A cap of $0.00 used to zero every commission without a word, which is what a form writing 0 for "no cap" would do. It is
+refused now, and so is a titled no-sale fee of $0.00 (did it mean "not set" or "free"?). A rate fee on a buyback with no
+price is refused instead of charged as nothing. A quantity limit of 1,000,000 that nobody had written down is gone: the
+plan sets none, so quantities go up to 1,000,000,000 and the $10,000,000.00 money ceiling does the real work. Lot numbers
+with stray spaces, or two spellings that print the same, are refused. So is a statement where one buyer's lines disagree
+about that buyer's balance.
+
+### What stays a question
+Where the plan leaves a choice, the cautious answer is the default and a setting changes it: whether forgiveness counts as
+paid, whether a certificate is good on its expiry day, whether one with no expiry counts, and whether the lot fee covers
+unsold lots. The pack's README lists them as questions for the auction company. The comparison run still shows
+differences between the two versions, and every one of them traces back to one of those written-down readings. The
+independent version had two small gaps of its own, a date it didn't check and a number type it accepted, and those were
+fixed in it as well. 105 suites.

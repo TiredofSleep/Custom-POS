@@ -28,8 +28,9 @@
   const MAX_CENTS = 1000 * 1000 * 1000;   /* $10,000,000.00: the ceiling for any one amount and for any total */
   const MAX_BP = 10000;                   /* 100.00% */
   const MAX_MILLI_PCT = 100000;           /* 100.000% */
-  const MAX_QTY = 1000 * 1000;            /* keeps unitCents x qty exact before the ceiling check */
+  const MAX_QTY = MAX_CENTS;              /* the plan sets no quantity ceiling, so it reuses the one number; unit x qty can pass 2^53 only far above the money ceiling, so the line check after the multiply stays exact */
   const BP_ONE = 10000;                   /* basis points in 100% */
+  const EXACT_HELD = 16;                  /* consignor basis: held lines up to which every way they could end is tried (65,536 ways, a few milliseconds) */
   const MILLI_ONE = 100000;               /* thousandths of a percent in 100% */
 
   const KINDS = ['flat', 'sliding', 'incremental'];
@@ -50,7 +51,7 @@
   const TERMS_KEYS = ['v', 'premium', 'tax', 'rounding', 'cardFeeBp', 'payByHours', 'pickupBusinessDays',
     'storagePerDayCents', 'confirmAboveCents', 'record'];
   const LINE_KEYS = ['lotNo', 'line', 'hammerId', 'bidderNo', 'contractId', 'title', 'unitCents', 'qty', 'mode',
-    'channel', 'taxClass', 'passed', 'buyback', 'titled', 'held', 'buyerBalanceCents'];
+    'channel', 'taxClass', 'passed', 'buyback', 'titled', 'held', 'buyerBalanceCents', 'buyerForgivenCents'];
   const TAX_LINE_KEYS = ['lotNo', 'line', 'taxClass', 'lineCents', 'premiumCents', 'premiumExact'];
   const CERT_KEYS = ['certId', 'partyId', 'state', 'form', 'number', 'expires', 'photoId'];
   const PAY_KEYS = ['payId', 'cents', 'method', 'ref', 'drawerId', 'voided', 'returned', 'refundedCents'];
@@ -59,7 +60,7 @@
   const EXPENSE_KEYS = ['cents', 'what'];
   const ADVANCE_KEYS = ['cents', 'method', 'ref'];
   const CONTRACT_KEYS = ['contractId', 'partyId', 'saleId', 'schedule', 'charges', 'absolute', 'unpaidRisk',
-    'settleBusinessDays', 'signedOn', 'docPhotoId'];
+    'settleBusinessDays', 'signedOn', 'docPhotoId', 'forgivenCountsAsPaid'];
   const CTX_KEYS = ['saleDate', 'cert'];
 
   /* ---------- refusals and input checks ---------- */
@@ -137,6 +138,13 @@
   /* @money @invariant — non-empty text (a lot number, an id), or a refusal; a number is never quietly turned into text. */
   function textIn(v, path) {
     if (typeof v !== 'string' || v.trim() === '') refuse(path, 'must be non-empty text, got ' + show(v));
+    return v;
+  }
+
+  /* @money @invariant — a lot number or line suffix: non-empty text with no space at either end, so "12" and "12 " can never count as two lots (two lot fees, no clash caught). */
+  function lotText(v, path) {
+    textIn(v, path);
+    if (v.trim() !== v) refuse(path, 'must not start or end with a space, got ' + show(v) + '; one lot is written one way');
     return v;
   }
 
@@ -221,14 +229,14 @@
     return parts.length ? ' ' + parts.join(' and ').replace(/^m/, 'M').replace(/^c/, 'C') + ' on ' + level + '.' : '';
   }
 
-  /* @money @price @print — one charge written out: the slices and their rates, the exact result, any minimum or cap, and the rounding. */
-  function chargeText(kind, b, bc, st) {
+  /* @money @price @print — one charge written out: the slices and their rates, the exact result, any minimum or cap, and the rounding (or, when the invoice rounds once over all its lines, the exact amount with no per-line rounding claimed). */
+  function chargeText(kind, b, bc, st, exactOnly) {
     let s = bc.parts.length ? bc.parts.map((p) => fmt(p.sliceCents) + ' x ' + pct(p.bp)).join(' + ') : fmt(0);
     if (kind === 'sliding' && b.length > 1) s += ' (all of it at its bracket\'s rate)';
     s += ' = ' + fmtExact(bc.exact, BP_ONE);
     if (st.clamp === 'min') s += ', raised to the ' + fmt(st.cents) + ' minimum';
     if (st.clamp === 'cap') s += ', held to the ' + fmt(st.cents) + ' cap';
-    if (st.clamp === null && st.num % BP_ONE !== 0) s += ', rounded half up to ' + fmt(st.cents);
+    if (st.clamp === null && st.num % BP_ONE !== 0) s += exactOnly ? ', kept exact (the invoice rounds its premium once)' : ', rounded half up to ' + fmt(st.cents);
     return s;
   }
 
@@ -275,6 +283,13 @@
     return { exact: exact, parts: parts };
   }
 
+  /* @money @price @invariant — an optional cap: absent means no cap; a cap of $0.00 is refused, because a form that writes 0 for "no cap" would silently zero every charge (a no-charge deal is written bp 0). */
+  function optCap(v, path) {
+    const c = optCents(v, path);
+    if (c === 0) refuse(path, 'a cap of $0.00 would zero every charge; leave the field out for no cap, or write the rate as bp 0');
+    return c;
+  }
+
   /* @money @price — holds an exact charge between the minimum and the cap (each in whole cents), then rounds it half up once. */
   function settle(exact, minCents, capCents) {
     let num = exact, clamp = null;
@@ -294,7 +309,14 @@
     return hasBp ? { bp: wholeIn(v.bp, 0, MAX_BP, path + '.bp') } : { cents: centsIn(v.cents, path + '.cents') };
   }
 
-  /* @money @price @invariant — a consignor fee schedule checked whole: kind, basis, rate table, minimum <= cap, the fees, and the lot-fee setting (sold lots only unless "offered"). */
+  /* @money @price @invariant — the titled no-sale fee: absent means a titled lot pays the plain no-sale fee; $0.00 is refused, because 0 could mean "not set" (pay the plain fee) or "free", and the math never guesses which. */
+  function optTitledFee(v, path) {
+    const c = optCents(v, path);
+    if (c === 0) refuse(path, 'is $0.00, which could mean "not set" or "titled lots pay nothing"; leave it out for the plain no-sale fee');
+    return c;
+  }
+
+  /* @money @price @invariant — a consignor fee schedule checked whole: kind, basis, rate table, minimum <= cap (a cap of 0 refused), the fees, and the lot-fee setting (sold lots only unless "offered"). */
   function checkSched(s, path) {
     onlyKeys(s, SCHED_KEYS, path);
     const out = {
@@ -302,10 +324,10 @@
       basis: oneOf(s.basis, BASES, path + '.basis'),
       brackets: checkBrackets(s.brackets, path + '.brackets'),
       minCents: optCents(s.minCents, path + '.minCents'),
-      capCents: optCents(s.capCents, path + '.capCents'),
+      capCents: optCap(s.capCents, path + '.capCents'),
       lotFeeCents: optCents(s.lotFeeCents, path + '.lotFeeCents') || 0,
       noSaleFeeCents: optCents(s.noSaleFeeCents, path + '.noSaleFeeCents') || 0,
-      titledNoSaleFeeCents: optCents(s.titledNoSaleFeeCents, path + '.titledNoSaleFeeCents'),
+      titledNoSaleFeeCents: optTitledFee(s.titledNoSaleFeeCents, path + '.titledNoSaleFeeCents'),
       buybackFee: checkBuyback(s.buybackFee, path + '.buybackFee'),
       lotFeeOn: s.lotFeeOn === undefined ? 'sold' : oneOf(s.lotFeeOn, ['sold', 'offered'], path + '.lotFeeOn')
     };
@@ -316,18 +338,21 @@
     return out;
   }
 
-  /* @money @invariant — hammer lines checked whole: lot number, price, quantity and mode, one outcome each (sold, passed or bought back), no lot line twice; works out each line's money (unit x qty only for "each"). */
+  /* @money @invariant — hammer lines checked whole: lot number, price, quantity and mode, one outcome each (sold, passed or bought back), no lot line twice (nor two spellings that print alike); works out each line's money (unit x qty only for "each"). */
   function checkLines(lines, path) {
     listOf(lines, path);
-    const seen = Object.create(null);
+    const seen = Object.create(null), printed = Object.create(null);
     return lines.map((raw, i) => {
       const p = path + '[' + i + ']';
       onlyKeys(raw, LINE_KEYS, p);
-      const lotNo = textIn(raw.lotNo, p + '.lotNo');
-      const line = raw.line === undefined ? '' : textIn(raw.line, p + '.line');
+      const lotNo = lotText(raw.lotNo, p + '.lotNo');
+      const line = raw.line === undefined ? '' : lotText(raw.line, p + '.line');
       const key = lotNo + '\u0000' + line;
       if (seen[key]) refuse(p, 'lot ' + lotNo + line + ' appears twice; a clash is held for a person, never charged twice');
       seen[key] = true;
+      if (printed[lotNo + line] !== undefined && printed[lotNo + line] !== key) refuse(p, 'lot ' + show(lotNo) + ' line ' + show(line) + ' prints as ' + lotNo + line + ', like another line here; write each lot number one way');
+      printed[lotNo + line] = key;
+      if (raw.buyback === true && raw.passed === false) refuse(p + '.passed', 'a buyback is not a sale, so it cannot say passed: false');
       const passed = optBool(raw.passed, p + '.passed'), buyback = optBool(raw.buyback, p + '.buyback');
       const outcome = buyback ? 'buyback' : passed ? 'passed' : 'sold';
       const mode = oneOf(raw.mode, MODES, p + '.mode');
@@ -370,6 +395,7 @@
     ls.forEach((l) => {
       if (l.outcome !== 'buyback' || s.buybackFee === null) return;
       const byRate = s.buybackFee.bp !== undefined;
+      if (byRate && l.lineCents === 0) refuse('lines[' + l.i + '].unitCents', 'a buyback fee of ' + pct(s.buybackFee.bp) + ' needs the buyback price, and lot ' + l.label + ' has none; the math never charges a rate on an unknown amount');
       const c = byRate ? roundNum(l.lineCents * s.buybackFee.bp) : s.buybackFee.cents;
       if (c > 0) {
         fees.push({ kind: 'buyback', lotNo: l.lotNo, line: l.line, cents: c,
@@ -377,6 +403,15 @@
       }
     });
     return fees;
+  }
+
+  /* @money @price — one sold line's commission on the item or line basis: the charge on one item (or on the whole line), the minimum and cap at that level, rounded half up once, then times the items. A total past the ceiling is refused by the caller's sum. */
+  function lineCommission(s, l) {
+    const item = s.basis === 'item';
+    const basisCents = item ? l.unitCents : l.lineCents;
+    const units = item ? l.units : 1;
+    const bc = bracketCharge(s.kind, s.brackets, basisCents), st = settle(bc.exact, s.minCents, s.capCents);
+    return { basisCents: basisCents, units: units, bc: bc, st: st, cents: st.cents * units };
   }
 
   /* @money @price — commission on already-checked lines: one rounding per basis unit (each item, each line, or the consignor's sold total), the minimum and cap at that same level, nothing on passed or bought-back lines. */
@@ -398,11 +433,7 @@
       }
     } else {
       sold.forEach((l) => {
-        const item = s.basis === 'item';
-        const basisCents = item ? l.unitCents : l.lineCents;
-        const units = item ? l.units : 1;
-        const bc = bracketCharge(s.kind, s.brackets, basisCents), st = settle(bc.exact, s.minCents, s.capCents);
-        const c = st.cents * units;
+        const lc = lineCommission(s, l), basisCents = lc.basisCents, units = lc.units, bc = lc.bc, st = lc.st, c = lc.cents;
         cents = sumCents([cents, c], 'commission total');
         perUnit.push({ lotNo: l.lotNo, line: l.line, basisCents: basisCents, units: units, exact: bc.exact, eachCents: st.cents, cents: c, clamp: st.clamp });
         text.push('  Lot ' + l.label + (units > 1 ? ' (' + units + ' at ' + fmt(basisCents) + ' each), each: ' : ': ') +
@@ -441,29 +472,26 @@
       kind = oneOf(p.kind, KINDS, path + '.kind');
     }
     if (kind === 'flat' && brackets.length !== 1) refuse(path + '.brackets', 'a flat premium has exactly one bracket (uptoCents null)');
-    const out = { kind: kind, brackets: brackets, minCents: optCents(p.minCents, path + '.minCents'), capCents: optCents(p.capCents, path + '.capCents') };
+    const out = { kind: kind, brackets: brackets, minCents: optCents(p.minCents, path + '.minCents'), capCents: optCap(p.capCents, path + '.capCents') };
     if (out.minCents !== null && out.capCents !== null && out.minCents > out.capCents) {
       refuse(path + '.minCents', 'the minimum ' + fmt(out.minCents) + ' is above the cap ' + fmt(out.capCents));
     }
     return out;
   }
 
-  /* @money @price — the premium on one already-checked line; a line of 0 cents carries no premium and no minimum. */
-  function premiumOf(p, lineCents) {
+  /* @money @price — the premium on one already-checked line of at least 1 cent; exactOnly writes the exact amount without a per-line rounding, for an invoice that rounds once. */
+  function premiumOf(p, lineCents, exactOnly) {
     const head = 'Premium, ' + p.kind + ': ' + bracketsText(p.brackets) + '.' + minCapText(p.minCents, p.capCents, 'each line');
-    if (lineCents === 0) {
-      return { mathVersion: MATH_VERSION, kind: p.kind, cents: 0, exact: 0, rawExact: 0, clamp: null, parts: [], mathText: head + ' Nothing sold on this line, so no premium.' };
-    }
     const bc = bracketCharge(p.kind, p.brackets, lineCents), st = settle(bc.exact, p.minCents, p.capCents);
     return {
       mathVersion: MATH_VERSION, kind: p.kind, cents: st.cents, exact: st.num, rawExact: bc.exact, clamp: st.clamp,
-      parts: bc.parts.map((x) => Object.assign({}, x)), mathText: head + ' ' + chargeText(p.kind, p.brackets, bc, st) + '.'
+      parts: bc.parts.map((x) => Object.assign({}, x)), mathText: head + ' ' + chargeText(p.kind, p.brackets, bc, st, exactOnly) + '.'
     };
   }
 
-  /* @money @price — the buyer's premium on one hammer line: the tier rates, then the per-line minimum and cap; `cents` is rounded half up, `exact` (cents x 10000, after the minimum and cap) is kept for an invoice that rounds once over all its lines. */
+  /* @money @price — the buyer's premium on one hammer line of at least 1 cent (a sold price; 0 is refused, never priced): the tier rates, then the per-line minimum and cap; `cents` is rounded half up, `exact` (cents x 10000, after the minimum and cap) is kept for an invoice that rounds once over all its lines. */
   function premium(prem, lineCents) {
-    return premiumOf(checkPrem(prem, 'prem'), centsIn(lineCents, 'lineCents'));
+    return premiumOf(checkPrem(prem, 'prem'), centsIn(lineCents, 'lineCents', 1), false);
   }
 
   /* ---------- sales tax ---------- */
@@ -541,15 +569,15 @@
     const ls = lines.map((raw, i) => {
       const p = 'lines[' + i + ']';
       onlyKeys(raw, TAX_LINE_KEYS, p);
-      const lotNo = textIn(raw.lotNo, p + '.lotNo');
-      const line = raw.line === undefined ? '' : textIn(raw.line, p + '.line');
+      const lotNo = lotText(raw.lotNo, p + '.lotNo');
+      const line = raw.line === undefined ? '' : lotText(raw.line, p + '.line');
       if (seen[lotNo + '\u0000' + line]) refuse(p, 'lot ' + lotNo + line + ' appears twice');
       seen[lotNo + '\u0000' + line] = true;
       if (raw.premiumCents !== undefined && raw.premiumExact !== undefined) refuse(p, 'give premiumCents or premiumExact, not both');
       const premExact = raw.premiumExact !== undefined
         ? wholeIn(raw.premiumExact, 0, MAX_CENTS * BP_ONE, p + '.premiumExact')
         : (raw.premiumCents === undefined ? 0 : centsIn(raw.premiumCents, p + '.premiumCents') * BP_ONE);
-      return { lotNo: lotNo, line: line, label: lotNo + line, taxClass: oneOf(raw.taxClass, TAX_CLASSES, p + '.taxClass'), lineCents: centsIn(raw.lineCents, p + '.lineCents'), premExact: premExact };
+      return { lotNo: lotNo, line: line, label: lotNo + line, taxClass: oneOf(raw.taxClass, TAX_CLASSES, p + '.taxClass'), lineCents: centsIn(raw.lineCents, p + '.lineCents', 1), premExact: premExact };
     });
     return taxOf(ls, t, cert, date);
   }
@@ -621,24 +649,29 @@
     });
   }
 
-  /* @money @ar — one buyer's invoice for one sale: hammer + premium (by channel) + tax + fees +/- adjustments, less payments net of voided, returned and refunded; disputed (held) lines are listed but never due. ctx = {saleDate, cert} for the tax. */
+  /* @money @ar — one buyer's invoice for one sale: hammer + premium (by channel) + tax + fees +/- adjustments, less payments net of voided, returned and refunded; disputed (held) lines are listed but never due; write-offs and waivers (forgivenCents, which a statement line carries) may bring the balance to $0.00 and no lower. ctx = {saleDate, cert} for the tax. */
   function invoice(terms, lines, payments, fees, adjustments, ctx) {
     const T = checkTerms(terms, 'terms');
     onlyKeys(ctx, CTX_KEYS, 'ctx');
     const saleDate = isoDate(ctx.saleDate, 'ctx.saleDate');
     const ls = checkLines(lines, 'lines');
+    let bidderNo = null;
     ls.forEach((l) => {
       const p = 'lines[' + l.i + ']';
       if (l.outcome !== 'sold') refuse(p, 'lot ' + l.label + ' was not sold (passed or bought back), so it has no place on a buyer\'s invoice');
       oneOf(l.raw.channel, CHANNELS, p + '.channel');
       oneOf(l.raw.taxClass, TAX_CLASSES, p + '.taxClass');
+      if (l.raw.bidderNo === undefined) return;
+      textIn(l.raw.bidderNo, p + '.bidderNo');
+      if (bidderNo !== null && l.raw.bidderNo !== bidderNo) refuse(p + '.bidderNo', 'an invoice is one buyer\'s, but this line is bidder ' + l.raw.bidderNo + ' and an earlier one is bidder ' + bidderNo);
+      bidderNo = l.raw.bidderNo;
     });
     const due = ls.filter((l) => !l.held);
     const held = ls.filter((l) => l.held);
     const perLine = T.rounding.premium === 'line';
     let premExactSum = 0;
     const outLines = due.map((l) => {
-      const pr = premiumOf(premFor(T, l.raw.channel), l.lineCents);
+      const pr = premiumOf(premFor(T, l.raw.channel), l.lineCents, !perLine);
       premExactSum += pr.exact;
       return { lotNo: l.lotNo, line: l.line, label: l.label, lineCents: l.lineCents, channel: l.raw.channel, taxClass: l.raw.taxClass,
         premiumCents: perLine ? pr.cents : null, premiumExact: pr.exact, premiumText: pr.mathText };
@@ -654,8 +687,16 @@
     const charges = sumCents([hammerCents, premiumCents, taxRes.cents, feesCents], 'invoice charges');
     const totalCents = charges + adjCents;
     if (totalCents < 0) refuse('adjustments', 'take the invoice below zero (' + fmt(totalCents) + '); a write-off can never exceed what is owed');
+    if (totalCents > MAX_CENTS) refuse('adjustments', 'take the invoice total past the ' + fmt(MAX_CENTS) + ' ceiling (' + fmt(totalCents) + ')');
     const paidCents = sumCents(payList.map((p) => p.netCents), 'payments total');
     const balanceCents = totalCents - paidCents;
+    /* Forgiveness (write-offs and waivers) is never money in. It may bring what is still owed down to $0.00 and no further:
+       forgiving more than is owed would become a refund claim, and a refund is a person's decision (record a correction). */
+    const forgivenCents = -adjList.reduce((a, x) => a + (x.kind === 'correction' ? 0 : x.cents), 0);
+    const owedBeforeForgiven = balanceCents + forgivenCents;
+    if (forgivenCents > Math.max(0, owedBeforeForgiven)) {
+      refuse('adjustments', 'write-offs and waivers of ' + fmt(forgivenCents) + ' are more than the ' + fmt(Math.max(0, owedBeforeForgiven)) + ' still owed before them; forgiveness never turns into a refund');
+    }
 
     const text = ['Invoice (terms v' + T.v + ', math version ' + MATH_VERSION + '; premium rounded per ' + T.rounding.premium + ', tax per invoice).'];
     outLines.forEach((o) => {
@@ -669,10 +710,10 @@
     adjList.forEach((a) => text.push('  Adjustment (' + a.kind + '): ' + (a.cents < 0 ? '-' + fmt(-a.cents) : '+' + fmt(a.cents))));
     payList.forEach((p) => text.push('  Payment ' + p.payId + ' (' + p.method + ') ' + fmt(p.cents) +
       (p.voided ? ' VOIDED, counts 0' : p.returned ? ' RETURNED, counts 0' : p.refundedCents ? ' less refund ' + fmt(p.refundedCents) + ' = ' + fmt(p.netCents) : '')));
-    text.push('Total ' + fmt(totalCents) + ' - paid ' + fmt(paidCents) + ' = balance ' + fmt(balanceCents) + (balanceCents < 0 ? ' (overpaid: the buyer is owed ' + fmt(-balanceCents) + ')' : balanceCents === 0 ? ' (paid in full)' : ' due') + '.');
+    text.push('Total ' + fmt(totalCents) + ' - paid ' + fmt(paidCents) + ' = balance ' + fmt(balanceCents) + (balanceCents < 0 ? ' (overpaid: the buyer is owed ' + fmt(-balanceCents) + ')' : balanceCents === 0 ? (forgivenCents ? ' (settled, ' + fmt(forgivenCents) + ' of it forgiven, not paid)' : ' (paid in full)') : ' due') + '.');
 
     return {
-      mathVersion: MATH_VERSION, termsV: T.v, saleDate: saleDate,
+      mathVersion: MATH_VERSION, termsV: T.v, saleDate: saleDate, bidderNo: bidderNo, forgivenCents: forgivenCents,
       lines: outLines.map((o) => ({ lotNo: o.lotNo, line: o.line, lineCents: o.lineCents, channel: o.channel, taxClass: o.taxClass, premiumCents: o.premiumCents, premiumExact: o.premiumExact })),
       held: held.map((l) => ({ lotNo: l.lotNo, line: l.line, lineCents: l.lineCents })),
       hammerCents: hammerCents, premiumCents: premiumCents, taxCents: taxRes.cents, tax: taxRes, feesCents: feesCents, adjustmentsCents: adjCents,
@@ -694,7 +735,73 @@
     });
   }
 
-  /* @money @report — one consignor's settlement statement for one sale, from the contract's stamped schedule: gross (sold lines), commission and schedule fees, expenses, advances, and the holdback the conservative paid rule demands; net = gross - commission - fees - expenses - advances - holdback. A line counts as buyer-paid only when that buyer's WHOLE invoice for the sale is at 0 or less. */
+  /* @money @invariant — the extra holdback that keeps a consignor from being paid now more than they would be owed if any held line never clears (a sliding rate that falls as the total rises, a no-sale fee larger than the lot fee, a minimum): the worst, over every way the held lines could end (each one paid, or its lot left unsold), of commission + fees - the held hammer that did clear, less the commission and fees already deducted. Exact on the item and line bases, and on the consignor basis up to 16 held lines; past that a safe bound that can only hold back a little more. */
+  function extraHoldback(s, ls, held, heldCount, com) {
+    const deducted = com.cents + com.feesCents;
+    if (heldCount === 0) return { cents: 0, worstCents: deducted };
+    const lots = Object.create(null), order = [];
+    ls.forEach((l) => {
+      if (!lots[l.lotNo]) { lots[l.lotNo] = { held: [], cleared: false }; order.push(l.lotNo); }
+      if (held[l.i]) lots[l.lotNo].held.push(l);
+      else if (l.outcome === 'sold') lots[l.lotNo].cleared = true;
+    });
+    const byLot = (fees) => { const m = Object.create(null); fees.forEach((f) => { m[f.lotNo] = (m[f.lotNo] || 0) + f.cents; }); return m; };
+    const feesIfSold = byLot(com.fees);
+    const feesIfUnsold = byLot(feesOf(s, ls.map((l) => (held[l.i] ? Object.assign({}, l, { outcome: 'passed' }) : l))));
+    let worst = 0;
+    if (s.basis !== 'consignor') {
+      /* Commission is per line here, so the worst case splits lot by lot: in each lot, either none of its held lines clears
+         (its fees as an unsold lot, if nothing else in it sold) or the best set of them does (each adds its commission and
+         gives back its own hammer). */
+      let clearedCom = com.cents;
+      order.forEach((k) => {
+        const g = lots[k], unsold = feesIfUnsold[k] || 0, sold = feesIfSold[k] || 0;
+        if (g.held.length === 0) { worst += unsold; return; }
+        const gain = g.held.map((l) => { const c = lineCommission(s, l).cents; clearedCom -= c; return c - l.lineCents; });
+        const up = gain.filter((x) => x > 0);
+        const best = up.length ? up.reduce((a, x) => a + x, 0) : Math.max.apply(null, gain);
+        worst += Math.max(unsold, sold + best);
+      });
+      worst += clearedCom;
+    } else {
+      /* One commission on the consignor's total. A lot whose sold lines are all held is "open": its fees depend on whether
+         any of them clears. Up to EXACT_HELD held lines, every way they could end is tried (exact). Past that, a safe
+         bound: within a bracket, commission - (total - paid total) never rises (a rate is at most 100%, and one more cent
+         moves the rounded charge by at most a cent), so its largest value is at the smallest total the held lines could
+         add or where a bracket starts; each open lot's fees then take their larger case on their own, which can only hold
+         back a little more than the true worst. */
+      let paidTotal = 0, anyPaid = false, heldTotal = 0, smallest = MAX_CENTS, fixedFees = 0;
+      const heldList = [];
+      ls.forEach((l) => {
+        if (l.outcome !== 'sold') return;
+        if (held[l.i]) { heldList.push(l); heldTotal += l.lineCents; smallest = Math.min(smallest, l.lineCents); } else { paidTotal += l.lineCents; anyPaid = true; }
+      });
+      const open = order.filter((k) => lots[k].held.length > 0 && !lots[k].cleared);
+      order.forEach((k) => { if (open.indexOf(k) < 0) fixedFees += feesIfSold[k] || 0; });
+      const comAt = (t) => settle(bracketCharge(s.kind, s.brackets, t).exact, s.minCents, s.capCents).cents;
+      if (heldList.length <= EXACT_HELD) {
+        worst = -MAX_CENTS * 4;
+        for (let m = 0; m < (1 << heldList.length); m++) {
+          let t = paidTotal;
+          const soldOpen = Object.create(null);
+          heldList.forEach((l, j) => { if (m & (1 << j)) { t += l.lineCents; soldOpen[l.lotNo] = true; } });
+          let v = (anyPaid || m > 0 ? comAt(t) : 0) + fixedFees - (t - paidTotal);
+          open.forEach((k) => { v += soldOpen[k] ? (feesIfSold[k] || 0) : (feesIfUnsold[k] || 0); });
+          if (v > worst) worst = v;
+        }
+      } else {
+        let worstCom = anyPaid ? comAt(paidTotal) : 0;
+        [paidTotal + smallest].concat(s.brackets.filter((b) => b.uptoCents !== null).map((b) => b.uptoCents + 1)
+          .filter((t) => t > paidTotal + smallest && t <= paidTotal + heldTotal))
+          .forEach((t) => { worstCom = Math.max(worstCom, comAt(t) - (t - paidTotal)); });
+        worst = worstCom + fixedFees;
+        open.forEach((k) => { worst += Math.max(feesIfUnsold[k] || 0, feesIfSold[k] || 0); });
+      }
+    }
+    return { cents: Math.max(0, worst - deducted), worstCents: worst };
+  }
+
+  /* @money @report — one consignor's settlement statement for one sale, from the contract's stamped schedule: gross (sold lines), commission and schedule fees, expenses, advances, and the holdback the conservative paid rule demands; net = gross - commission - fees - expenses - advances - holdback. A line counts as buyer-paid only when that buyer's WHOLE invoice for the sale is at 0 or less without counting write-offs and waivers as paid (unless the contract says forgivenCountsAsPaid); the holdback also covers the worst case of held lines that never clear. */
   function statement(contract, lines, expenses, advances, unpaidRisk) {
     onlyKeys(contract, CONTRACT_KEYS, 'contract');
     const risk = oneOf(unpaidRisk, RISKS, 'unpaidRisk');
@@ -704,16 +811,34 @@
     if (contract.charges !== undefined && contract.charges !== null && listOf(contract.charges, 'contract.charges').length > 0) {
       refuse('contract.charges', 'math version 1 does not apply contract charges (their rule is not defined yet); record each one as an expense');
     }
+    const forgivenPaid = optBool(contract.forgivenCountsAsPaid, 'contract.forgivenCountsAsPaid');
     const s = checkSched(contract.schedule, 'contract.schedule');
     const ls = checkLines(lines, 'lines');
-    const seenHammer = Object.create(null);
+    const seenHammer = Object.create(null), byBidder = Object.create(null), forgiven = [];
+    let consignor = contract.contractId === undefined ? null : textIn(contract.contractId, 'contract.contractId');
     ls.forEach((l) => {
-      if (l.outcome !== 'sold') return;
       const p = 'lines[' + l.i + ']';
+      if (l.raw.contractId !== undefined) {
+        textIn(l.raw.contractId, p + '.contractId');
+        if (consignor !== null && l.raw.contractId !== consignor) refuse(p + '.contractId', 'lot ' + l.label + ' is on contract ' + l.raw.contractId + ', not ' + consignor + '; a statement pays one consignor');
+        consignor = l.raw.contractId;
+      }
+      if (l.outcome !== 'sold') return;
       const hid = textIn(l.raw.hammerId, p + '.hammerId');
       if (seenHammer[hid]) refuse(p + '.hammerId', 'hammer ' + hid + ' is on this statement twice; a line is paid once');
       seenHammer[hid] = true;
-      wholeIn(l.raw.buyerBalanceCents, -MAX_CENTS, MAX_CENTS, p + '.buyerBalanceCents');
+      const bal = wholeIn(l.raw.buyerBalanceCents, -MAX_CENTS, MAX_CENTS, p + '.buyerBalanceCents');
+      if (l.raw.buyerForgivenCents === undefined && !forgivenPaid) {
+        refuse(p + '.buyerForgivenCents', 'is required: how much of this buyer\'s invoice was written off or waived (the invoice\'s forgivenCents, 0 if none), because forgiven money is not paid money');
+      }
+      const forg = l.raw.buyerForgivenCents === undefined ? 0 : centsIn(l.raw.buyerForgivenCents, p + '.buyerForgivenCents');
+      forgiven[l.i] = forg;
+      if (l.raw.bidderNo === undefined) return;
+      const b = textIn(l.raw.bidderNo, p + '.bidderNo'), prev = byBidder[b];
+      if (prev && (prev.bal !== bal || prev.forg !== forg)) {
+        refuse(p + '.buyerBalanceCents', 'bidder ' + b + ' has one invoice for the sale, but two of its lines here disagree on it (' + fmt(prev.bal) + ' / ' + fmt(prev.forg) + ' forgiven vs ' + fmt(bal) + ' / ' + fmt(forg) + '); the paid rule reads the whole invoice');
+      }
+      byBidder[b] = { bal: bal, forg: forg };
     });
     const com = commissionOf(s, ls);
     const exp = checkDeductions(expenses, EXPENSE_KEYS, 'expenses');
@@ -722,42 +847,55 @@
     const advancesCents = sumCents(adv.map((a) => a.cents), 'advances total');
 
     const text = ['Settlement statement' + (contract.contractId ? ' for contract ' + contract.contractId : '') + ' (math version ' + MATH_VERSION + '). Unpaid risk: ' + risk +
-      (risk === 'consignor' ? ' (a line waits until its buyer has paid the whole invoice).' : ' (the house pays unpaid lines as if collected).')];
-    let gross = 0, holdback = 0;
+      (risk === 'consignor' ? ' (a line waits until its buyer has paid the whole invoice).' : ' (the house pays unpaid lines as if collected).') +
+      (forgivenPaid ? ' Write-offs and waivers count as paid (forgivenCountsAsPaid).' : '')];
+    let gross = 0, heldLines = 0, heldCount = 0;
+    const heldIdx = Object.create(null);
     const outLines = ls.map((l) => {
       if (l.outcome !== 'sold') {
         text.push('  Lot ' + l.label + ': ' + (l.outcome === 'passed' ? 'passed, no sale' : 'bought back at ' + fmt(l.lineCents)) + ', not in gross.');
         return { hammerId: l.raw.hammerId === undefined ? null : l.raw.hammerId, lotNo: l.lotNo, line: l.line, lineCents: l.lineCents, inGross: false, status: l.outcome, buyerPaid: null, heldCents: 0 };
       }
       gross = sumCents([gross, l.lineCents], 'gross');
-      const bal = l.raw.buyerBalanceCents;
-      const paid = bal <= 0;
+      const bal = l.raw.buyerBalanceCents, forg = forgiven[l.i];
+      const owed = forgivenPaid ? bal : bal + forg;   /* what the buyer would still owe if nothing had been forgiven */
+      const paid = owed <= 0;
       let status, heldCents = 0;
       if (l.held) { status = 'disputed'; heldCents = l.lineCents; }
       else if (paid) { status = 'paid'; }
       else if (risk === 'consignor') { status = 'unpaidHeld'; heldCents = l.lineCents; }
       else { status = 'unpaidHouse'; }
-      holdback = sumCents([holdback, heldCents], 'holdback');
-      const said = status === 'disputed' ? 'DISPUTED, held back' : status === 'paid' ? 'buyer paid in full (invoice balance ' + fmt(bal) + ')'
-        : status === 'unpaidHeld' ? 'buyer still owes ' + fmt(bal) + ' on the sale, held back' : 'buyer still owes ' + fmt(bal) + ', paid as if collected (house risk)';
+      if (heldCents > 0) { heldIdx[l.i] = true; heldCount++; }
+      heldLines = sumCents([heldLines, heldCents], 'holdback');
+      const owes = bal > 0 ? 'buyer still owes ' + fmt(bal) + ' on the sale' : 'buyer\'s invoice is at ' + fmt(bal) + ' only because ' + fmt(forg) + ' of it was written off or waived, which is not payment';
+      const said = status === 'disputed' ? 'DISPUTED, held back'
+        : status === 'paid' ? 'buyer paid in full (invoice balance ' + fmt(bal) + (forg && forgivenPaid ? ', ' + fmt(forg) + ' forgiven and counted as paid' : '') + ')'
+          : status === 'unpaidHeld' ? owes + ', held back' : owes + ', paid as if collected (house risk)';
       text.push('  Lot ' + l.label + ' (hammer ' + l.raw.hammerId + '): ' + fmt(l.lineCents) + ', ' + said + '.');
-      return { hammerId: l.raw.hammerId, lotNo: l.lotNo, line: l.line, lineCents: l.lineCents, inGross: true, status: status, buyerPaid: paid, buyerBalanceCents: bal, heldCents: heldCents };
+      return { hammerId: l.raw.hammerId, lotNo: l.lotNo, line: l.line, lineCents: l.lineCents, inGross: true, status: status, buyerPaid: paid, buyerBalanceCents: bal, buyerForgivenCents: forg, heldCents: heldCents };
     });
+    const extra = extraHoldback(s, ls, heldIdx, heldCount, com);
+    const holdback = sumCents([heldLines, extra.cents], 'holdback');
     const net = gross - com.cents - com.feesCents - expensesCents - advancesCents - holdback;
 
     text.push('Gross (sold lines): ' + fmt(gross) + '.');
     text.push(com.mathText.split('\n').map((x) => '  ' + x).join('\n'));
     exp.forEach((e) => text.push('  Expense' + (e.what ? ' (' + e.what + ')' : '') + ': ' + fmt(e.cents)));
     adv.forEach((a) => text.push('  Advance already paid' + (a.ref ? ' (' + a.ref + ')' : '') + ': ' + fmt(a.cents)));
+    if (extra.cents > 0) {
+      text.push('  Held back a further ' + fmt(extra.cents) + ': if the held lines never clear, commission and fees less the held hammer that does clear could come to ' +
+        fmt(extra.worstCents) + ', more than the ' + fmt(com.cents + com.feesCents) + ' deducted here; the difference waits until they clear.');
+    }
     text.push(fmt(gross) + ' gross - ' + fmt(com.cents) + ' commission - ' + fmt(com.feesCents) + ' fees - ' + fmt(expensesCents) + ' expenses - ' +
-      fmt(advancesCents) + ' advances - ' + fmt(holdback) + ' held back = ' + fmt(net) + (net < 0 ? ' (nothing is payable now)' : ' net to the consignor') + '.');
+      fmt(advancesCents) + ' advances - ' + fmt(holdback) + ' held back' + (extra.cents ? ' (' + fmt(heldLines) + ' of held lines + ' + fmt(extra.cents) + ' further)' : '') +
+      ' = ' + fmt(net) + (net < 0 ? ' (nothing is payable now)' : ' net to the consignor') + '.');
 
     return {
-      mathVersion: MATH_VERSION, contractId: contract.contractId === undefined ? null : contract.contractId, unpaidRisk: risk, lines: outLines,
+      mathVersion: MATH_VERSION, contractId: contract.contractId === undefined ? null : contract.contractId, unpaidRisk: risk, forgivenCountsAsPaid: forgivenPaid, lines: outLines,
       grossCents: gross,
       commission: { kind: com.kind, basis: com.basis, brackets: com.brackets, minCents: com.minCents, capCents: com.capCents, cents: com.cents, perUnit: com.perUnit, mathText: com.mathText },
       fees: com.fees, feesCents: com.feesCents, expenses: exp, expensesCents: expensesCents, advances: adv, advancesCents: advancesCents,
-      holdbackCents: holdback, netCents: net, mathText: text.join('\n')
+      heldLinesCents: heldLines, extraHoldbackCents: extra.cents, holdbackCents: holdback, netCents: net, mathText: text.join('\n')
     };
   }
 

@@ -398,10 +398,10 @@ const STMT_CONTRACT = {
     lotFeeCents: 300, noSaleFeeCents: 1000, titledNoSaleFeeCents: 2500, buybackFee: { bp: 500 } }
 };
 const STMT_LINES = [
-  LINE('A1', 40000, { hammerId: 'h1', buyerBalanceCents: 0 }),
-  LINE('A2', 15000, { qty: 3, hammerId: 'h2', buyerBalanceCents: -300 }),
-  LINE('A3', 90000, { hammerId: 'h3', buyerBalanceCents: 500 }),
-  LINE('A4', 25000, { hammerId: 'h4', buyerBalanceCents: 0, held: true }),
+  LINE('A1', 40000, { hammerId: 'h1', buyerBalanceCents: 0, buyerForgivenCents: 0 }),
+  LINE('A2', 15000, { qty: 3, hammerId: 'h2', buyerBalanceCents: -300, buyerForgivenCents: 0 }),
+  LINE('A3', 90000, { hammerId: 'h3', buyerBalanceCents: 500, buyerForgivenCents: 0 }),
+  LINE('A4', 25000, { hammerId: 'h4', buyerBalanceCents: 0, buyerForgivenCents: 0, held: true }),
   LINE('A5', 0, { passed: true }),
   LINE('A6', 20000, { buyback: true })
 ];
@@ -423,6 +423,7 @@ const INV_PAYS = [
 const INV_FEES = [{ kind: 'card', cents: 1200 }, { kind: 'storage', cents: 500 }];
 const INV_ADJ = [{ kind: 'writeoff', cents: -1000, reason: 'damaged on load-out' }, { kind: 'correction', cents: 250, reason: 'lot 102 count' }];
 const INV_CTX = { saleDate: SALE_DATE, cert: { certId: 'X-9', expires: '2027-03-31' } };
+const ZERO_PREMIUM_TERMS = Object.assign({}, TERMS, { premium: { floor: { brackets: [{ uptoCents: null, bp: 0 }] }, online: ONLINE } });
 
 proof(9, 'A float, a negative, a value above $10,000,000.00, a typo, a guess: each is refused, never coerced',
   'a bad number silently turned into money: 100.5 cents, "100", NaN, a negative price, an amount over the ceiling, a misspelt cap that would be skipped, an unknown tax class guessed, an impossible date, a refund larger than its payment',
@@ -486,9 +487,18 @@ proof(9, 'A float, a negative, a value above $10,000,000.00, a typo, a guess: ea
       ['an invoice line with no channel', inv([LINE('1', 1000, { taxClass: 'general' })]), 'channel'],
       ['contract charges (no rule defined yet)', st(Object.assign({}, STMT_CONTRACT, { charges: [{ kind: 'advertising', cents: 100, rule: 'x' }] })), 'charges'],
       ['an unpaid risk different from the contract\'s', st(Object.assign({}, STMT_CONTRACT, { unpaidRisk: 'house' }), null, 'consignor'), 'unpaidRisk'],
-      ['a sold line with no hammer id', st(null, [LINE('A1', 100, { buyerBalanceCents: 0 })]), 'hammerId'],
-      ['the same hammer twice', st(null, [LINE('A1', 100, { hammerId: 'h1', buyerBalanceCents: 0 }), LINE('A2', 100, { hammerId: 'h1', buyerBalanceCents: 0 })]), 'hammerId'],
-      ['a fractional buyer balance', st(null, [LINE('A1', 100, { hammerId: 'h1', buyerBalanceCents: 0.5 })]), 'buyerBalanceCents']
+      ['a sold line with no hammer id', st(null, [LINE('A1', 100, { buyerBalanceCents: 0, buyerForgivenCents: 0 })]), 'hammerId'],
+      ['the same hammer twice', st(null, [LINE('A1', 100, { hammerId: 'h1', buyerBalanceCents: 0, buyerForgivenCents: 0 }), LINE('A2', 100, { hammerId: 'h1', buyerBalanceCents: 0, buyerForgivenCents: 0 })]), 'hammerId'],
+      ['a fractional buyer balance', st(null, [LINE('A1', 100, { hammerId: 'h1', buyerBalanceCents: 0.5, buyerForgivenCents: 0 })]), 'buyerBalanceCents'],
+      ['a statement line that does not say what was forgiven', st(null, [LINE('A1', 100, { hammerId: 'h1', buyerBalanceCents: 0 })]), 'buyerForgivenCents'],
+      ['a fractional forgiven amount', st(null, [LINE('A1', 100, { hammerId: 'h1', buyerBalanceCents: 0, buyerForgivenCents: 0.5 })]), 'buyerForgivenCents'],
+      ['a refund on a voided payment', inv(null, [{ payId: 'P1', cents: 1000, method: 'cash', voided: true, refundedCents: 1 }]), 'refundedCents'],
+      ['a commission cap of $0.00', () => F.commission(S({ capCents: 0 }), [LINE('1', 100)]), 'capCents'],
+      ['a premium cap of $0.00', () => F.premium({ brackets: [{ uptoCents: null, bp: 1000 }], capCents: 0 }, 100), 'capCents'],
+      ['a titled no-sale fee of $0.00', () => F.commission(S({ noSaleFeeCents: 1000, titledNoSaleFeeCents: 0 }), [LINE('1', 100)]), 'titledNoSaleFeeCents'],
+      ['a premium on a 0-cent line', () => F.premium(FLOOR10, 0), 'lineCents'],
+      ['a tax line of 0 cents', () => F.tax([{ lotNo: '1', taxClass: 'general', lineCents: 0 }], TAXT, null, SALE_DATE), 'lineCents'],
+      ['an invoice total past $10M', inv([LINE('1', 1000 * 1000 * 1000, { channel: 'floor', taxClass: 'titled' })], [], [], [{ kind: 'correction', cents: 1 }], null, ZERO_PREMIUM_TERMS), 'adjustments']
     ];
     const broken = [];
     for (const [label, fn, pathHas] of cases) {
@@ -507,6 +517,13 @@ proof(9, 'A float, a negative, a value above $10,000,000.00, a typo, a guess: ea
     { why: 'a choice taking with qty above 1 let through', find: "if (mode === 'choice' && qty !== 1) refuse(", repl: 'if (false) refuse(' },
     { why: 'a duplicate lot line let through', find: 'if (seen[key]) refuse(', repl: 'if (false) refuse(' },
     { why: 'a refund above its payment let through', find: 'if (refunded > cents) refuse(', repl: 'if (false) refuse(' },
+    { why: 'a refund on a voided payment let through (only a returned one refused)', find: 'if (refunded > 0 && (voided || returned)) refuse(', repl: 'if (refunded > 0 && returned) refuse(' },
+    { why: 'a cap of $0.00 accepted (it zeroes every charge)', find: "if (c === 0) refuse(path, 'a cap of $0.00", repl: "if (false) refuse(path, 'a cap of $0.00" },
+    { why: 'a titled no-sale fee of $0.00 accepted (not set, or free?)', find: "if (c === 0) refuse(path, 'is $0.00, which could mean", repl: "if (false) refuse(path, 'is $0.00, which could mean" },
+    { why: 'a premium priced on a 0-cent line', find: "centsIn(lineCents, 'lineCents', 1), false)", repl: "centsIn(lineCents, 'lineCents'), false)" },
+    { why: 'a 0-cent tax line accepted', find: "lineCents: centsIn(raw.lineCents, p + '.lineCents', 1)", repl: "lineCents: centsIn(raw.lineCents, p + '.lineCents')" },
+    { why: 'an invoice total let past the ceiling', find: "if (totalCents > MAX_CENTS) refuse('adjustments',", repl: "if (false) refuse('adjustments'," },
+    { why: 'a statement line read without its forgiven amount', find: 'if (l.raw.buyerForgivenCents === undefined && !forgivenPaid) {', repl: 'if (false) {' },
     { why: 'an unlisted tax class guessed', find: 'if (rule === undefined) refuse(', repl: 'if (false) refuse(' },
     { why: 'a write-off that adds money let through', find: "if (kind !== 'correction' && cents > 0) refuse(", repl: 'if (false) refuse(' },
     { why: 'impossible dates let through', find: 'if (m < 1 || m > 12 || d < 1 || d > days[m - 1]) refuse(', repl: 'if (false) refuse(' },
@@ -598,7 +615,8 @@ proof(11, 'Statement: net + commission + fees + expenses + advances + holdback =
 proof(12, 'The conservative paid rule: buyer-paid only when the buyer\'s whole invoice is at $0.00 or less',
   'a consignor paid out of a buyer\'s part-paid invoice (per-line allocation by guess), or a buyer at exactly $0.00 treated as unpaid',
   (F) => {
-    const ls = [LINE('X', 10000, { hammerId: 'hx', buyerBalanceCents: 0 }), LINE('Y', 10000, { hammerId: 'hy', buyerBalanceCents: 1 }), LINE('Z', 10000, { hammerId: 'hz', buyerBalanceCents: -2500 })];
+    const ls = [LINE('X', 10000, { hammerId: 'hx', buyerBalanceCents: 0, buyerForgivenCents: 0 }), LINE('Y', 10000, { hammerId: 'hy', buyerBalanceCents: 1, buyerForgivenCents: 0 }),
+      LINE('Z', 10000, { hammerId: 'hz', buyerBalanceCents: -2500, buyerForgivenCents: 0 })];
     const c = F.statement({ schedule: FLAT10 }, ls, [], [], 'consignor');
     const h = F.statement({ schedule: FLAT10 }, ls, [], [], 'house');
     return expectAll([
@@ -610,8 +628,8 @@ proof(12, 'The conservative paid rule: buyer-paid only when the buyer\'s whole i
     ]);
   },
   [
-    { why: 'a buyer at exactly $0.00 treated as unpaid', find: 'const paid = bal <= 0;', repl: 'const paid = bal < 0;' },
-    { why: 'per-line allocation: paid once what is owed is less than the line', find: 'const paid = bal <= 0;', repl: 'const paid = bal <= l.lineCents;' },
+    { why: 'a buyer at exactly $0.00 treated as unpaid', find: 'const paid = owed <= 0;', repl: 'const paid = owed < 0;' },
+    { why: 'per-line allocation: paid once what is owed is less than the line', find: 'const paid = owed <= 0;', repl: 'const paid = owed <= l.lineCents;' },
     { why: 'unpaid lines never held back', find: "else if (risk === 'consignor') {", repl: 'else if (false) {' }
   ]);
 
@@ -767,6 +785,292 @@ sourceProof(17, 'The unit\'s files hold no phone, e-mail or server address, and 
     { why: 'a server address planted', input: plantInto('\n/* 10.' + '0.0.' + '7 */\n') },
     { why: 'a private word planted', input: plantInto('\n/* ' + PLANTED_WORD + ' */\n') }
   ].concat(LOCAL_WORDS.length ? [{ why: 'the first word of the local private list planted', input: plantInto('\n/* ' + LOCAL_WORDS[0] + ' */\n') }] : []));
+
+/* ======================================================================== */
+/* P18-P24 came from a second look: an independent reference build, a differential fuzz against it and a code review.
+   Each closes a rule the first seventeen proofs did not pin, and each control is a break that once left the whole
+   suite green. */
+
+/* P18 — an invoice that rounds its premium once, over premiums that hit a per-line minimum and cap, with the premium
+   taxed. Terms: floor 10%; online incremental 15% up to $1,000.00, 10% above, minimum $5.00, cap $500.00 per line; tax
+   9.875%, premium taxed; general taxable, farm exempt only with a certificate (none here), titled exempt.
+     lot 101 online general $20.00:      15% = $3.00, raised to the $5.00 minimum                -> $5.00
+     lot 102 online general $10,000.00:  $150.00 + $900.00 = $1,050.00, held to the $500.00 cap  -> $500.00
+     lot 103 floor general $1.05:        $0.105
+     lot 104 floor general $1.05:        $0.105
+     lot 105 floor titled $2.05:         $0.205 (exempt)
+     lot 106 online farm $1.03:          $0.1545, raised to the $5.00 minimum (taxed: no certificate) -> $5.00
+   hammer $20.00 + $10,000.00 + $1.05 + $1.05 + $2.05 + $1.03 = $10,025.18
+   PER INVOICE: premium $5 + $500 + $0.105 + $0.105 + $0.205 + $5 = $510.415, rounded once -> $510.42
+     taxed premium (every lot but 105): $5 + $500 + $0.105 + $0.105 + $5 = $510.21 exactly
+     taxed hammer $10,023.13; base $10,533.34; x 9.875% = $1,040.167325 -> $1,040.17; total $11,575.77
+   PER LINE: premiums $5.00, $500.00, $0.11, $0.11, $0.21, $5.00 = $510.43; taxed premium $510.22 (the rounded line
+     premiums); base $10,533.35; x 9.875% = $1,040.168313 -> $1,040.17; total $11,575.78 */
+const CAPPED_LINES = [
+  LINE('101', 2000, { channel: 'online', taxClass: 'general' }), LINE('102', 1000000, { channel: 'online', taxClass: 'general' }),
+  LINE('103', 105, { channel: 'floor', taxClass: 'general' }), LINE('104', 105, { channel: 'floor', taxClass: 'general' }),
+  LINE('105', 205, { channel: 'floor', taxClass: 'titled' }), LINE('106', 103, { channel: 'online', taxClass: 'farm' })
+];
+proof(18, 'Premium rounded once per invoice over capped and minimum line premiums, and the taxed premium with it',
+  'a buyer charged an uncapped premium when the invoice rounds once, a taxed premium that skips the cap or minimum, a taxed premium rounded twice, or a tax base built on unrounded line premiums',
+  (F) => {
+    const inv = (r) => F.invoice(Object.assign({}, TERMS, { rounding: { premium: r, tax: 'invoice' } }), CAPPED_LINES, [], [], [], { saleDate: SALE_DATE, cert: null });
+    const once = inv('invoice'), lines = inv('line');
+    return expectAll([
+      ['hammer', once.hammerCents, 1002518],
+      ['line premiums kept exact (cents x 10000)', once.lines.map((l) => l.premiumExact), [5000000, 500000000, 105000, 105000, 205000, 5000000]],
+      ['premium rounded once', once.premiumCents, 51042],
+      ['taxed premium, once, after the cap and minimum', once.tax.premiumBaseCents, 51021],
+      ['tax base and tax', [once.tax.baseCents, once.taxCents], [1053334, 104017]],
+      ['total', once.totalCents, 1157577],
+      ['per line: premium', lines.premiumCents, 51043],
+      ['per line: taxed premium is the rounded line premiums', lines.tax.premiumBaseCents, 51022],
+      ['per line: tax base, tax and total', [lines.tax.baseCents, lines.taxCents, lines.totalCents], [1053335, 104017, 1157578]]
+    ]);
+  },
+  [
+    { why: 'the once-rounded premium adds the line premiums before their cap and minimum', find: 'premExactSum += pr.exact;', repl: 'premExactSum += pr.rawExact;' },
+    { why: 'the taxed premium skips the cap and minimum', find: 'premiumExact: pr.exact, premiumText', repl: 'premiumExact: pr.rawExact, premiumText' },
+    { why: 'the taxed premium rounded line by line, then again', find: 'premExact: perLine ? o.premiumCents * BP_ONE : o.premiumExact })', repl: 'premExact: perLine ? o.premiumCents * BP_ONE : roundNum(o.premiumExact) * BP_ONE })' },
+    { why: 'per-line rounding taxes the unrounded premium', find: 'premExact: perLine ? o.premiumCents * BP_ONE : o.premiumExact })', repl: 'premExact: o.premiumExact })' }
+  ]);
+
+/* P19 — schedule fee edges. Flat 10% per line; no-sale fee $10.00; titled no-sale fee $25.00; buyback fee 5%.
+     lot 4 bought back at $3.10: 5% = 15.5 cents -> 16 cents (half up; truncating would say 15)
+     lot 5 offered as two choice takings, 5A and 5B, both passed: ONE no-sale fee, $10.00 (per lot, not per taking)
+     lot 6: 6A passed and titled, 6B passed: ONE titled no-sale fee, $25.00
+     fees $0.16 + $10.00 + $25.00 = $35.16; commission $0.00 (nothing sold)
+     a 5% buyback fee on a buyback with no price: refused (a rate on an unknown amount is a guess)
+     a flat $20.00 buyback fee on a buyback with no price: charged, $20.00 */
+const EDGE_SCHED = { kind: 'flat', basis: 'line', brackets: [{ uptoCents: null, bp: 1000 }], noSaleFeeCents: 1000, titledNoSaleFeeCents: 2500, buybackFee: { bp: 500 } };
+const EDGE_LINES = [
+  LINE('4', 310, { passed: true, buyback: true }),
+  LINE('5', 0, { mode: 'choice', line: 'A', passed: true }), LINE('5', 0, { mode: 'choice', line: 'B', passed: true }),
+  LINE('6', 0, { mode: 'choice', line: 'A', passed: true, titled: true }), LINE('6', 0, { mode: 'choice', line: 'B', passed: true })
+];
+proof(19, 'Fee edges: a buyback fee rounded half up, one no-sale fee per lot when every taking passes, no rate on a buyback with no price',
+  'a half-cent buyback fee truncated, a no-sale fee charged once per passed taking, or a percentage fee charged as $0.00 on a buyback whose price is unknown',
+  (F) => {
+    const r = F.commission(EDGE_SCHED, EDGE_LINES);
+    const noPrice = [LINE('7', 0, { passed: true, buyback: true })];
+    return expectAll([
+      ['fee rows', r.fees.map((f) => f.kind + ':' + f.lotNo + ':' + f.cents).sort(), ['buyback:4:16', 'noSale:5:1000', 'titledNoSale:6:2500']],
+      ['fees and commission', [r.feesCents, r.cents], [3516, 0]],
+      ['buyback text shows the half cent', /\$3\.10 x 5\.00% = \$0\.155, rounded half up to \$0\.16/.test(r.mathText), true],
+      ['a rate on a buyback with no price', refusal('a 5% buyback fee on a $0.00 buyback', () => F.commission(EDGE_SCHED, noPrice), 'unitCents'), true],
+      ['a flat buyback fee with no price', F.commission(Object.assign({}, EDGE_SCHED, { buybackFee: { cents: 2000 } }), noPrice).feesCents, 2000]
+    ]);
+  },
+  [
+    { why: 'the buyback fee truncated instead of rounded half up', find: 'const c = byRate ? roundNum(l.lineCents * s.buybackFee.bp) : s.buybackFee.cents;', repl: 'const c = byRate ? div(l.lineCents * s.buybackFee.bp, BP_ONE) : s.buybackFee.cents;' },
+    { why: 'a no-sale fee charged for every passed taking', find: 'if (!anySold && !anyBuyback) {', repl: "if (!anySold && !anyBuyback) { g.slice(1).forEach(() => fees.push({ kind: 'noSale', lotNo: g[0].lotNo, cents: s.noSaleFeeCents, text: '' }));" },
+    { why: 'a percentage buyback fee charged as $0.00 when the price is unknown', find: 'if (byRate && l.lineCents === 0) refuse(', repl: 'if (false) refuse(' }
+  ]);
+
+/* P20 — quantity. The plan sets no ceiling on qty, so the library reuses the one number it has (1,000,000,000) and lets
+   the $10,000,000.00 money ceiling do the real work. Flat 10% per line:
+     one-money lot of 2,000,000 pieces for $5,000.00: the line is $5,000.00 (qty never multiplies one money) -> $500.00
+     2,000,000 each at $0.01 = $20,000.00 -> $2,000.00
+     item basis, 2,000,000 each at $1.00: 10% = $0.10 an item, raised to a $0.25 minimum, x 2,000,000 = $500,000.00
+     100,000,001 each at $0.10 = $10,000,000.10: past the ceiling, refused
+     qty 1,000,000,001: refused */
+proof(20, 'Quantity: large lots up to 1,000,000,000 pieces are worked exactly; only the money ceiling refuses',
+  'a real lot refused for an invented quantity limit, or a quantity so large the line could not be worked exactly',
+  (F) => {
+    const c = (sched, line) => F.commission(sched, [line]).cents;
+    const ITEM_MIN = { kind: 'flat', basis: 'item', brackets: [{ uptoCents: null, bp: 1000 }], minCents: 25 };
+    return expectAll([
+      ['one money, 2,000,000 pieces', c(FLAT10, LINE('1', 500000, { qty: 2000000, mode: 'onemoney' })), 50000],
+      ['2,000,000 each at a cent', c(FLAT10, LINE('1', 1, { qty: 2000000 })), 200000],
+      ['item basis with a minimum, 2,000,000 items', c(ITEM_MIN, LINE('1', 100, { qty: 2000000 })), 50000000],
+      ['a line past $10M', refusal('100,000,001 x $0.10', () => F.commission(FLAT10, [LINE('1', 10, { qty: 100000001 })]), 'lines[0]'), true],
+      ['qty past the ceiling', refusal('qty 1,000,000,001', () => F.commission(FLAT10, [LINE('1', 1, { qty: 1000000001, mode: 'onemoney' })]), 'qty'), true]
+    ]);
+  },
+  [
+    { why: 'the old, undeclared 1,000,000 quantity limit', find: 'const MAX_QTY = MAX_CENTS;', repl: 'const MAX_QTY = 1000 * 1000;' },
+    { why: 'no quantity ceiling at all', find: "wholeIn(raw.qty, 1, MAX_QTY, p + '.qty')", repl: "wholeIn(raw.qty, 1, Number.MAX_SAFE_INTEGER, p + '.qty')" }
+  ]);
+
+/* P21 — the holdback covers every way the held lines could end. Unpaid (consignor risk) and disputed lines are held back
+   in full, and commission is charged on every sold line, so when they clear the release is exact. But a held line may
+   never clear. Then the consignor is owed commission and fees on what is left, and that can be MORE than was deducted:
+   a sliding rate that falls as the total rises, an unsold lot's no-sale fee above its lot fee, a per-item minimum larger
+   than the hammer. The statement holds that difference back too, so nothing is paid now that a later statement would
+   claw back. Every example is checked by brute force as well: the statement is re-run for each way its held lines could
+   end (each one paid, or its lot unsold), and the net now must equal the least of those nets and the all-collected net.
+   A  sliding on the consignor's total, 25% up to $1,000.00, 15% above. $1,000.00 paid; $0.01 unpaid (consignor risk).
+      All sold: $1,000.01 x 15% = $150.00. If the $0.01 never clears: $1,000.00 x 25% = $250.00.
+      Held back $0.01 + a further $100.00. Net $1,000.01 - $150.00 - $100.01 = $750.00 (what $1,000.00 alone pays).
+   B  flat 10% per line, lot fee $3.00 (sold lots), no-sale fee $10.00. Lot 1 $100.00 paid; lot 2 $50.00 unpaid.
+      All sold: $15.00 + $6.00 = $21.00. If lot 2 never clears: $10.00 + $3.00 + a $10.00 no-sale fee = $23.00.
+      Held back $50.00 + $2.00. Net $150.00 - $21.00 - $52.00 = $77.00 (= $100.00 - $23.00).
+   C  flat 10% per item, minimum $1.00 an item, no-sale fee $50.00. Lot 1 $500.00 paid; lot 2, 100 each at $0.01
+      ($1.00), unpaid; lot 3 $5.00 unpaid. Commission $50.00 + 100 x $1.00 + $1.00 = $151.00. The worst end: lot 2
+      clears and lot 3 does not: $50.00 + $100.00 + a $50.00 no-sale fee - lot 2's $1.00 = $199.00.
+      Held back $6.00 + $48.00. Net $506.00 - $151.00 - $54.00 = $301.00 (= $501.00 - $150.00 - $50.00).
+   D  sliding on the consignor's total, 10% up to $1,000.00, 30% up to $1,100.00, 5% above. $900.00 paid; unpaid
+      $100.01, $250.00 and $10.00. All sold: $1,260.01 x 5% = $63.00. The worst end: only the $100.01 clears, so the
+      total is $1,000.01, at 30%: $300.00 - $100.01 = $199.99. Held back $360.01 + $136.99.
+      Net $1,260.01 - $63.00 - $497.00 = $700.01 (= $1,000.01 - $300.00).
+   E  house risk, A's rates: $900.00 paid, $200.00 DISPUTED. All sold: $1,100.00 x 15% = $165.00. Without the
+      disputed line: $900.00 x 25% = $225.00. Held back $200.00 + $60.00. Net $1,100.00 - $165.00 - $260.00 = $675.00.
+   F  A with the $0.01 paid: nothing held, nothing further. Net $1,000.01 - $150.00 = $850.01.
+   G  D plus fourteen more unpaid lots of $0.01: 17 held lines, past the 16 for which every end is tried, so the safe
+      bound runs. All sold: $1,260.15 x 5% = $63.0075 -> $63.01. The bound looks at the smallest total the held lines can
+      add ($900.01: $90.00 - $0.01) and at each bracket start: $1,000.01 gives $300.00 - $100.01 = $199.99, $1,100.01
+      gives $55.00 - $200.01. Worst $199.99 (reached when only the $100.01 clears). Held back $360.15 + $136.98.
+      Net $1,260.15 - $63.01 - $497.13 = $700.01.
+   H  A's rates with a lot fee of $3.00 and a no-sale fee of $10.00: lot 1 $1,000.00 paid, lot 2 $50.00 unpaid. All
+      sold: $1,050.00 x 15% = $157.50 + $6.00 fees. If lot 2 never clears: $250.00 + $3.00 + $10.00 = $263.00.
+      Held back $50.00 + $99.50. Net $1,050.00 - $163.50 - $149.50 = $737.00 (= $1,000.00 - $263.00). */
+const SOLD = (lotNo, unitCents, hammerId, balance, extra) => LINE(lotNo, unitCents, Object.assign({ hammerId: hammerId, buyerBalanceCents: balance, buyerForgivenCents: 0 }, extra || {}));
+const SLIDE_25_15 = { kind: 'sliding', basis: 'consignor', brackets: [{ uptoCents: 100000, bp: 2500 }, { uptoCents: null, bp: 1500 }] };
+const HOLD_CASES = [
+  ['A', { schedule: SLIDE_25_15 }, [SOLD('1', 100000, 'h1', 0), SOLD('2', 1, 'h2', 1)], 'consignor', [1, 10000, 75000]],
+  ['B', { schedule: { kind: 'flat', basis: 'line', brackets: [{ uptoCents: null, bp: 1000 }], lotFeeCents: 300, noSaleFeeCents: 1000 } },
+    [SOLD('1', 10000, 'h1', 0), SOLD('2', 5000, 'h2', 2500)], 'consignor', [5000, 200, 7700]],
+  ['C', { schedule: { kind: 'flat', basis: 'item', brackets: [{ uptoCents: null, bp: 1000 }], minCents: 100, noSaleFeeCents: 5000 } },
+    [SOLD('1', 50000, 'h1', 0), SOLD('2', 1, 'h2', 700, { qty: 100 }), SOLD('3', 500, 'h3', 900)], 'consignor', [600, 4800, 30100]],
+  ['D', { schedule: { kind: 'sliding', basis: 'consignor', brackets: [{ uptoCents: 100000, bp: 1000 }, { uptoCents: 110000, bp: 3000 }, { uptoCents: null, bp: 500 }] } },
+    [SOLD('1', 90000, 'h1', 0), SOLD('2', 10001, 'h2', 1), SOLD('3', 25000, 'h3', 1), SOLD('4', 1000, 'h4', 1)], 'consignor', [36001, 13699, 70001]],
+  ['E', { schedule: SLIDE_25_15 }, [SOLD('1', 90000, 'h1', 0), SOLD('2', 20000, 'h2', 0, { held: true })], 'house', [20000, 6000, 67500]],
+  ['F', { schedule: SLIDE_25_15 }, [SOLD('1', 100000, 'h1', 0), SOLD('2', 1, 'h2', 0)], 'consignor', [0, 0, 85001]],
+  ['G', { schedule: { kind: 'sliding', basis: 'consignor', brackets: [{ uptoCents: 100000, bp: 1000 }, { uptoCents: 110000, bp: 3000 }, { uptoCents: null, bp: 500 }] } },
+    [SOLD('1', 90000, 'h1', 0), SOLD('2', 10001, 'h2', 1), SOLD('3', 25000, 'h3', 1), SOLD('4', 1000, 'h4', 1)]
+      .concat([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((n) => SOLD(String(n), 1, 'h' + n, 1))), 'consignor', [36015, 13698, 70001]],
+  ['H', { schedule: Object.assign({ lotFeeCents: 300, noSaleFeeCents: 1000 }, SLIDE_25_15) }, [SOLD('1', 100000, 'h1', 0), SOLD('2', 5000, 'h2', 1)], 'consignor', [5000, 9950, 73700]]
+];
+/* @proof — re-runs a statement for every way its held lines could end (each one paid, or its lot unsold), nothing held; returns the least net. */
+function leastNetIfHeldLinesEnd(F, contract, lines, st) {
+  const heldAt = st.lines.map((l, i) => (l.heldCents > 0 ? i : -1)).filter((i) => i >= 0);
+  let least = Infinity;
+  for (let m = 0; m < (1 << heldAt.length); m++) {
+    const scenario = lines.map((l, i) => {
+      const k = heldAt.indexOf(i), o = Object.assign({}, l);
+      delete o.held;
+      if (k >= 0 && !(m & (1 << k))) { o.passed = true; delete o.hammerId; delete o.buyerBalanceCents; delete o.buyerForgivenCents; return o; }
+      if (o.hammerId !== undefined) { o.buyerBalanceCents = 0; o.buyerForgivenCents = 0; }
+      return o;
+    });
+    least = Math.min(least, F.statement(contract, scenario, [], [], 'house').netCents);
+  }
+  return least;
+}
+proof(21, 'The holdback covers every way the held lines could end: nothing is paid now that a later statement would take back',
+  'a consignor overpaid out of money the house never collected when a held line is voided: a sliding rate that falls with the total, a no-sale fee above the lot fee, or a per-item minimum',
+  (F) => {
+    const rows = [];
+    for (const [name, contract, lines, risk, want] of HOLD_CASES) {
+      const st = F.statement(contract, lines, [], [], risk);
+      rows.push([name + ': held lines, further holdback, net', [st.heldLinesCents, st.extraHoldbackCents, st.netCents], want]);
+      rows.push([name + ': identity 5', st.netCents + st.commission.cents + st.feesCents + st.expensesCents + st.advancesCents + st.holdbackCents, st.grossCents]);
+      if (st.lines.filter((l) => l.heldCents > 0).length <= 8) {   /* G (17 held) is worked by hand above; 131,072 re-runs per copy would slow the suite */
+        rows.push([name + ': net = the least net over every end (brute force)', st.netCents, Math.min(st.netCents + st.extraHoldbackCents, leastNetIfHeldLinesEnd(F, contract, lines, st))]);
+      }
+    }
+    const a = F.statement(HOLD_CASES[0][1], HOLD_CASES[0][2], [], [], 'consignor');
+    rows.push(['the text names the further holdback', /Held back a further \$100\.00/.test(a.mathText) && /\$100\.01 held back \(\$0\.01 of held lines \+ \$100\.00 further\) = \$750\.00/.test(a.mathText), true]);
+    return expectAll(rows);
+  },
+  [
+    { why: 'no further holdback (held hammer only)', find: 'return { cents: Math.max(0, worst - deducted), worstCents: worst };', repl: 'return { cents: 0, worstCents: worst };' },
+    { why: 'an unsold lot\'s fees taken as if it sold', find: "const feesIfUnsold = byLot(feesOf(s, ls.map((l) => (held[l.i] ? Object.assign({}, l, { outcome: 'passed' }) : l))));", repl: 'const feesIfUnsold = feesIfSold;' },
+    { why: 'only "nothing clears" checked, never "some clear"', find: 'worst += Math.max(unsold, sold + best);', repl: 'worst += unsold;' },
+    { why: 'the bound ignores a sliding bracket that starts inside the held amounts', find: '.filter((t) => t > paidTotal + smallest && t <= paidTotal + heldTotal))', repl: '.filter(() => false))' },
+    { why: 'the consignor-basis search tries only "nothing clears"', find: 'for (let m = 0; m < (1 << heldList.length); m++) {', repl: 'for (let m = 0; m < 1; m++) {' },
+    { why: 'the consignor-basis search prices an open lot\'s fees as if it sold', find: 'v += soldOpen[k] ? (feesIfSold[k] || 0) : (feesIfUnsold[k] || 0);', repl: 'v += feesIfSold[k] || 0;' },
+    { why: 'a disputed line under house risk left out of the worst case', find: 'if (heldCents > 0) { heldIdx[l.i] = true; heldCount++; }', repl: "if (heldCents > 0 && status !== 'disputed') { heldIdx[l.i] = true; heldCount++; }" }
+  ]);
+
+/* P22 — forgiveness is not payment. Floor premium 10%; the lot is titled, so no tax. One $1,000.00 lot: total $1,100.00.
+   The buyer pays $600.00 cash and the house writes off the other $500.00: balance $0.00, forgivenCents $500.00.
+   The consignor's statement, flat 10% per line, consignor risk; the line carries balance $0.00 and $500.00 forgiven:
+     default: NOT paid. The house received $600.00, not the $1,000.00 hammer. Held back $1,000.00:
+       $1,000.00 - $100.00 commission - $1,000.00 held back = -$100.00 (nothing payable now)
+     contract.forgivenCountsAsPaid true: paid; net $1,000.00 - $100.00 = $900.00
+     house risk: paid as if collected; net $900.00
+   Forgiving more than is owed is refused: paid $1,100.00 and then a $1.00 write-off (nothing was owed), or paid $600.00
+   and then $500.01 of waivers. Forgiving exactly what is owed (the case above) is accepted. */
+const FORGIVE_LINE = [LINE('1', 100000, { channel: 'floor', taxClass: 'titled' })];
+const FORGIVE_STMT = [LINE('1', 100000, { hammerId: 'h1', buyerBalanceCents: 0, buyerForgivenCents: 50000 })];
+proof(22, 'Write-offs and waivers are not payment: a forgiven invoice does not release a consignor\'s money, and forgiveness never exceeds what is owed',
+  'a consignor paid hammer money the house never received because a write-off brought the buyer to $0.00, or a write-off that turns into a refund claim',
+  (F) => {
+    const inv = (pays, adj) => () => F.invoice(TERMS, FORGIVE_LINE, pays, [], adj, { saleDate: SALE_DATE });
+    const r = inv([{ payId: 'P1', cents: 60000, method: 'cash' }], [{ kind: 'writeoff', cents: -50000, reason: 'uncollectable' }])();
+    const st = (contract, risk) => F.statement(Object.assign({ schedule: FLAT10 }, contract), FORGIVE_STMT, [], [], risk);
+    const def = st({}, 'consignor'), on = st({ forgivenCountsAsPaid: true }, 'consignor'), house = st({}, 'house');
+    return expectAll([
+      ['invoice balance and forgiven', [r.balanceCents, r.forgivenCents], [0, 50000]],
+      ['invoice text says forgiven, not paid', /\$500\.00 of it forgiven, not paid/.test(r.mathText), true],
+      ['default: not paid, held back', [def.lines[0].status, def.lines[0].buyerPaid, def.holdbackCents, def.netCents], ['unpaidHeld', false, 100000, -10000]],
+      ['setting on: paid', [on.lines[0].status, on.netCents], ['paid', 90000]],
+      ['house risk: paid as if collected', [house.lines[0].status, house.netCents], ['unpaidHouse', 90000]],
+      ['a write-off when nothing is owed', refusal('a $1.00 write-off on a paid invoice', inv([{ payId: 'P1', cents: 110000, method: 'cash' }], [{ kind: 'writeoff', cents: -100 }]), 'adjustments'), true],
+      ['waivers past what is owed', refusal('$500.01 of waivers on $500.00 owed', inv([{ payId: 'P1', cents: 60000, method: 'cash' }], [{ kind: 'waive', cents: -50000 }, { kind: 'waive', cents: -1 }]), 'adjustments'), true]
+    ]);
+  },
+  [
+    { why: 'forgiveness counted as payment by default', find: 'const owed = forgivenPaid ? bal : bal + forg;', repl: 'const owed = bal;' },
+    { why: 'forgiveness past what is owed let through', find: 'if (forgivenCents > Math.max(0, owedBeforeForgiven)) {', repl: 'if (false) {' },
+    { why: 'the invoice does not report what was forgiven', find: "const forgivenCents = -adjList.reduce((a, x) => a + (x.kind === 'correction' ? 0 : x.cents), 0);", repl: 'const forgivenCents = 0;' },
+    { why: 'a waiver not counted as forgiveness (write-offs only)', find: "(x.kind === 'correction' ? 0 : x.cents)", repl: "(x.kind === 'writeoff' ? x.cents : 0)" }
+  ]);
+
+/* P23 — the working matches the number. Three $1.05 floor lots at 10%: each premium is $0.105. Rounded per LINE, each
+   line says "rounded half up to $0.11" and the premium is $0.33. Rounded once per INVOICE, no line may claim $0.11 (a
+   person adding them would get $0.33): each says $0.105 kept exact, and the total says "$0.32 ($0.315 rounded once)". */
+proof(23, 'Under invoice rounding the line working shows the exact premium, never a per-line rounding that is not charged',
+  'working that adds up to a different total than the invoice charges, so a person checking it finds a cent that is not there',
+  (F) => {
+    const three = [1, 2, 3].map((n) => LINE(String(n), 105, { channel: 'floor', taxClass: 'general' }));
+    const inv = (r) => F.invoice(Object.assign({}, TERMS, { tax: NO_TAX, rounding: { premium: r, tax: 'invoice' } }), three, [], [], [], { saleDate: SALE_DATE });
+    const once = inv('invoice').mathText.split('\n'), line = inv('line').mathText.split('\n');
+    const lots = (t) => t.filter((x) => /^ {2}Lot [123] \(floor\): hammer /.test(x));
+    return expectAll([
+      ['per invoice: three line texts', lots(once).length, 3],
+      ['per invoice: each line exact', lots(once).every((x) => /\$1\.05 x 10\.00% = \$0\.105, kept exact/.test(x)), true],
+      ['per invoice: no line claims a rounding', once.some((x) => /rounded half up to \$0\.11/.test(x)), false],
+      ['per invoice: the total rounds once', once.some((x) => x.indexOf('premium $0.32 ($0.315 rounded once)') >= 0), true],
+      ['per line: each line rounds', lots(line).every((x) => /rounded half up to \$0\.11/.test(x)), true]
+    ]);
+  },
+  [{ why: 'line working always claims a per-line rounding', find: 'premiumOf(premFor(T, l.raw.channel), l.lineCents, !perLine)', repl: 'premiumOf(premFor(T, l.raw.channel), l.lineCents, false)' }]);
+
+/* P24 — one buyer per invoice, one consignor per statement, one spelling per lot. Each case changes one thing in a call
+   that is otherwise accepted, and every case is reported, so a control cannot pass because some other guard fired. */
+proof(24, 'One buyer\'s balance, one consignor\'s lines, one spelling of a lot: anything else is refused',
+  'a buyer counted both paid and unpaid, another consignor\'s lot paid out on this statement, two buyers on one invoice, or "12" and "12 " charged as two lots',
+  (F) => {
+    const B7 = (lotNo, hid, bal, forg) => SOLD(lotNo, 10000, hid, bal, { bidderNo: 'B7', buyerForgivenCents: forg });
+    const st = (contract, lines) => () => F.statement(Object.assign({ schedule: FLAT10 }, contract), lines, [], [], 'consignor');
+    const ok = st({ contractId: 'C-1' }, [B7('1', 'h1', 0, 0), B7('2', 'h2', 0, 0), SOLD('3', 100, 'h3', 0, { contractId: 'C-1' })])();
+    const okInv = F.invoice(TERMS, [LINE('1', 100, { channel: 'floor', taxClass: 'general', bidderNo: '7' }), LINE('2', 100, { channel: 'floor', taxClass: 'general', bidderNo: '7' })], [], [], [], { saleDate: SALE_DATE });
+    if (ok.lines.map((l) => l.status).join() !== 'paid,paid,paid' || okInv.bidderNo !== '7') return 'the agreeing cases were not accepted as they are';
+    const cases = [
+      ['one bidder, two balances', st({}, [B7('1', 'h1', 0, 0), B7('2', 'h2', 500, 0)]), 'buyerBalanceCents'],
+      ['one bidder, two forgiven amounts', st({}, [B7('1', 'h1', 0, 0), B7('2', 'h2', 0, 100)]), 'buyerBalanceCents'],
+      ['another contract\'s lot', st({ contractId: 'C-1' }, [SOLD('1', 100, 'h1', 0, { contractId: 'C-2' })]), 'contractId'],
+      ['two contracts\' lots, no contract id', st({}, [SOLD('1', 100, 'h1', 0, { contractId: 'C-1' }), SOLD('2', 100, 'h2', 0, { contractId: 'C-2' })]), 'contractId'],
+      ['two bidders on one invoice', () => F.invoice(TERMS, [LINE('1', 100, { channel: 'floor', taxClass: 'general', bidderNo: '7' }), LINE('2', 100, { channel: 'floor', taxClass: 'general', bidderNo: '8' })], [], [], [], { saleDate: SALE_DATE }), 'bidderNo'],
+      ['a lot number with a trailing space', () => F.commission(FLAT10, [LINE('12', 100), LINE('12 ', 100)]), 'lotNo'],
+      ['a line suffix with a leading space', () => F.commission(FLAT10, [LINE('12', 100, { mode: 'choice', line: ' A' })]), 'line'],
+      ['"12A" and "12" line "A" in one list', () => F.commission(FLAT10, [LINE('12A', 100), LINE('12', 100, { mode: 'choice', line: 'A' })]), 'lines[1]'],
+      ['a buyback that says passed: false', () => F.commission(FLAT10, [LINE('1', 100, { buyback: true, passed: false })]), 'passed']
+    ];
+    const broken = [];
+    for (const [label, fn, pathHas] of cases) { const r = refusal(label, fn, pathHas); if (r !== true) broken.push(r); }
+    return broken.length ? broken.length + ' of ' + cases.length + ' cases broke: ' + broken.join('; ') : true;
+  },
+  [
+    { why: 'one bidder\'s lines may disagree on the invoice', find: 'if (prev && (prev.bal !== bal || prev.forg !== forg)) {', repl: 'if (false) {' },
+    { why: 'another contract\'s lot accepted', find: 'if (consignor !== null && l.raw.contractId !== consignor) refuse(', repl: 'if (false) refuse(' },
+    { why: 'two bidders accepted on one invoice', find: 'if (bidderNo !== null && l.raw.bidderNo !== bidderNo) refuse(', repl: 'if (false) refuse(' },
+    { why: 'spaces around a lot number accepted', find: 'if (v.trim() !== v) refuse(', repl: 'if (false) refuse(' },
+    { why: 'two spellings that print alike accepted', find: 'if (printed[lotNo + line] !== undefined && printed[lotNo + line] !== key) refuse(', repl: 'if (false) refuse(' },
+    { why: 'a buyback with passed: false accepted', find: 'if (raw.buyback === true && raw.passed === false) refuse(', repl: 'if (false) refuse(' }
+  ]);
 
 /* ---------- verdict ---------- */
 console.log('\n' + proofs + ' proofs, ' + controls + ' negative controls' + (failed ? ': ' + failed + ' FAILED' : ', every control seen failing'));
