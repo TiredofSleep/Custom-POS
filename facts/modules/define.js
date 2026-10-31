@@ -90,6 +90,7 @@ function assemble(mods, opts) {
   const needPeople = Object.keys(rules).filter(function (t) { return ['self', 'self-or', 'needs', 'owner'].indexOf(rules[t].kind) >= 0; });
   if (needPeople.length && !staffers.length) throw new Error('these facts name a person, but no module provides staff: ' + needPeople.join(', '));
   const staffOf = staffers.length ? staffers[0].provides.staff : null;
+  const firstOk = staffers.length && typeof staffers[0].provides.firstOk === 'function' ? staffers[0].provides.firstOk : null;   /* what a brand-new shop's first fact must be */
   const trusted = opts.trusted || ['hub-services'];
   const grantCheck = typeof opts.grantCheck === 'function' ? opts.grantCheck : null;
   const pinChecked = Object.keys(rules).filter(function (t) { return rules[t].pin; });
@@ -99,12 +100,16 @@ function assemble(mods, opts) {
   /* @facts @permission — the verdict on one fact: null (admit) or why it is refused */
   function judge(e, master, staged, bundle) {
     const r = rules[e.type];
-    if (!r) return null;   /* not a module's type: the registry already refused it if nobody registered it */
+    /* a registered type no module in THIS hub claims is refused: a hub runs the rules it was given, it never fails open (stage-2
+       review: a hub built from some modules left the others' privileged types unjudged) */
+    if (!r) return 'no module in this hub owns a ' + e.type;
     if (r.kind === 'hub-only') return trusted.indexOf(e.station) >= 0 ? null : 'only the hub writes a ' + e.type;
     if (trusted.indexOf(e.station) >= 0) return null;
     if (r.kind === 'any') return null;
     const staff = staffOf(master || [], staged || []);
-    if (!staff.byId.size) return null;   /* a brand-new shop: nobody to judge by yet, so its first people can be written */
+    /* a brand-new shop: nobody to judge by yet — but its first fact must be what the staff module says a shop starts with (its owner),
+       or nobody could ever be made an owner afterwards (stage-2 review) */
+    if (!staff.byId.size) return (firstOk && !firstOk(e)) ? 'a new shop starts with its owner (an active owner, written first)' : null;
     const who = e.actor != null ? staff.byId.get(String(e.actor)) : null;
     if (!who) return 'a ' + e.type + ' must name an active person (actor), and ' + (e.actor == null ? 'it names no one' : 'that person is not on staff');
     if (who.active === false) return who.name + ' is not active';
@@ -115,7 +120,9 @@ function assemble(mods, opts) {
     else if (r.kind === 'self' && String(p[r.self]) !== String(who.id)) why = who.name + ' may write a ' + e.type + ' only about themselves';
     else if (r.kind === 'self-or' && String(p[r.self]) !== String(who.id) && !owner && !staff.can(who, r.right)) why = who.name + ' may write only their own (another person\'s needs "' + r.right + '")';
     if (why) return why;
-    if (r.rule) { why = r.rule(p, who, staff, e); if (why) return why; }   /* the module's own extra rule: it may only refuse more */
+    /* the module's own extra rule: it may only refuse more — and a rule that throws refuses THIS fact only (closed, never open; never the
+       whole send, which would wedge the tablet resending it) */
+    if (r.rule) { try { why = r.rule(p, who, staff, e); } catch (x) { why = 'the ' + r.module + ' module\'s rule failed on this ' + e.type; } if (why) return why; }
     if (r.pin && grantCheck && !grantCheck((bundle && bundle.grants) || [], String(who.id), e.station, e)) return 'a ' + e.type + ' needs a PIN the hub checked for ' + who.name + ' on this tablet';
     return null;
   }

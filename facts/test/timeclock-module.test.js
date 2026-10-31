@@ -46,11 +46,11 @@ H.testAsync('a clock-in on one tablet is on every tablet; a tablet that never sy
   try {
     const A = await shop(srv), B = await tablet(srv, 'backroom'), lone = makeStation({ id: 'lone', persist: jstore() });
     const t0 = Date.now() - 2 * HOUR;
-    const r = await put(A, 'clock.in', 'clk', { empId: 'clk', at: t0, wage: 15 }, 'clk');
+    const r = await put(A, 'clock.in', 'clk', { empId: 'clk', at: t0 }, 'clk');   /* no wage on a clerk's own punch (stage-2 review): the person's wage from setup applies */
     H.ok(r.ok, 'the clerk clocks in on the counter, with no PIN check (nobody is kept off the clock by the internet)');
     await sync.pullAsync(B, B.remote);
     const pb = TCM.punches(B.log.all(), S.fold(B.log.all()));
-    H.eq(pb.length, 1, 'the back room sees one punch'); H.eq(pb[0].staffId, 'clk'); H.eq(pb[0].name, 'Cam'); H.eq(pb[0].inTs, t0); H.eq(pb[0].out, null, 'still on the clock'); H.eq(pb[0].wage, 15, 'the wage at punch time travels with it');
+    H.eq(pb.length, 1, 'the back room sees one punch'); H.eq(pb[0].staffId, 'clk'); H.eq(pb[0].name, 'Cam'); H.eq(pb[0].inTs, t0); H.eq(pb[0].out, null, 'still on the clock'); H.eq(pb[0].wage, null, 'no wage written: the person\'s wage from setup applies');
     H.eq(TCM.punches(lone.log.all(), S.fold(lone.log.all())).length, 0, 'a tablet that never synced sees none');
     /* clock out on the OTHER tablet: it closes the same shift */
     const shiftId = TCM.openShift(B.log.all(), 'clk'); H.eq(shiftId, r.id, 'the open shift is the clock-in itself');
@@ -80,12 +80,15 @@ H.testAsync('who may punch and who may correct: a clerk only for themselves; a c
       A.passes = [];
       out.tabletAutocloses = (await put(A, 'clock.autoclose', 'clk', { empId: 'clk', at: t0 + 2 * HOUR, shiftId: inn.id }, 'own')).ok;
       out.breakSelf = (await put(A, 'break.start', 'clk', { empId: 'clk', shiftId: inn.id, at: t0 + HOUR }, 'clk')).ok;
+      /* a wage on a clock-in is a pay figure: never from a clerk, from someone with payroll yes (stage-2 review) */
+      out.clerkWage = (await put(A, 'clock.in', 'clk', { empId: 'clk', at: t0 + 5 * HOUR, wage: 9999 }, 'clk')).ok;
+      out.managerWage = (await put(A, 'clock.in', 'mgr', { empId: 'mgr', at: t0 + 5 * HOUR, wage: 22 }, 'mgr')).ok;
       return out;
     };
     const j = await run(srv, true), o = await run(open, false);
-    ['selfIn', 'managerInsAnother', 'managerEditsWithPin', 'breakSelf'].forEach(function (k) { H.ok(j[k] === true, 'admitted: ' + k); });
-    ['clerkInsAnother', 'clerkEdits', 'managerEditsNoPin', 'tabletAutocloses'].forEach(function (k) { H.ok(j[k] === false, 'refused: ' + k); });
-    ['clerkInsAnother', 'clerkEdits', 'managerEditsNoPin', 'tabletAutocloses'].forEach(function (k) { H.ok(o[k] === true, 'a hub with no modules admits: ' + k); });
+    ['selfIn', 'managerInsAnother', 'managerEditsWithPin', 'breakSelf', 'managerWage'].forEach(function (k) { H.ok(j[k] === true, 'admitted: ' + k); });
+    ['clerkInsAnother', 'clerkEdits', 'managerEditsNoPin', 'tabletAutocloses', 'clerkWage'].forEach(function (k) { H.ok(j[k] === false, 'refused: ' + k); });
+    ['clerkInsAnother', 'clerkEdits', 'managerEditsNoPin', 'tabletAutocloses', 'clerkWage'].forEach(function (k) { H.ok(o[k] === true, 'a hub with no modules admits: ' + k); });
   } finally { await srv.close(); await open.close(); rmDb(f); rmDb(f2); }
 });
 
@@ -128,6 +131,28 @@ H.test('history: version 1\'s saved fact log still verifies and still folds to t
   /* the negative control: one saved fact taken out changes the answer (the comparison can fail) */
   const less = fx.facts.filter(function (e) { return e.type !== 'clock.edit'; });
   H.ok(JSON.stringify(TCM.punches(less, S.fold(less))) !== JSON.stringify(fx.punches), 'without the manager\'s correction the punches differ');
+});
+
+H.test('stage-2 review: a break naming shift "constructor" cannot break anyone\'s punches; a skewed break end closes at its start; a break never outlasts its shift', function () {
+  const reg = require('../core/registry'), EV = require('../core/event'), hlc = require('../core/hlc'), clock = hlc.makeClock('rv');
+  const fact = function (type, key, payload, actor) { return EV.makeEvent({ type: type, aggregate: reg.typeDef(type).aggregate, key: key, payload: payload, hlc: clock.now(), station: 'rv', actor: actor || null }); };
+  H.ok(/clock-in.s id/.test(String(reg.typeDef('break.start').admit({ empId: 'clk', shiftId: 'constructor', at: 1 }, function () { return false; }))), 'a NEW break naming "constructor" is refused at the door');
+  const t0 = new Date(2026, 9, 31, 9, 0).getTime(), staff = [fact('staff.set', 'clk', { staffId: 'clk', set: { name: 'Cam' } })];
+  const inn = fact('clock.in', 'clk', { empId: 'clk', at: t0 }, 'clk');
+  /* history that already holds such a fact (made before the door rule): the fold must not throw */
+  const poison = fact('break.start', 'clk', { empId: 'clk', shiftId: 'constructor', at: t0 + 1000 }, 'clk');
+  let threw = null; try { TCM.punches(staff.concat([inn, poison]), S.fold(staff)); } catch (e) { threw = e.message; }
+  H.eq(threw, null, 'punches() over a poisoned history does not throw');
+  /* a break.end written a moment BEFORE its start (a skewed tablet), and a shift closed with its break never ended */
+  const bs = fact('break.start', 'clk', { empId: 'clk', shiftId: inn.id, at: t0 + 2 * HOUR }, 'clk'), be = fact('break.end', 'clk', { empId: 'clk', shiftId: inn.id, at: t0 + 2 * HOUR - 60000 }, 'clk');
+  const out = fact('clock.out', 'clk', { empId: 'clk', at: t0 + 4 * HOUR, shiftId: inn.id }, 'clk');
+  const p1 = TCM.punches(staff.concat([inn, bs, be, out]), S.fold(staff))[0];
+  H.eq(p1.breaks[0].endTs, p1.breaks[0].startTs, 'the skewed end closes the break at its start (zero length), not left open');
+  const inn2 = fact('clock.in', 'clk', { empId: 'clk', at: t0 + 24 * HOUR }, 'clk'), bs2 = fact('break.start', 'clk', { empId: 'clk', shiftId: inn2.id, at: t0 + 26 * HOUR }, 'clk'), out2 = fact('clock.out', 'clk', { empId: 'clk', at: t0 + 28 * HOUR, shiftId: inn2.id }, 'clk');
+  const p2 = TCM.punches(staff.concat([inn2, bs2, out2]), S.fold(staff))[0];
+  H.eq(p2.breaks[0].endTs, t0 + 28 * HOUR, 'a break never ended stops at the clock-out');
+  const paid = (p2.outTs - p2.inTs - p2.breaks.reduce(function (a, b) { return a + (b.endTs - b.startTs); }, 0)) / HOUR;
+  H.eq(paid, 2, 'so the shift pays its 2 hours before the break, not 0');
 });
 
 H.done();

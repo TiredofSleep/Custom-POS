@@ -795,11 +795,13 @@ function lapsedCustomers(){ const cut=Date.now()-winbackDays()*86400000; return 
    Generalizes "staff requests, owner approves" — the anti-theft gate — with no per-trade code. */
 function approvers(){ return (FLOW.staff||[]).filter(s=> s.role==="owner" || s.role==="manager"); }
 function needsApproval(action){ return !!(FLOW.endpoints && FLOW.endpoints.approvals && FLOW.endpoints.approvals[action]) && approvers().length>0; }
-function withApproval(action, label, fn){
+async function withApproval(action, label, fn){
   if(!needsApproval(action)){ fn(null); render(); return; }
+  if(FACTS.on && !FACTS.ready){ flash("A manager PIN is checked against your hub, and this device is not connected to it yet — switch it to the Time clock once to connect"); return; }
   const pin = prompt(label + "\nEnter a manager/owner PIN to approve this " + action + ":");
   if(pin==null) return;                                  // cancelled — no change
-  const who = approvers().find(s=> String(s.pin)===String(pin));
+  const who = FACTS.on ? await factsWhoByPin(pin, s=> s.role==="owner" || s.role==="manager")   // several stations: the hub's PIN hashes (the download carries no PINs)
+    : approvers().find(s=> String(s.pin)===String(pin));
   if(!who){ flash("Not authorized — a manager or owner PIN is required"); return; }
   fn(who);
   DB=loadDB(); DB.approvals=DB.approvals||[]; DB.approvals.push({ action, label, by:who.name, at:new Date().toISOString().slice(11,16), ts:Date.now() }); saveDB(DB);
@@ -1221,101 +1223,196 @@ function fileIncident(staff, type, note, urgent){ DB=loadDB(); DB.incidents=DB.i
    On when the flow says storage:"facts" and the engine bundle is on the page (globalThis.CustomPOSFacts, from facts/bundle.js — the
    builder puts it in the download). Each device keeps its own log of facts in IndexedDB and sends them to the hub (facts/server.js);
    a clock-in on one tablet is on every tablet, and nothing is lost while a tablet is offline. DB.punches is REBUILT from the facts
-   after every change — the time clock module's compat projection, the exact shape DB.punches has always had — so the tip pool,
-   labor cost, pay estimate and reports read it unchanged. Staff and their PIN hashes come from the hub's staff facts; a brand-new
-   hub is given the team from setup once (factsSeedStaff). Nothing here touches the blob sync (SYNC). */
-const FACTS = { on:false, ready:false, need:null, error:null, st:null, remote:null, hub:"", passes:[], staff:null, timer:null, seeding:false };
+   after every change — the time clock module's compat projection, the exact shape DB.punches has always had — with any punches this
+   device held before it joined the hub kept beside them, so the tip pool, labor cost, pay estimate and reports read it unchanged.
+   Staff and their PIN hashes come from the hub's staff facts; PINs are TYPED on the device when people are added (a several-stations
+   download carries none) and leave it only as hashes. Nothing here touches the blob sync (SYNC).
+   Stage-2 review, all taken: a reload or "Try again" left the device read-only while it still said "Welcome"; the waiting-to-send line
+   read a wrong count and said "up to date" while the hub refused; connecting wiped this device's earlier punches; the team could be
+   added only once; a mistyped device name could not be undone; staff names were drawn as HTML; the clock redrew every 5 s over typing;
+   punches were not on the Activity log. */
+const FACTS = { on:false, ready:false, need:null, error:null, st:null, remote:null, hub:"", passes:[], staff:null, timer:null, busy:false, last:"" };
 function factsWanted(){ return !!(FLOW && FLOW.storage==="facts" && typeof globalThis.CustomPOSFacts==="object" && globalThis.CustomPOSFacts); }
 function factsKey(){ return "custompos_facts_"+flowId(); }
 function factsCfg(){ try{ return JSON.parse(localStorage.getItem(factsKey())||"null"); }catch(e){ return null; } }
-/* start this device's station: its log from IndexedDB, its token, the hub over HTTP, a pull every few seconds */
-async function factsBoot(){
+/* a name from the hub is never drawn as HTML (whoever may change staff could otherwise run script on every tablet) */
+function factsEsc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+/* stop this device's station: the pull timer and the station itself (which releases this tab's lease) */
+function factsStop(){ if(FACTS.timer){ clearInterval(FACTS.timer); FACTS.timer=null; } if(FACTS.st){ try{ FACTS.st.close(); }catch(e){} } FACTS.st=null; FACTS.remote=null; FACTS.ready=false; }
+if(typeof window!=="undefined") window.addEventListener("pagehide", factsStop);   // a reload is the writer again at once, never read-only
+/* start this device's station: its log from IndexedDB, its token (handed over in memory, once, by Connect), the hub over HTTP, a pull every few seconds */
+async function factsBoot(token){
   FACTS.on = factsWanted(); if(!FACTS.on) return;
+  factsStop();
   const cfg = factsCfg();
   if(!cfg || !cfg.hub || !cfg.station){ FACTS.need = "connect"; render(); return; }
   const F = globalThis.CustomPOSFacts;
   try{
     const store = await F.browserStore.openBrowserStore(cfg.station, { prefix: "custompos-facts-" });
     const st = F.station.makeStation({ id: cfg.station, persist: store });
-    if(cfg.token){ st.setAccess(cfg.token); delete cfg.token; localStorage.setItem(factsKey(), JSON.stringify(cfg)); }   // handed over once; it lives with the log, never in the page's storage
-    if(!st.accessToken){ FACTS.need = "connect"; render(); return; }
+    if(token) st.setAccess(token);   // straight into the log's own store; never in the page's storage
+    if(!st.accessToken){ try{ st.close(); }catch(e){} FACTS.need = "connect"; render(); return; }   // let go of the store: Connect opens it again
     const remote = F.http.httpHub(cfg.hub, { timeoutMs: 8000 });
     st.setTransport(function(b){ b.grants = FACTS.passes; return remote.receive(b); });   // a hub-checked PIN pass rides with the facts that need one
-    FACTS.st = st; FACTS.remote = remote; FACTS.hub = cfg.hub.replace(/\/+$/,""); FACTS.ready = true; FACTS.need = null; FACTS.error = null;
-    await factsPull();
-    if(FACTS.timer) clearInterval(FACTS.timer);
+    FACTS.st = st; FACTS.remote = remote; FACTS.hub = cfg.hub.replace(/\/+$/,""); FACTS.ready = true; FACTS.need = null; FACTS.error = null; FACTS.last = "";
+    await factsPull(true);
     FACTS.timer = setInterval(factsPull, 5000);
   }catch(e){ FACTS.error = String(e && e.message || e); render(); }
 }
-async function factsPull(){ if(!FACTS.ready) return; try{ await FACTS.st.commit("pull"); }catch(e){} try{ await globalThis.CustomPOSFacts.sync.pullAsync(FACTS.st, FACTS.remote); }catch(e){} factsRefresh(); }
+/* Connect: the hub is asked first whether this token belongs to this device name (an empty send it judges whole), so a mistype is said now,
+   not discovered later as punches that never arrive */
+async function factsConnect(hub, name, token){
+  try{
+    const r = await fetch(hub.replace(/\/+$/,"") + "/v2/receive", { method:"POST", headers:{ "content-type":"application/json", "x-custompos-token": token }, body: JSON.stringify({ station: name, token: token, events: [] }) }).then(x=>x.json());
+    if(!r || r.refused){ FACTS.error = "The hub did not accept this device: " + ((r && r.refused) || "no answer"); FACTS.need = "connect"; render(); return; }
+  }catch(e){ FACTS.error = "The hub at " + hub + " did not answer (" + (e && e.message || e) + ")"; FACTS.need = "connect"; render(); return; }
+  localStorage.setItem(factsKey(), JSON.stringify({ hub: hub, station: name }));   // the address and the name only
+  FACTS.need = null; FACTS.error = null; factsBoot(token);
+}
+/* Disconnect: this device forgets the hub (asked first when punches are still waiting to send — they stay on the device) */
+function factsDisconnect(){
+  const owed = factsOwedCount();
+  if(owed && !confirm(owed + " punch" + (owed===1?"":"es") + " on this device have not reached the hub yet. Disconnect anyway? They stay on this device and are sent if it connects again with the same name.")) return;
+  try{ if(FACTS.st && !owed) FACTS.st.dropUnissuedAccess(); }catch(e){}
+  factsStop(); try{ localStorage.removeItem(factsKey()); }catch(e){}
+  FACTS.need = "connect"; FACTS.error = null; FACTS.staff = null; render();
+}
+async function factsPull(first){
+  if(!FACTS.ready) return;
+  try{ FACTS.st.tick(); }catch(e){}   // a reload after a crash takes the lease back once a full lease has passed
+  try{ await FACTS.st.commit("pull"); }catch(e){}
+  try{ await globalThis.CustomPOSFacts.sync.pullAsync(FACTS.st, FACTS.remote); }catch(e){}
+  factsRefresh(first===true);
+}
 async function factsSettle(){ for(let i=0; i<400 && FACTS.st && FACTS.st.inFlight; i++) await new Promise(r=>setTimeout(r,20)); }
-/* DB.punches from the facts (the compat projection), saved locally only, then the clock redrawn */
-function factsRefresh(){
+/* DB.punches from the facts — and the punches this device held before it joined the hub, kept beside them (connecting never wipes a
+   one-computer shop's history) — written and redrawn only when something changed, and never redrawn while someone is typing here */
+function factsRefresh(force){
   if(!FACTS.ready) return;
   const F = globalThis.CustomPOSFacts, all = FACTS.st.log.all();
   FACTS.staff = F.staff.fold(all);
-  const db = loadDB(); db.punches = F.clock.punches(all, FACTS.staff); persistDB(db);
-  const s = boundStation(); if(s && s.type==="timeclock") render();
+  const db = loadDB();
+  if(!db.factsSince){ db.punchesBeforeFacts = (db.punches||[]).slice(); db.factsSince = Date.now(); }
+  const next = F.clock.punches(all, FACTS.staff).concat(db.punchesBeforeFacts||[]).sort((a,b)=>a.inTs-b.inTs);
+  const sig = JSON.stringify([next, Array.from(FACTS.staff.byId.values()).map(s=>[s.id, s.name, s.active, s.role]), factsStatusText()]);
+  if(!force && sig===FACTS.last) return;
+  FACTS.last = sig; db.punches = next; persistDB(db);
+  /* the page's in-memory copy too: a later save from another screen writes it back whole, and must never put back old punches or lose
+     the before-the-hub marker (which would fold the hub's punches in twice) */
+  if(DB && DB!==db){ DB.punches = next; DB.factsSince = db.factsSince; DB.punchesBeforeFacts = db.punchesBeforeFacts; }
+  const app = document.getElementById("app"), typing = document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName) && app && app.contains(document.activeElement);
+  const s = boundStation(); if(s && s.type==="timeclock" && !typing) render();
 }
-async function factsRecord(type, key, payload, actor){ FACTS.st.record(type, key, payload, { actor: actor }); await factsSettle(); factsRefresh(); }
+/* record now (the fact is in this device's log at once) and show it at once; send, then refresh again. Never a "Welcome" for a punch that
+   was not recorded: a refusal becomes the error card */
+function factsRecordNow(type, key, payload, actor){
+  try{ FACTS.st.record(type, key, payload, { actor: actor }); return true; }
+  catch(e){ FACTS.error = String(e && e.message || e); render(); return false; }
+}
+async function factsAfter(){ factsRefresh(true); await factsSettle(); factsRefresh(true); }
+async function factsRecord(type, key, payload, actor){ if(!factsRecordNow(type, key, payload, actor)) return false; await factsAfter(); return true; }
 function factsStaff(){ return FACTS.staff ? Array.from(FACTS.staff.byId.values()).filter(s=>s.active!==false) : []; }
-function factsOwed(){ try{ return FACTS.st ? FACTS.st.outbox().length : 0; }catch(e){ return 0; } }
-/* a brand-new hub gets the team from setup, once: the owner first (a new shop admits its first person), then the owner's PIN is checked
-   BY THE HUB for a short pass, and the rest are added under it (facts/modules/staff.js — a staff change needs the right and that pass) */
-async function factsSeedStaff(){
-  if(FACTS.seeding || !FACTS.ready) return; FACTS.seeding = true; render();
-  try{
-    const F = globalThis.CustomPOSFacts, list = (FLOW.staff||[]).filter(s=>s && s.id && s.name && s.pin);
-    if(!list.length) throw new Error("add your team (name + PIN) in the builder first");
-    const owner = list.find(s=>s.role==="owner") || list[0];
-    const setOf = async function(s){ const o = s===owner; return { name: String(s.name).slice(0,60), role: o ? "owner" : (s.role==="manager" ? "manager" : "staff"), rights: o ? [] : (s.role==="manager" ? ["payroll","employees"] : []), pin: await F.staff.pinRecordAsync(String(s.pin)) }; };
-    await factsRecord("staff.set", owner.id, { staffId: owner.id, set: await setOf(owner) }, null);
-    const r = await fetch(FACTS.hub + "/v2/pin", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ token: FACTS.st.accessToken, staffId: owner.id, pin: String(owner.pin) }) }).then(x=>x.json());
-    if(!r.grant) throw new Error("the hub did not accept "+owner.name+"'s PIN ("+(r.refused||"no answer")+")");
-    FACTS.passes = [r.grant];
-    for(const s of list){ if(s!==owner) await factsRecord("staff.set", s.id, { staffId: s.id, set: await setOf(s) }, owner.id); }
-    FACTS.passes = [];
-    flash("Your team is on the hub");
-  }catch(e){ FACTS.error = String(e && e.message || e); }
-  FACTS.seeding = false; factsRefresh(); render();
+function factsOwedCount(){ try{ const o = FACTS.st && FACTS.st.outbox(); return o && Array.isArray(o.events) ? o.events.length : 0; }catch(e){ return 0; } }
+/* what the status line says — never "up to date" while something is wrong (an error never renders as good news) */
+function factsStatusText(){
+  const st = FACTS.st; if(!st) return "";
+  if(st.readOnly) return "This device is read-only here (" + (st.halted||"another window holds it") + "). It takes over by itself about 30 seconds after the other window is gone.";
+  if(st.accessRefused) return "The hub refuses this device: " + st.accessRefused + ". Ask whoever runs the hub, then disconnect and connect again.";
+  const r = st.refusedOwed || 0, n = factsOwedCount();
+  if(r) return "The hub refused " + r + " punch" + (r===1?"":"es") + " from this device (kept here). Check the device name, or ask whoever runs the hub.";
+  return n ? n + " punch" + (n===1?"":"es") + " waiting to send (kept on this device until the hub has them)" : "up to date";
 }
-/* the four punches as facts: the person themselves is the actor, so the hub admits a clock-in without asking for anything else */
-async function factsClockIn(staff){ clockWelcome={ name:staff.name, inbound:true, staffId:staff.id }; clockAction=null; pinBuf=""; await factsRecord("clock.in", staff.id, { empId: staff.id, at: Date.now(), wage: staffWage(staff.id) }, staff.id); }
+/* who from setup the hub is missing (everyone, on a brand-new hub) */
+function factsMissing(){ const on = new Set(FACTS.staff ? Array.from(FACTS.staff.byId.keys()) : []); return (FLOW.staff||[]).filter(s=>s && s.id && s.name && !on.has(String(s.id))); }
+/* the team onto the hub: each PIN is TYPED here and leaves only as a hash. A brand-new hub takes its owner first; everyone after is added
+   under an owner's or manager's PIN, checked BY THE HUB for a short pass. It writes only who is missing, so it runs again after a hire or an
+   interrupted try (facts/modules/staff.js — a staff change needs the right and that pass) */
+async function factsAddTeam(form){
+  if(FACTS.busy || !FACTS.ready) return;
+  const F = globalThis.CustomPOSFacts, missing = factsMissing(), empty = !(FACTS.staff && FACTS.staff.byId.size);
+  const pins = {};
+  for(const s of missing){ const v = ((form.querySelector('[data-pin="'+CSS.escape(String(s.id))+'"]')||{}).value||"").trim(); if(!/^\d{4,8}$/.test(v)){ flash("Enter a 4 to 8 digit PIN for "+s.name); return; } pins[s.id] = v; }
+  let approver = null, approverPin = "";
+  if(empty){ approver = missing.find(s=>s.role==="owner") || missing[0]; approverPin = pins[approver.id]; }
+  else { const id = (form.querySelector("#factsApprover")||{}).value; approver = factsStaff().find(s=>String(s.id)===id); approverPin = ((form.querySelector("#factsApproverPin")||{}).value||"").trim(); if(!approver){ flash("Choose who is adding them"); return; } }
+  FACTS.busy = true; FACTS.passes = []; render();
+  try{
+    const setOf = async function(s){ const own = (empty && s===approver) || s.role==="owner"; return { name: String(s.name).slice(0,60), role: own ? "owner" : (s.role==="manager" ? "manager" : "staff"), rights: own ? [] : (s.role==="manager" ? ["payroll","employees"] : []), pin: await F.staff.pinRecordAsync(pins[s.id]) }; };
+    if(empty && !(await factsRecord("staff.set", approver.id, { staffId: approver.id, set: await setOf(approver) }, null))) throw new Error(FACTS.error || "the owner could not be added");
+    const rest = missing.filter(s=>!(empty && s===approver));
+    if(rest.length){
+      const r = await fetch(FACTS.hub + "/v2/pin", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ token: FACTS.st.accessToken, staffId: approver.id, pin: approverPin }) }).then(x=>x.json());
+      if(!r.grant) throw new Error("the hub did not accept " + approver.name + "'s PIN (" + (r.refused||"no answer") + ")");
+      FACTS.passes = [r.grant];
+      for(const s of rest){ if(!(await factsRecord("staff.set", s.id, { staffId: s.id, set: await setOf(s) }, approver.id))) throw new Error(FACTS.error || (s.name + " could not be added")); }
+    }
+    flash(missing.length===1 ? missing[0].name + " is on the hub" : "Your team is on the hub");
+  }catch(e){ FACTS.error = String(e && e.message || e); }
+  finally{ FACTS.passes = []; FACTS.busy = false; factsRefresh(true); render(); }
+}
+/* the four punches as facts: the person themselves is the actor, so the hub admits a clock-in without asking for anything else. No wage is
+   written (a pay figure needs payroll): the person's wage from setup applies, as it always has */
+async function factsClockIn(staff){
+  if(!factsRecordNow("clock.in", staff.id, { empId: staff.id, at: Date.now() }, staff.id)) return;
+  clockWelcome={ name:staff.name, inbound:true, staffId:staff.id }; clockAction=null; pinBuf="";
+  try{ logActivity("clock", staff.name+" clocked in"); }catch(e){}
+  await factsAfter();
+}
 async function factsClockOut(staff){
   const F = globalThis.CustomPOSFacts, sid = F.clock.openShift(FACTS.st.log.all(), staff.id); if(!sid) return;
-  if(onBreak(openPunch(staff.id))) await factsRecord("break.end", staff.id, { empId: staff.id, shiftId: sid, at: Date.now() }, staff.id);
+  if(onBreak(openPunch(staff.id)) && !factsRecordNow("break.end", staff.id, { empId: staff.id, shiftId: sid, at: Date.now() }, staff.id)) return;
+  if(!factsRecordNow("clock.out", staff.id, { empId: staff.id, at: Date.now(), shiftId: sid }, staff.id)) return;
   clockWelcome={ name:staff.name, inbound:false, staffId:staff.id }; clockAction=null; pinBuf="";
-  await factsRecord("clock.out", staff.id, { empId: staff.id, at: Date.now(), shiftId: sid }, staff.id);
+  try{ logActivity("clock", staff.name+" clocked out"); }catch(e){}
+  await factsAfter();
 }
 async function factsBreak(staff, starting){
   const F = globalThis.CustomPOSFacts, sid = F.clock.openShift(FACTS.st.log.all(), staff.id); if(!sid) return;
   await factsRecord(starting ? "break.start" : "break.end", staff.id, { empId: staff.id, shiftId: sid, at: Date.now() }, staff.id);
 }
-/* what the clock shows before its PIN pad in facts mode: connect this device, connecting, a problem, or bring the team on — true when it drew one */
+/* the team card: everyone on a brand-new hub, or who the hub is missing — a PIN typed for each, and (when the hub has people) who adds them */
+function renderFactsTeam(app){
+  const missing = factsMissing(), empty = !(FACTS.staff && FACTS.staff.byId.size); if(!missing.length) return false;
+  const c = document.createElement("div"); c.className = "card"; c.id = "factsTeam";
+  c.innerHTML = empty ? "<h2 style='margin:2px 0'>Bring your team onto the hub</h2><p class='muted'>This hub has nobody on staff yet. Type a PIN for each person (4 to 8 digits); the first is the owner. Each PIN leaves this device only as a scrambled hash.</p>"
+    : "<h2 style='margin:2px 0'>Add " + missing.length + " " + (missing.length===1?"person":"people") + " to the hub</h2><p class='muted'>They are in your setup but not on the hub yet. Type a PIN for each, then an owner or manager confirms with their own PIN.</p>";
+  missing.forEach(function(s){ const l=document.createElement("label"); l.style.cssText="display:block;margin:4px 0"; l.textContent=s.name+(s.role==="owner"||(empty&&s===(missing.find(x=>x.role==="owner")||missing[0]))?" (owner)":"")+" — PIN"; const i=document.createElement("input"); i.type="password"; i.inputMode="numeric"; i.autocomplete="off"; i.setAttribute("data-pin", String(s.id)); i.style.cssText="display:block;max-width:160px"; l.appendChild(i); c.appendChild(l); });
+  if(!empty){
+    const who=document.createElement("select"); who.id="factsApprover"; factsStaff().filter(s=>s.role==="owner"||(s.rights||[]).indexOf("employees")>=0).forEach(function(s){ const o=document.createElement("option"); o.value=s.id; o.textContent=s.name; who.appendChild(o); });
+    const pin=document.createElement("input"); pin.id="factsApproverPin"; pin.type="password"; pin.inputMode="numeric"; pin.placeholder="their PIN"; pin.autocomplete="off"; pin.style.cssText="max-width:120px;margin-left:8px";
+    const row=document.createElement("div"); row.style.margin="8px 0"; row.appendChild(document.createTextNode("Added by ")); row.appendChild(who); row.appendChild(pin); c.appendChild(row);
+  }
+  const b=document.createElement("button"); b.className="primary"; b.textContent=FACTS.busy?"Adding…":(empty?"Add my team":"Add them"); b.disabled=FACTS.busy; b.onclick=function(){ factsAddTeam(c); }; c.appendChild(b);
+  app.appendChild(c); return true;
+}
+/* what the clock shows before its PIN pad in facts mode: connect this device, connecting, read-only, a problem, or bring the team on — true when it drew one */
 function renderFactsGate(app, station, staff){
   if(FACTS.need==="connect"){
     const c=document.createElement("div"); c.className="card"; c.style.maxWidth="440px";
     c.innerHTML="<h2 style='margin:2px 0'>Connect this device</h2><p class='muted'>This time clock is shared through your hub, so every station sees the same punches. Ask whoever runs the hub for this device's name and setup token.</p>";
-    const f=(id,label,val,type)=>{ const l=document.createElement("label"); l.style.cssText="display:block;margin:6px 0"; l.textContent=label; const i=document.createElement("input"); i.id=id; i.value=val||""; if(type) i.type=type; i.style.cssText="display:block;width:100%"; l.appendChild(i); c.appendChild(l); return i; };
-    const hub=f("factsHub","Hub address", FLOW.factsHub||""), name=f("factsStation","Device name (as the hub knows it)",""), tok=f("factsToken","Setup token","","password");
+    if(FACTS.error){ const er=document.createElement("div"); er.id="factsError"; er.style.cssText="color:var(--bad);margin:6px 0"; er.textContent=FACTS.error; c.appendChild(er); }
+    const f=(id,label,val,type)=>{ const l=document.createElement("label"); l.style.cssText="display:block;margin:6px 0"; l.textContent=label; const i=document.createElement("input"); i.id=id; i.value=val||""; if(type) i.type=type; i.autocomplete="off"; i.style.cssText="display:block;width:100%"; l.appendChild(i); c.appendChild(l); return i; };
+    const cfg=factsCfg()||{}, hub=f("factsHub","Hub address", cfg.hub||FLOW.factsHub||""), name=f("factsStation","Device name (as the hub knows it)", cfg.station||""), tok=f("factsToken","Setup token","","password");
     const go=document.createElement("button"); go.className="primary"; go.textContent="Connect"; go.style.marginTop="8px";
     go.onclick=()=>{ const h=hub.value.trim(), n=name.value.trim(), t=tok.value.trim();
-      if(!/^https?:\/\/[^\s]+$/.test(h) || !/^[A-Za-z0-9_.:-]{1,64}$/.test(n) || t.length<20){ flash("Enter the hub address, the device name and its setup token"); return; }
-      localStorage.setItem(factsKey(), JSON.stringify({ hub:h, station:n, token:t })); FACTS.need=null; factsBoot(); };
+      if(!/^https?:\/\/[^\s"'<>]+$/.test(h) || !/^[A-Za-z0-9][A-Za-z0-9 _.:-]{0,63}$/.test(n) || t.length<20){ flash("Enter the hub address (https://…), the device name and its setup token"); return; }
+      FACTS.error=null; factsConnect(h, n, t); };
     c.appendChild(go); app.appendChild(c); return true;
   }
-  if(FACTS.error){ const e=document.createElement("div"); e.className="card"; e.style.cssText="border-color:var(--bad)"; e.innerHTML="<b>The shared time clock has a problem</b><div class='muted'></div>"; e.querySelector(".muted").textContent=FACTS.error; const r=document.createElement("button"); r.textContent="Try again"; r.onclick=()=>{ FACTS.error=null; factsBoot(); }; e.appendChild(r); app.appendChild(e); return true; }
+  if(FACTS.error){ const e=document.createElement("div"); e.className="card"; e.style.cssText="border-color:var(--bad)"; e.innerHTML="<b>The shared time clock has a problem</b><div class='muted'></div>"; e.querySelector(".muted").textContent=FACTS.error; const r=document.createElement("button"); r.textContent="Try again"; r.onclick=()=>{ FACTS.error=null; if(FACTS.ready){ factsRefresh(true); render(); } else factsBoot(); }; e.appendChild(r); app.appendChild(e); return true; }
   if(!FACTS.ready){ const w=document.createElement("div"); w.className="card muted"; w.textContent="Connecting to the hub…"; app.appendChild(w); return true; }
-  if(!staff.length){
-    const c=document.createElement("div"); c.className="card"; c.innerHTML="<h2 style='margin:2px 0'>Bring your team onto the hub</h2><p class='muted'>This hub has nobody on staff yet. Your team from setup will be added, with the first person as the owner; each PIN is kept only as a scrambled hash.</p>";
-    const b=document.createElement("button"); b.className="primary"; b.textContent=FACTS.seeding?"Adding…":"Add my team"; b.disabled=FACTS.seeding; b.onclick=factsSeedStaff; c.appendChild(b); app.appendChild(c); return true;
-  }
+  if(FACTS.st && FACTS.st.readOnly){ const w=document.createElement("div"); w.className="card"; w.innerHTML="<b>This device is open in another window or tab</b><div class='muted'></div>"; w.querySelector(".muted").textContent=factsStatusText(); const r=document.createElement("button"); r.textContent="Check again"; r.onclick=()=>{ factsPull(true); }; w.appendChild(r); app.appendChild(w); return true; }
+  if(!staff.length){ if(!renderFactsTeam(app)){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nobody is on staff yet, on the hub or in setup. Add your team in the builder."; app.appendChild(e); } return true; }
   return false;
 }
-/* the PIN pad's ✓: a plain compare in blob mode; in facts mode each person's PIN hash is checked (WebCrypto) */
+/* who a typed PIN belongs to in facts mode: checked against the hub's PIN hashes (a several-stations download carries no PINs); ok() narrows who may match */
+async function factsWhoByPin(pin, ok){ if(!FACTS.ready) return null; const F=globalThis.CustomPOSFacts; for(const s of factsStaff()){ if((!ok||ok(s)) && s.pin && await F.staff.pinMatchesAsync(s.pin, String(pin))) return s; } return null; }
+/* the PIN pad's ✓: a plain compare in blob mode; in facts mode each person's PIN hash is checked (WebCrypto) — one check at a time */
+let clockChecking = false;
 async function clockEnter(staff){
+  if(clockChecking) return;
   const buf=pinBuf; let who=null;
-  if(FACTS.on){ const F=globalThis.CustomPOSFacts; for(const s of staff){ if(s.pin && await F.staff.pinMatchesAsync(s.pin, buf)){ who=s; break; } } }
+  if(FACTS.on){ clockChecking=true; flash("Checking…"); try{ const F=globalThis.CustomPOSFacts; for(const s of staff){ if(s.pin && await F.staff.pinMatchesAsync(s.pin, buf)){ who=s; break; } } } finally{ clockChecking=false; } }
   else who=staff.find(s=>String(s.pin)===buf)||null;
   if(who){ if(openPunch(who.id)){ clockAction={staffId:who.id}; pinBuf=""; render(); } else clockIn(who); } else { pinBuf=""; flash("PIN not recognized"); render(); }
 }
@@ -1334,14 +1431,14 @@ function renderTimeclock(app, station){
     const w=clockWelcome; const wel=document.createElement("div"); wel.className="card"; wel.style.textAlign="center";
     const cheer=CLOCK_CHEERS[w.name.length % CLOCK_CHEERS.length];  // deterministic (no Math.random in the engine)
     if(w.inbound){
-      wel.innerHTML="<h2 style='margin:6px 0'>👋 Welcome, "+w.name+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked in at "+nowHM()+" · "+cheer+"</div>";
+      wel.innerHTML="<h2 style='margin:6px 0'>👋 Welcome, "+factsEsc(w.name)+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked in at "+nowHM()+" · "+cheer+"</div>";
       const wc=FLOW.welcome||{};
       if(wc.message){ const m=document.createElement("div"); m.className="line"; m.style.justifyContent="center"; m.innerHTML="<span>"+wc.message+"</span>"; wel.appendChild(m); }
       if((wc.specials||[]).length){ const s=document.createElement("div"); s.style.marginTop="8px"; s.innerHTML="<b>Today's specials</b>"; (wc.specials||[]).forEach(sp=>{ const d=document.createElement("div"); d.className="muted"; d.textContent="• "+sp; s.appendChild(d); }); wel.appendChild(s); }
       const kus=w.staffId?kudosFor(w.staffId):[]; if(kus.length){ const k=kus[0]; const kd=document.createElement("div"); kd.style.cssText="margin-top:10px;background:#123a1e;color:#b6f0c6;border-radius:8px;padding:8px 10px"; kd.innerHTML="⭐ <b>"+k.from+"</b> says: "+k.note; wel.appendChild(kd); }
     } else {
       const wg=staffWage(w.staffId); const paid = wg? " · earned $"+earnedToday(w.staffId).toFixed(2):"";
-      wel.innerHTML="<h2 style='margin:6px 0'>✅ Thanks, "+w.name+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked out · "+hoursToday(w.staffId).toFixed(2)+" h today"+paid+". See you next time.</div>";
+      wel.innerHTML="<h2 style='margin:6px 0'>✅ Thanks, "+factsEsc(w.name)+"!</h2><div class='muted' style='margin-bottom:10px'>Clocked out · "+hoursToday(w.staffId).toFixed(2)+" h today"+paid+". See you next time.</div>";
     }
     const ok=document.createElement("button"); ok.className="primary"; ok.textContent=w.inbound?"Start shift":"Done"; ok.onclick=()=>{ clockWelcome=null; render(); }; wel.appendChild(ok);
     app.appendChild(wel); return;
@@ -1351,7 +1448,7 @@ function renderTimeclock(app, station){
     const s=staff.find(x=>x.id===clockAction.staffId); const p=s&&openPunch(s.id);
     if(!s||!p){ clockAction=null; render(); return; }
     const card=document.createElement("div"); card.className="card";
-    card.innerHTML="<h2 style='margin:2px 0'>Hi "+s.name+"</h2><div class='muted'>On since "+p.in+" · "+(workedMs(p)/3600000).toFixed(2)+" h worked"+(breakMs(p)? " · "+(breakMs(p)/60000).toFixed(0)+" min on break":"")+"</div>";
+    card.innerHTML="<h2 style='margin:2px 0'>Hi "+factsEsc(s.name)+"</h2><div class='muted'>On since "+p.in+" · "+(workedMs(p)/3600000).toFixed(2)+" h worked"+(breakMs(p)? " · "+(breakMs(p)/60000).toFixed(0)+" min on break":"")+"</div>";
     if(staffWage(s.id)){ const e=document.createElement("div"); e.className="line"; e.style.fontSize="18px"; e.innerHTML="<span>Earned this shift</span><span class='spacer'></span><b>$"+earnedToday(s.id).toFixed(2)+"</b>"; e.title="at $"+staffWage(s.id).toFixed(2)+"/h"; card.appendChild(e); }
     const due=breakDue(p); if(due){ const d=document.createElement("div"); d.className="line"; d.style.cssText="background:#5a3a12;color:#ffdca8;border-radius:6px;padding:8px;margin-top:6px"; d.textContent="⏰ "+due; card.appendChild(d); }
     const btns=document.createElement("div"); btns.style.cssText="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px";
@@ -1387,14 +1484,16 @@ function renderTimeclock(app, station){
   const zero=document.createElement("button"); zero.textContent="0"; zero.onclick=()=>press("0"); grid.appendChild(zero);
   const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=()=>clockEnter(staff); grid.appendChild(ent);
   pad.appendChild(grid); app.appendChild(pad);
-  if(FACTS.on){ const n=factsOwed(), sh=document.createElement("div"); sh.className="muted"; sh.id="factsStatus"; sh.style.margin="4px 0 8px"; sh.textContent="Shared through the hub"+(n? " · "+n+" punch"+(n===1?"":"es")+" waiting to send (kept on this device until the hub has them)" : " · up to date"); app.appendChild(sh); }
+  if(FACTS.on){ const sh=document.createElement("div"); sh.className="muted"; sh.id="factsStatus"; sh.style.margin="4px 0 8px"; sh.textContent="Shared through the hub · "+factsStatusText()+" ";
+    const dc=document.createElement("button"); dc.id="factsDisconnect"; dc.textContent="Disconnect this device"; dc.style.cssText="font-size:12px;padding:2px 8px;margin-left:6px"; dc.onclick=factsDisconnect; sh.appendChild(dc); app.appendChild(sh); }
   // who's on the clock — with live hours, break state, and (if waged) earnings
   const on=staff.filter(s=>openPunch(s.id));
   const oc=document.createElement("div"); oc.className="card"; oc.innerHTML="<div class='row'><b>On the clock</b></div>";
   if(!on.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="Nobody clocked in."; oc.appendChild(e); }
   on.forEach(s=>{ const p=openPunch(s.id); const br=onBreak(p)?" · <span style='color:var(--warn,#c99a12)'>on break</span>":""; const wg=staffWage(s.id)?" · $"+earnedToday(s.id).toFixed(2):"";
-    const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+s.name+"</span><span class='spacer'></span><span class='muted'>in "+p.in+" · "+hoursToday(s.id).toFixed(2)+" h"+br+wg+"</span>"; oc.appendChild(row); });
+    const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+factsEsc(s.name)+"</span><span class='spacer'></span><span class='muted'>in "+p.in+" · "+hoursToday(s.id).toFixed(2)+" h"+br+wg+"</span>"; oc.appendChild(row); });
   app.appendChild(oc);
+  if(FACTS.on && FACTS.ready) renderFactsTeam(app);   // a hire in setup, or a team add that was interrupted: add who the hub is missing
 }
 
 /* APPOINTMENTS — book a customer + service + time; check-in turns a booking into a real order in the pipeline.
@@ -1746,6 +1845,7 @@ function giveKudos(fromName, toId, toName, note){ if(!toId||!note) return; DB=lo
 function renderWorker(app, station){
   const staff=FLOW.staff||[];
   app.innerHTML="<h2>"+station.label+"</h2>";
+  if(FACTS.on && renderFactsGate(app, station, factsStaff())) return;   // several stations: PINs are checked against the hub, so this device connects first
   if(!staff.length){ const e=document.createElement("div"); e.className="empty card"; e.textContent="No staff configured. Add staff (name + PIN) in the builder."; app.appendChild(e); return; }
   // stay signed in on a personal device: restore a remembered worker (per device)
   if(!workerId){ try{ const saved=localStorage.getItem(wkey()); if(saved && staff.some(s=>s.id===saved)) workerId=saved; }catch(e){} }
@@ -1759,7 +1859,7 @@ function renderWorker(app, station){
     ["1","2","3","4","5","6","7","8","9"].forEach(d=>{ const b=document.createElement("button"); b.textContent=d; b.onclick=()=>press(d); grid.appendChild(b); });
     const clr=document.createElement("button"); clr.textContent="⌫"; clr.onclick=()=>{ pinBuf=pinBuf.slice(0,-1); render(); }; grid.appendChild(clr);
     const zero=document.createElement("button"); zero.textContent="0"; zero.onclick=()=>press("0"); grid.appendChild(zero);
-    const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=()=>{ const who=staff.find(s=>String(s.pin)===pinBuf); if(who){ workerId=who.id; const rm=document.getElementById("wkRemember"); if(!rm||rm.checked){ try{ localStorage.setItem(wkey(), who.id); }catch(e){} } pinBuf=""; render(); } else { pinBuf=""; flash("PIN not recognized"); render(); } }; grid.appendChild(ent);
+    const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=async()=>{ const hit=FACTS.on ? await factsWhoByPin(pinBuf, s=>staff.some(x=>String(x.id)===String(s.id))) : null; const who=FACTS.on ? (hit && staff.find(x=>String(x.id)===String(hit.id))) : staff.find(s=>String(s.pin)===pinBuf); if(who){ workerId=who.id; const rm=document.getElementById("wkRemember"); if(!rm||rm.checked){ try{ localStorage.setItem(wkey(), who.id); }catch(e){} } pinBuf=""; render(); } else { pinBuf=""; flash("PIN not recognized"); render(); } }; grid.appendChild(ent);
     pad.appendChild(grid); app.appendChild(pad);
     // stay-signed-in choice (on by default — the portal is meant for a worker's own phone; uncheck on a shared device)
     const rmw=document.createElement("label"); rmw.className="muted"; rmw.style.cssText="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px";

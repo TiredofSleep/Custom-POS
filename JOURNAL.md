@@ -1480,3 +1480,27 @@ never hears of it.
 The builder's *Several computers* now produces such a download. Its test found that a download with the engine inside was broken:
 JavaScript's string `replace` reads `$&` in a replacement as a code, and the engine's own source has one. It is a one-word fix
 (a replacer function), and every *several stations* download would have been broken without it.
+
+### A third review, before it went public
+Three code-running reviewers tried to break Stage 2 before it was published. They found 27 things. All were taken, and each fix has a
+test that failed before it. The serious ones:
+
+- **The hub as the docs start it ran no rules.** Every test had built the hub inside the test, with its modules. The documented
+  command built it without them, so a clerk could have corrected their own hours. A new test now starts the hub exactly as a shop
+  would, as its own process.
+- **With `--with-blob` the hub served its own folder**, so its database and the key that signs PIN passes were one request away. It
+  now serves only the app's own pages, and it refuses to start with its data inside the folder it serves.
+- **A several-stations download carried every PIN**, and the hub hands that file to anyone on its network. The download now carries
+  none. Each PIN is typed on a tablet when the team joins the hub and leaves it only as a hash. Every PIN screen checks the hub's
+  hashes, including money approvals and a worker's own screen.
+- **A reload left the tablet read-only** while the screen still said "Welcome". The old page now lets go when it closes.
+- **A mistyped device name went unnoticed** until every punch came back refused. The engine reads a device's name from its token
+  alone, so our own front door now checks the name a device gives against its token. Connect sends an empty bundle to ask.
+- **A staff name could run as HTML** on every tablet, and connecting wiped a tablet's earlier punches. Names are drawn as text now,
+  and earlier punches are kept beside the shared ones.
+
+The browser test now plays a fuller day. It covers a wrong name at Connect, a reload, the hub going away and coming back, a hire
+added later under a manager's PIN, and a name full of HTML. The gate is also stricter. Before, the same punches were fed to both
+modes. Now blob mode's own clock runs the same actions at the same moments under a fixed browser clock, and every shift time must
+match. The negative control now goes through a real hub that does carry records, so "the punch never arrived" cannot be blamed on
+a dead hub.

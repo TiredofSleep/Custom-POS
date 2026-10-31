@@ -21,7 +21,13 @@ blob-mode builder as an opt-in.*
     download.
   - One hub answers both the facts and the blob records (`facts/server.js --with-blob`).
   - The gate is held: the two-station test (in Node and in a real browser), authority and PIN over a real hub, the history fixture,
-    the time clock drawn in facts mode, and the tip pool and labor cost equal from the compat projection and from `DB.punches`.
+    the time clock drawn in facts mode, and every shift time, the tip pool and labor cost equal from the compat projection and from
+    blob mode's own clock run for the same actions at the same moments.
+  - *A third review, before publishing* (three code-running reviewers, 27 findings, all taken): the documented hub command ran no
+    rules and, with `--with-blob`, served its own database; a several-stations download carried every PIN; a reload left a tablet
+    read-only; a mistyped device name went unnoticed; a staff name could run as HTML; connecting wiped a tablet's earlier punches.
+    Each fix has a test that failed before it (`facts/test/cli.test.js`, and the new checks in the module tests,
+    `tests/facts-clock.js` and `tests/builder-facts.js`).
 - *Not yet:* the optional hub job that closes a forgotten shift (`timeclock.autoCloseAfterHrs`) — the fact type is ready and only
   the hub may write it.
 

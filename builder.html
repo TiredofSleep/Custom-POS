@@ -453,7 +453,7 @@ function chooseTrade(k){ tradeKey=k; cfg=JSON.parse(JSON.stringify(TEMPLATES[k])
 /* ---- guided interview: a plain-language path for non-technical owners (Shape → Config → People → Pay → Run) ---- */
 const DEPLOY_NOTE = {
   one:     "**One computer.** Everything lives in this browser on that device — no server, no monthly fee. Use **Data & backup → Backup (JSON)** now and then (or let Claude Code automate it) so a copy lives somewhere safe.",
-  several: "**Several computers.** Run one small sync hub on an always-on machine (a spare PC or a ~a-few-dollars/month cloud box): `CUSTOMPOS_ADMIN_KEY=<a long random key> node facts/server.js --db hub-data/facts.db --with-blob` (Node 22+). It answers both the time clock, which runs on the v2 engine so every punch is on every station, and the shared records. Give each device a name and a setup token from the hub (`POST /v2/admin/enroll` with your key — ask Claude Code to do it for you); the time clock asks for them once. Each device keeps its own copy, so a dropped connection never stops a sale or a punch. The records part is open, as the sync hub always was: keep the hub on your own network, or put a proxy with a password in front before opening it to the internet.",
+  several: "**Several computers.** Run one small sync hub on an always-on machine (a spare PC or a ~a-few-dollars/month cloud box): `CUSTOMPOS_ADMIN_KEY=<a long random key> node facts/server.js --db ../custompos-hub-data/facts.db --with-blob` (Node 22+; its data folder sits beside the app's folder, never inside it — the hub refuses that, since it serves the app's folder). It answers both the time clock, which runs on the v2 engine so every punch is on every station, and the shared records. Give each device a name and a setup token from the hub (`POST /v2/admin/enroll` with your key — ask Claude Code to do it for you); the time clock asks for them once. Each device keeps its own copy, so a dropped connection never stops a sale or a punch. The records part is open, as the sync hub always was: keep the hub on your own network, or put a proxy with a password in front before opening it to the internet.",
   backup:  "**Several computers + off-site backup.** As above with the sync hub, plus schedule the hub's rolling snapshots to copy off-site (another drive or cloud) on a timer — so a dead hard drive is never the end of your data. Ask Claude Code to set the backup schedule up for you."
 };
 function startGuide(){ step='guide'; gstep=1; guide={}; render(); }
@@ -469,7 +469,10 @@ function guideTeam(has){ guide.team=has;
 }
 /* several stations → facts mode for the time clock, with the hub's address if it is known (the device asks for it otherwise) */
 function guideFinish(){
-  if(guide.deploy==='several' || guide.deploy==='backup'){ cfg.storage='facts'; cfg.factsHub=(guide.hub||'').trim(); }
+  if(guide.deploy==='several' || guide.deploy==='backup'){
+    const hub=(guide.hub||'').trim();
+    if(hub && !/^https?:\/\/[^\s"'<>]+$/.test(hub)){ flashB("The hub's address should look like https://hub.example — or leave it blank and fill it in on each device"); return; }   // stage-2 review: it goes into the download
+    cfg.storage='facts'; cfg.factsHub=hub; }
   else { delete cfg.storage; delete cfg.factsHub; }
   buildAndShow();
 }
@@ -732,19 +735,24 @@ processor credentials live only on your own server.
 }
 
 /* ---- assemble + download ---- */
+/* JSON that is safe inside a script tag: a name holding a closing script tag (or an HTML comment opener) can never end the tag early (stage-2 review) */
+function jsonInScript(v){ return JSON.stringify(v).replace(new RegExp("[<" + String.fromCharCode(0x2028, 0x2029) + "]", "g"), function(c){ return String.fromCharCode(92) + "u" + ("000" + c.charCodeAt(0).toString(16)).slice(-4); }); }
 async function assemble(cfg){
   const engine = (typeof window!=="undefined" && window.__ENGINE_SRC__) ? window.__ENGINE_SRC__ : await fetch('pos.html').then(r=>r.text());
   const verM = engine.match(/CUSTOMPOS_VERSION\s*=\s*"([^"]+)"/);
   const build = { version: verM?verM[1]:"?", builtAt: new Date().toISOString().slice(0,10), business: cfg.branding.name };
-  const banner = "<!-- customPOS · "+build.business+" · engine v"+build.version+" · built "+build.builtAt+" · your software, your data -->\n";
-  let inject = "<script>window.CUSTOMPOS_FLOW = "+JSON.stringify(cfg)+"; window.CUSTOMPOS_BUILD = "+JSON.stringify(build)+";<\/script>\n";
+  const banner = "<!-- customPOS · "+String(build.business||"").replace(/[<>]|--/g," ")+" · engine v"+build.version+" · built "+build.builtAt+" · your software, your data -->\n";
+  /* a several-stations download carries NO PINs (stage-2 review): each is typed on a device when the team joins the hub and leaves it only
+     as a hash, and every PIN screen checks the hub's hashes — the hub serves this file to anyone on its network */
+  const flow = cfg.storage==='facts' ? Object.assign({}, cfg, { staff: (cfg.staff||[]).map(function(p){ const c=Object.assign({}, p); delete c.pin; return c; }) }) : cfg;
+  let inject = "<script>window.CUSTOMPOS_FLOW = "+jsonInScript(flow)+"; window.CUSTOMPOS_BUILD = "+jsonInScript(build)+";<\/script>\n";
   /* Stage 2: a 'several stations' download carries the v2 engine (facts/bundle.js, built by build.js) and points both the time clock
      (facts) and the records (blob sync) at the same hub — one hub answers both (facts/server.js --with-blob) */
   if(cfg.storage==='facts'){
     let fb = (typeof window!=="undefined" && window.__FACTS_BUNDLE__) ? window.__FACTS_BUNDLE__ : null;
     if(!fb){ try{ const r=await fetch('facts.bundle.js'); if(r.ok) fb=await r.text(); }catch(e){} }   // facts.bundle.js sits beside pos.html (generated: node facts/bundle.js --out facts.bundle.js)
     if(!fb) throw new Error('the v2 engine bundle (facts.bundle.js) could not be loaded beside the builder');
-    inject = "<script>"+fb.replace(/<\/script/gi,"<\\/script")+"<\/script>\n" + inject + (cfg.factsHub ? "<script>window.CUSTOMPOS_HUB = "+JSON.stringify(cfg.factsHub)+";<\/script>\n" : "");
+    inject = "<script>"+fb.replace(/<\/script/gi,"<\\/script")+"<\/script>\n" + inject + (cfg.factsHub ? "<script>window.CUSTOMPOS_HUB = "+jsonInScript(cfg.factsHub)+";<\/script>\n" : "");
   }
   /* a replacer FUNCTION, not a string: a replacement string reads $& $' $` $1 as codes, and the engine bundle holds such text (Stage 2:
      a "several stations" download broke with "Invalid or unexpected token" until this) */

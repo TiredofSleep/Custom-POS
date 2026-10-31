@@ -28,7 +28,7 @@ PIN, and the first module, the **time clock**. It runs in the app today: pick *S
 | `modules/staff.js` | the people as facts: name, role, rights, a PBKDF2 PIN hash (never the digits) | **this repo** (Stage 2) |
 | `modules/pingrant.js` | the PIN the hub checks itself: a 30-minute signed pass for one person on one tablet | **this repo** (Stage 2) |
 | `modules/timeclock.js` | the Time clock module: shared punches, breaks, corrections, and `punches()`, which rebuilds the app's own `DB.punches` | **this repo** (Stage 2) |
-| `test/modules.test.js`, `staff.test.js`, `timeclock-module.test.js` | the contract, the staff and PINs, the time clock (with a history fixture) | **this repo** (Stage 2) |
+| `test/modules.test.js`, `staff.test.js`, `timeclock-module.test.js`, `cli.test.js` | the contract, the staff and PINs, the time clock (with a history fixture), the hub started as the docs say | **this repo** (Stage 2) |
 
 **Imported files are never edited here.** They arrive only through the origin shop's private exporter, which refuses while
 any real name, phone, address, server detail or secret survives, and which runs the engine laws inside its own output first.
@@ -41,7 +41,7 @@ change is made upstream and re-exported, never by hand here.
 ```
 node tests/facts-engine.js          # the engine laws, the wire, the bundle, the modules (Node 22+)
 node tests/public-refusal.js        # nothing that must never be published is in facts/ or packs/
-CUSTOMPOS_ADMIN_KEY=<long random> node facts/server.js --db hub-data/facts.db --with-blob
+CUSTOMPOS_ADMIN_KEY=<long random> node facts/server.js --db ../custompos-hub-data/facts.db --with-blob
 node facts/bundle.js --out facts.bundle.js   # the bundle beside pos.html, which the builder puts in a "several stations" download
 ```
 
@@ -49,12 +49,19 @@ The hub needs **Node 22 or newer** (it uses the built-in `node:sqlite`) and an o
 listens on 127.0.0.1. For anything beyond this one machine, put a TLS proxy in front (see [../docs/HUB-SYNC.md](../docs/HUB-SYNC.md)).
 
 `--with-blob` makes it **one hub for both**: the repo's `hub.js` also answers `/api/db` (records, still synced as blobs until their
-modules move) and serves the app's files. ⚠️ That blob API is open, as `hub.js` has always been: on its own it is for a LAN, and
+modules move) and serves the app's files: only the app's own pages and the bundle, never the rest of the folder. Its data must
+live OUTSIDE the app's folder (the hub refuses to start otherwise: its database and the key that signs PIN passes would be one
+request away). ⚠️ That blob API is open, as `hub.js` has always been: on its own it is for a LAN, and
 beyond one, the proxy in front must guard it. The facts doors keep their own tokens and keys either way.
 
 **A device**: the operator enrols it (`POST /v2/admin/enroll {station}` with the operator key) and gives the device its name and the
-token shown once. The app's time clock asks for both the first time. A brand-new hub is then given the team from setup: the owner
-first, then everyone else under the owner's PIN, which the hub checks itself.
+token shown once. The app's time clock asks for both the first time, and the hub refuses a token given with the wrong name at once
+(every send says its name, and the hub checks it against the token). The token goes straight into the device's own engine store,
+never the page's storage. A brand-new hub is then given the team: each PIN is TYPED on the device and leaves it only as a hash (a
+several-stations download carries no PINs). The owner comes first; everyone after, including a hire added later on any device, is
+added under an owner's or manager's PIN, which the hub checks itself. Every PIN screen in facts mode (the clock, money approvals, a
+worker's own screen) checks the hub's hashes, so a device that asks for a PIN connects once. Disconnect forgets the hub; punches
+made before a device joined are kept beside the shared ones.
 
 ## What it promises, and how that is checked
 
@@ -74,8 +81,12 @@ first, then everyone else under the owner's PIN, which the hub checks itself.
   - a forgotten shift is closed by the hub alone.
   Every refusal is shown to land on a hub with no modules, so the refusal is the rule's, not the wire's.
   (`modules`, `staff`, `timeclock-module`)
-- **A clock-in on one tablet is on every tablet**, in a real browser with two tablets and one hub. The tip pool and labor cost
-  come out the same from the shared punches as from the old local ones. (`tests/facts-clock.js`)
+- **A clock-in on one tablet is on every tablet**, in a real browser with tablets and one hub, through a reload, a hub that goes away
+  and comes back, a hire added later and a staff name full of HTML. Every shift time, the tip pool and the labor cost come out the
+  same from the shared punches as from blob mode's own clock run for the same actions at the same moments; blob mode through the same
+  hub carries records but not punches. (`tests/facts-clock.js`)
+- **The hub as a shop starts it** runs the rules, never enrols a name the judge trusts, serves only its allow-list, survives a
+  malformed request and refuses a send under the wrong name. (`test/cli.test.js`)
 
 It is honest about what it does not do: the hub cannot tell who is holding a tablet. A PIN checked by the hub, and an instant
 revoke, are the defence for the facts that matter, not a guarantee. A PIN is short, and every tablet holds the PIN hashes, so a

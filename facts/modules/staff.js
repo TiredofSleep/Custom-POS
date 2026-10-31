@@ -47,8 +47,16 @@ function rule(p, who, staff) {
   const s = p.set || {}, target = staff.byId.get(p.staffId) || null;
   if ((s.role === 'owner' || (target && target.role === 'owner')) && !isOwner(who)) return 'only an owner makes or changes an owner';
   if (String(p.staffId) === String(who.id) && !can(who, 'employees') && Object.keys(s).some(function (k) { return k !== 'pin'; })) return who.name + ' may change only their own PIN';
+  /* the shop always keeps an active owner: the last one may not be demoted or switched off (stage-2 review: it could, and then nobody
+     could ever make an owner again) */
+  if (target && target.role === 'owner' && target.active !== false && ((s.role != null && s.role !== 'owner') || s.active === false)) {
+    let others = 0; staff.byId.forEach(function (x) { if (x.id !== target.id && x.role === 'owner' && x.active !== false) others++; });
+    if (!others) return 'the shop must keep an active owner — make someone else an owner first';
+  }
   return null;
 }
+/* @facts @employee — what a brand-new shop's first fact must be: its owner, active (define.js asks before anyone is on staff) */
+function firstOk(e) { const s = e && e.type === 'staff.set' && e.payload && e.payload.set; return !!(s && s.role === 'owner' && s.active !== false); }
 
 /* @facts @employee — a PIN made into its record (Node; a browser makes the same with WebCrypto PBKDF2) */
 function pinRecord(pin, salt) { salt = salt || crypto.randomBytes(16).toString('hex'); return { salt: salt, hash: crypto.pbkdf2Sync(String(pin), Buffer.from(salt, 'hex'), PIN_ITER, 32, 'sha256').toString('hex'), iter: PIN_ITER }; }
@@ -98,7 +106,7 @@ const STAFF = defineModule({
   facts: { 'staff.set': { authority: 'self-or:employees', pin: true, rule: rule, validate: validate, creates: ['staffId'],
     doc: 'A person added or changed, field by field. payload {staffId, set: {name?, role?, rights?, active?, pin? {salt, hash, iter}}}' } },
   views: { list: function (facts) { return fold(facts); } },
-  provides: { staff: staffNow }
+  provides: { staff: staffNow, firstOk: firstOk }
 });
 
 module.exports = { STAFF: STAFF, fold: fold, isOwner: isOwner, can: can, pinRecord: pinRecord, pinMatches: pinMatches, validate: validate, ROLES: ROLES,

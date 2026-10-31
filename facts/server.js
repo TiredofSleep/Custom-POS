@@ -18,7 +18,7 @@
    Tokens ride in the body, never the URL. Every refusal is a JSON answer that says why: malformed 400, a sender with no key and a
    body over 64 KB 401, no or wrong operator key 403, no such route 404, too large 413.
    It listens on 127.0.0.1 by default; put a TLS proxy in front for anything beyond this machine (docs/HUB-SYNC.md).
-   usage:  CUSTOMPOS_ADMIN_KEY=<long random> node facts/server.js --db hub-data/facts.db [--port 8790] [--host 127.0.0.1] [--with-blob]
+   usage:  CUSTOMPOS_ADMIN_KEY=<long random> node facts/server.js --db ../custompos-hub-data/facts.db [--port 8790] [--host 127.0.0.1] [--with-blob]
            (--with-blob: the repo's hub.js also answers here — /api/db for records and the app's files — so a shop runs ONE hub)
    Needs Node 22 or newer (node:sqlite). */
 'use strict';
@@ -27,6 +27,7 @@ const crypto = require('crypto');
 const { makeHub } = require('./hub/hub');
 const { openSqliteStore } = require('./hub/sqlite-store');
 const path = require('path');
+const fs = require('fs');
 const { assemble } = require('./modules/define');
 const { grantsFor } = require('./modules/pingrant');
 require('./aggregates/timeclock');   /* the fact types this hub knows; in Stage 2 each module registers its own */
@@ -35,6 +36,11 @@ const MAX_BODY = 8 * 1024 * 1024;   /* a whole receive of 1000 facts fits many t
 const PREAUTH_MAX = 64 * 1024;      /* what a sender the hub cannot name may send before it is cut off */
 const PREAUTH_MS = 15000;           /* and how long it has to send it */
 const MAX_CONN = 256;               /* connections at once (a small shop has a handful of tablets) */
+const SERVED_ROOT = path.resolve(__dirname, '..');   /* the folder the repo's hub.js serves when mounted (--with-blob) */
+/* what the mounted hub.js may answer here: its shared records and the app's own files — nothing else under the folder (stage-2 review) */
+const FALLBACK_OK = /^\/(?:api\/[A-Za-z0-9_\/-]*|pos\.html|builder\.html|index\.html|facts\.bundle\.js|favicon\.ico)?$/;
+/* station names this hub's own services use, or that the judge trusts: never handed to a device over the operator door */
+const RESERVED = /^(?:hub-services|v1-shadow|scriptdesk.*)$/i;
 
 /* @facts @hub — the operator key check: SHA-256 both sides, compared in constant time */
 function sameKey(given, key) { const a = crypto.createHash('sha256').update(String(given || '')).digest(), b = crypto.createHash('sha256').update(String(key)).digest(); return crypto.timingSafeEqual(a, b); }
@@ -53,8 +59,17 @@ function startHubServer(opts) {
   opts = opts || {};
   const adminKey = opts.adminKey || process.env.CUSTOMPOS_ADMIN_KEY || '';
   if (String(adminKey).length < 16) return Promise.reject(new Error('the hub needs an operator key of 16+ characters (CUSTOMPOS_ADMIN_KEY) — without one, nobody could enrol a device'));
+  /* stage-2 review: a hub that also serves files (opts.fallback, --with-blob) must keep its data OUTSIDE the folder it serves — its
+     database and its PIN-pass signing key would otherwise be one GET away (that was found, and a forged pass made an owner) */
+  if (opts.fallback && opts.db && !opts.store) {
+    const rel = path.relative(SERVED_ROOT, path.resolve(opts.db));
+    if (!rel.startsWith('..') && !path.isAbsolute(rel)) return Promise.reject(new Error('with --with-blob the hub serves the app\'s folder, so its data must live outside it — for example --db ../custompos-hub-data/facts.db'));
+  }
   let store = null;
-  try { store = opts.store || (opts.db ? openSqliteStore(opts.db) : null); } catch (e) { return Promise.reject(e); }
+  try {
+    if (opts.db && !opts.store) fs.mkdirSync(path.dirname(path.resolve(opts.db)), { recursive: true });   /* a fresh checkout has no data folder yet */
+    store = opts.store || (opts.db ? openSqliteStore(opts.db) : null);
+  } catch (e) { return Promise.reject(e); }
   /* Stage 2: the modules this hub runs (opts.modules, each from defineModule). With them, ONE judge decides who may write what, and the
      hub checks PINs itself for the facts that need it (facts/modules/define.js, pingrant.js). Without them, it admits any registered type. */
   const mods = opts.modules || [];
@@ -91,7 +106,13 @@ function startHubServer(opts) {
     /* ONE HUB FOR BOTH (Stage 2, docs/V2-MODULAR-IMPORT.md): while a shop's records still sync as blobs and its punches are facts, one
        process answers both, so a shop has one hub address. opts.fallback gets every request that is not a /v2/ door (the CLI's
        --with-blob mounts the repo's own hub.js: /api/db and the app's files, exactly as that hub serves them on its own). */
-    if (opts.fallback && url.indexOf('/v2/') !== 0) { opts.fallback(req, res); return; }
+    /* stage-2 review: only an allow-list reaches it (its records and the app's files — never the folder's other files, which held the
+       database and the PIN-pass key), and a request that throws inside it is a 400, never a dead hub (a bad % escape killed the process) */
+    if (opts.fallback && url.indexOf('/v2/') !== 0) {
+      if (!FALLBACK_OK.test(url)) { refuse(req, res, 404, { refused: 'no such file here' }); return; }
+      try { opts.fallback(req, res); } catch (e) { if (!res.headersSent) refuse(req, res, 400, { refused: 'malformed request' }); else req.socket.destroy(); }
+      return;
+    }
     try {
       if (req.method === 'GET' && url === '/v2/health') {
         /* a store that refuses writes is NOT healthy: one retry, then 503, so a monitor or a proxy's health check sees a full disk
@@ -105,7 +126,14 @@ function startHubServer(opts) {
       if (url.indexOf('/v2/admin/') === 0 && !operator(req)) { refuse(req, res, 403, { refused: 'the operator key is needed' }); return; }
       readJson(req, res, function (j) {
         try {
-          if (url === '/v2/receive') { send(res, 200, hub.receive(j)); return; }
+          if (url === '/v2/receive') {
+            /* the name a device gives must be the one its token was enrolled as (stage-2 review: the engine reads the station from the token
+               alone, so a device set up under a mistyped name sent nothing it could see was wrong until each fact came back refused). The
+               whole bundle is refused, and an empty send is how a tablet checks its name and token at Connect (pos.html factsConnect) */
+            const dev = hub.allowedDevice(String((j && j.token) || ''));
+            if (dev && j && typeof j.station === 'string' && j.station !== dev.station) { send(res, 200, { refused: 'this setup token belongs to a different device name — check the name the hub gave this device' }); return; }
+            send(res, 200, hub.receive(j)); return;
+          }
           /* the pull carries `at` (the fact the tablet holds at its cursor — how a hub restored from an older copy is caught and takes a
              new identity) and `info` (the tablet's clock, build and scope, for the watch); both go to the hub (pre-push review: dropped) */
           if (url === '/v2/pull') { send(res, 200, hub.pull(j.token, j.cursor, j.epoch, j.limit, typeof j.at === 'string' ? j.at : undefined, (j.info && typeof j.info === 'object' && !Array.isArray(j.info)) ? j.info : undefined)); return; }
@@ -116,6 +144,8 @@ function startHubServer(opts) {
             send(res, 200, grants.issue(staffSource.provides.staff(hub.facts(), []), j.staffId, dev.station, j.pin)); return;
           }
           if (url === '/v2/admin/enroll') {
+            /* a name the judge trusts (or a service's own) is never a device's: enrolled as one, a device would pass every rule (stage-2 review) */
+            if (RESERVED.test(String(j.station || ''))) { send(res, 400, { refused: 'that station name is reserved for the hub\'s own services' }); return; }
             let t = null; try { t = hub.enroll(j.station, { by: String(j.by || 'operator').slice(0, 120) }); } catch (e) { send(res, 400, { refused: String(e.message) }); return; }
             if (!t) { send(res, 503, { refused: 'the hub could not make the enrolment durable — retry' }); return; }
             send(res, 200, { ok: true, station: j.station, token: t }); return;
@@ -124,7 +154,7 @@ function startHubServer(opts) {
           const n = hub.revoke(j.station);
           if (!n && hub.enrolled(j.station)) { send(res, 503, { refused: 'the hub could not make the revoke durable — retry; that device still has access' }); return; }
           send(res, 200, { ok: true, revoked: n });
-        } catch (e) { send(res, 500, { refused: 'the hub could not answer: ' + String(e && e.message || e).slice(0, 200) }); }
+        } catch (e) { console.error('[hub] a request failed: ' + String(e && e.stack || e).slice(0, 600)); send(res, 500, { refused: 'the hub could not answer this request' }); }   /* the cause stays in the hub's own log, never echoed to a device (stage-2 review) */
       });
     } catch (e) { send(res, 500, { refused: 'the hub could not answer' }); }
   });
@@ -153,7 +183,10 @@ if (require.main === module) {
   if (!host || host[0] === '-') usage('--host needs an address');
   /* --with-blob: the repo's hub.js answers everything outside /v2/ (records as blobs, and the app's files) — one hub for both */
   const fallback = a.indexOf('--with-blob') >= 0 ? (function () { const blob = require('../hub.js'), h = blob.server.listeners('request')[0]; return function (req, res) { h(req, res); }; })() : null;
-  startHubServer({ db: db, port: +port, host: host, fallback: fallback })
+  /* the modules this hub runs — the staff (with the PIN the hub checks) and the time clock. Without them a hub would judge nobody
+     (stage-2 review: the documented command ran with no rules at all, because only the tests passed modules) */
+  const modules = [require('./modules/staff').STAFF, require('./modules/timeclock').TIMECLOCK];
+  startHubServer({ db: db, port: +port, host: host, fallback: fallback, modules: modules })
     .then(function (s) { console.log('facts hub on ' + s.url + ' · epoch ' + s.hub.epoch + ' · head ' + s.hub.head); })
     .catch(function (e) { console.error('the hub did not start: ' + e.message); process.exit(1); });
 }

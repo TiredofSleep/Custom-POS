@@ -22,7 +22,7 @@ const FACTS = path.join(ROOT, 'facts');
 const PROV = path.join(FACTS, 'PROVENANCE.json');
 /* this repo's own files under facts/: written here, never by an import */
 const OWN = ['facts/README.md', 'facts/PROVENANCE.json', 'facts/server.js', 'facts/bundle.js', 'facts/test/wire.test.js', 'facts/test/bundle.test.js',
-  'facts/test/modules.test.js', 'facts/test/staff.test.js', 'facts/test/timeclock-module.test.js'];
+  'facts/test/modules.test.js', 'facts/test/staff.test.js', 'facts/test/timeclock-module.test.js', 'facts/test/cli.test.js'];
 /* this repo's own folders under facts/: the modules (Stage 2) — an import never writes inside them */
 const OWN_DIRS = ['facts/modules/'];
 /* @facts — is a path this repo's own (a listed file, or inside an own folder) */

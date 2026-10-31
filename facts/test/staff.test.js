@@ -111,4 +111,26 @@ H.testAsync('a PIN hashed in a browser (WebCrypto) is the same as the hub\'s (No
   H.ok(S.validate({ staffId: 'z', set: { pin: b } }) === null, 'and the hub takes the browser\'s record as a valid staff.set');
 });
 
+H.test('stage-2 review: a new shop starts with its owner; the last active owner cannot be demoted or switched off; made-up staff ids and a flood of passes cost the hub nothing', function () {
+  const { assemble } = require('../modules/define');
+  const g = G.grantsFor({ secret: 'r' }), A = assemble([S.STAFF], { grantCheck: g.check });
+  const fact = function (staffId, set, actor) { return { type: 'staff.set', station: 'tab', actor: actor, payload: { staffId: staffId, set: set }, hlc: { t: Date.now(), c: 0 } }; };
+  H.ok(/starts with its owner/.test(String(A.judge(fact('clk', { name: 'Cam', role: 'staff' }, null), [], []))), 'a brand-new shop refuses a first person who is not an owner');
+  H.eq(A.judge(fact('own', { name: 'Ola', role: 'owner' }, null), [], []), null, 'and admits its owner first');
+  const master = [fact('own', { name: 'Ola', role: 'owner', pin: S.pinRecord('1111') }, null)];
+  const pass = g.issue(S.fold(master), 'own', 'tab', '1111').grant, b = { grants: [pass] };
+  H.ok(/must keep an active owner/.test(String(A.judge(fact('own', { role: 'manager' }, 'own'), master, [], b))), 'the last owner cannot demote themselves');
+  H.ok(/must keep an active owner/.test(String(A.judge(fact('own', { active: false }, 'own'), master, [], b))), 'nor switch themselves off');
+  const two = master.concat([fact('own2', { name: 'Oz', role: 'owner' }, 'own')]);
+  H.eq(A.judge(fact('own', { role: 'manager' }, 'own'), two, [], b), null, 'the negative control: with a second owner, the first may step down');
+  /* made-up staff ids: refused before anything is kept */
+  const big = 'x'.repeat(5000); for (let i = 0; i < 200; i++) g.issue(S.fold(master), big + i, 'tab', '0000');
+  for (let i = 0; i < 200; i++) g.issue(S.fold(master), 'nobody' + i, 'tab', '0000');
+  H.ok(g.triesSize() <= 2, 'hundreds of made-up ids leave at most one bucket per tablet (' + g.triesSize() + ')');
+  /* a flood of junk passes is cheap: only a few that name this person and tablet are ever looked at */
+  const junk = []; for (let i = 0; i < 5000; i++) junk.push({ staffId: 'own', station: 'tab', since: 1, until: Date.now() + 1e6, sig: 'f'.repeat(64) });
+  const t0 = Date.now(), r = g.check(junk, 'own', 'tab', { hlc: { t: Date.now() } }); const took = Date.now() - t0;
+  H.ok(r === false && took < 200, '5,000 junk passes judged in ' + took + ' ms (refused)');
+});
+
 H.done();

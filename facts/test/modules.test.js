@@ -117,4 +117,17 @@ H.test('over a real hub: the judge admits and refuses by authority, by right and
   REFUSE.forEach(function (k) { H.ok(open[k] === true, 'a hub with no judge admits: ' + k); });
 });
 
+H.test('stage-2 review: a type no module in this hub claims is refused (never fail open); a rule that throws refuses only its own fact', function () {
+  const A = assemble([STAFF, SHIFT], { grantCheck: function () { return true; } });
+  require('../aggregates/timeclock');
+  const staffFacts = [{ type: 'tstaff.set', aggregate: 'tstaff', payload: { staffId: 'own', name: 'O', role: 'owner' } }];
+  H.ok(/no module in this hub owns a clock.manual/.test(String(A.judge({ type: 'clock.manual', station: 'tab', actor: 'own', payload: { empId: 'own' } }, staffFacts, []))), 'an unclaimed (but registered) type is refused');
+  H.eq(A.judge({ type: 'tshift.in', station: 'tab', actor: 'own', payload: { staffId: 'own' } }, staffFacts, []), null, 'the negative control: a claimed type by the right person is admitted');
+  const BOOM = defineModule({ name: 'tboom', version: 1, requires: ['tstaff'], aggregate: { name: 'tboom', fold: function () { return {}; } }, facts: { 'tboom.x': { authority: 'any', validate: ok }, 'tboom.y': { authority: 'self-or:payroll', validate: ok, rule: function () { throw new Error('a bug in a rule'); } } } });
+  const B = assemble([STAFF, BOOM], { grantCheck: function () { return true; } });
+  const why = B.judge({ type: 'tboom.y', station: 'tab', actor: 'own', payload: { staffId: 'own' } }, staffFacts, []);
+  H.ok(/rule failed/.test(String(why)) && String(why).indexOf('a bug in a rule') < 0, 'a rule that throws refuses that fact, and does not echo the error');
+  H.eq(B.judge({ type: 'tboom.x', station: 'tab', actor: null, payload: {} }, staffFacts, []), null, 'and another fact in the same send is still judged normally');
+});
+
 H.done();

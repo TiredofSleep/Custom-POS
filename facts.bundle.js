@@ -2296,6 +2296,7 @@ function assemble(mods, opts) {
   const needPeople = Object.keys(rules).filter(function (t) { return ['self', 'self-or', 'needs', 'owner'].indexOf(rules[t].kind) >= 0; });
   if (needPeople.length && !staffers.length) throw new Error('these facts name a person, but no module provides staff: ' + needPeople.join(', '));
   const staffOf = staffers.length ? staffers[0].provides.staff : null;
+  const firstOk = staffers.length && typeof staffers[0].provides.firstOk === 'function' ? staffers[0].provides.firstOk : null;   /* what a brand-new shop's first fact must be */
   const trusted = opts.trusted || ['hub-services'];
   const grantCheck = typeof opts.grantCheck === 'function' ? opts.grantCheck : null;
   const pinChecked = Object.keys(rules).filter(function (t) { return rules[t].pin; });
@@ -2305,12 +2306,16 @@ function assemble(mods, opts) {
   /* @facts @permission — the verdict on one fact: null (admit) or why it is refused */
   function judge(e, master, staged, bundle) {
     const r = rules[e.type];
-    if (!r) return null;   /* not a module's type: the registry already refused it if nobody registered it */
+    /* a registered type no module in THIS hub claims is refused: a hub runs the rules it was given, it never fails open (stage-2
+       review: a hub built from some modules left the others' privileged types unjudged) */
+    if (!r) return 'no module in this hub owns a ' + e.type;
     if (r.kind === 'hub-only') return trusted.indexOf(e.station) >= 0 ? null : 'only the hub writes a ' + e.type;
     if (trusted.indexOf(e.station) >= 0) return null;
     if (r.kind === 'any') return null;
     const staff = staffOf(master || [], staged || []);
-    if (!staff.byId.size) return null;   /* a brand-new shop: nobody to judge by yet, so its first people can be written */
+    /* a brand-new shop: nobody to judge by yet — but its first fact must be what the staff module says a shop starts with (its owner),
+       or nobody could ever be made an owner afterwards (stage-2 review) */
+    if (!staff.byId.size) return (firstOk && !firstOk(e)) ? 'a new shop starts with its owner (an active owner, written first)' : null;
     const who = e.actor != null ? staff.byId.get(String(e.actor)) : null;
     if (!who) return 'a ' + e.type + ' must name an active person (actor), and ' + (e.actor == null ? 'it names no one' : 'that person is not on staff');
     if (who.active === false) return who.name + ' is not active';
@@ -2321,7 +2326,9 @@ function assemble(mods, opts) {
     else if (r.kind === 'self' && String(p[r.self]) !== String(who.id)) why = who.name + ' may write a ' + e.type + ' only about themselves';
     else if (r.kind === 'self-or' && String(p[r.self]) !== String(who.id) && !owner && !staff.can(who, r.right)) why = who.name + ' may write only their own (another person\'s needs "' + r.right + '")';
     if (why) return why;
-    if (r.rule) { why = r.rule(p, who, staff, e); if (why) return why; }   /* the module's own extra rule: it may only refuse more */
+    /* the module's own extra rule: it may only refuse more — and a rule that throws refuses THIS fact only (closed, never open; never the
+       whole send, which would wedge the tablet resending it) */
+    if (r.rule) { try { why = r.rule(p, who, staff, e); } catch (x) { why = 'the ' + r.module + ' module\'s rule failed on this ' + e.type; } if (why) return why; }
     if (r.pin && grantCheck && !grantCheck((bundle && bundle.grants) || [], String(who.id), e.station, e)) return 'a ' + e.type + ' needs a PIN the hub checked for ' + who.name + ' on this tablet';
     return null;
   }
@@ -2381,8 +2388,16 @@ function rule(p, who, staff) {
   const s = p.set || {}, target = staff.byId.get(p.staffId) || null;
   if ((s.role === 'owner' || (target && target.role === 'owner')) && !isOwner(who)) return 'only an owner makes or changes an owner';
   if (String(p.staffId) === String(who.id) && !can(who, 'employees') && Object.keys(s).some(function (k) { return k !== 'pin'; })) return who.name + ' may change only their own PIN';
+  /* the shop always keeps an active owner: the last one may not be demoted or switched off (stage-2 review: it could, and then nobody
+     could ever make an owner again) */
+  if (target && target.role === 'owner' && target.active !== false && ((s.role != null && s.role !== 'owner') || s.active === false)) {
+    let others = 0; staff.byId.forEach(function (x) { if (x.id !== target.id && x.role === 'owner' && x.active !== false) others++; });
+    if (!others) return 'the shop must keep an active owner — make someone else an owner first';
+  }
   return null;
 }
+/* @facts @employee — what a brand-new shop's first fact must be: its owner, active (define.js asks before anyone is on staff) */
+function firstOk(e) { const s = e && e.type === 'staff.set' && e.payload && e.payload.set; return !!(s && s.role === 'owner' && s.active !== false); }
 
 /* @facts @employee — a PIN made into its record (Node; a browser makes the same with WebCrypto PBKDF2) */
 function pinRecord(pin, salt) { salt = salt || crypto.randomBytes(16).toString('hex'); return { salt: salt, hash: crypto.pbkdf2Sync(String(pin), Buffer.from(salt, 'hex'), PIN_ITER, 32, 'sha256').toString('hex'), iter: PIN_ITER }; }
@@ -2432,7 +2447,7 @@ const STAFF = defineModule({
   facts: { 'staff.set': { authority: 'self-or:employees', pin: true, rule: rule, validate: validate, creates: ['staffId'],
     doc: 'A person added or changed, field by field. payload {staffId, set: {name?, role?, rights?, active?, pin? {salt, hash, iter}}}' } },
   views: { list: function (facts) { return fold(facts); } },
-  provides: { staff: staffNow }
+  provides: { staff: staffNow, firstOk: firstOk }
 });
 
 module.exports = { STAFF: STAFF, fold: fold, isOwner: isOwner, can: can, pinRecord: pinRecord, pinMatches: pinMatches, validate: validate, ROLES: ROLES,
@@ -2461,14 +2476,24 @@ const isMs = function (v) { return typeof v === 'number' && Number.isFinite(v) &
 function vBreak(p) { if (typeof p.empId !== 'string' || !p.empId) return 'empId names the person'; if (typeof p.shiftId !== 'string' || !p.shiftId) return 'a break names its shift'; return isMs(p.at) ? null : 'at is a real time'; }
 /* @facts @fold @timeclock — breaks by shift: { byShift: { shiftId: [{start, end|null}] } }; an end closes that shift's open break */
 function foldBreaks(evs) {
-  const byShift = {};
-  evs.slice().sort(function (a, b) { return (a.payload.at - b.payload.at) || String(a.id).localeCompare(String(b.id)); }).forEach(function (e) {
+  /* stage-2 review: a plain {} let a fact naming shift "constructor" break every device's fold for good (facts are forever); a map with no
+     prototype cannot be poisoned. The facts go in the order they were made (their hybrid clock), not by the time a tablet wrote in them,
+     and an end written a moment before its start (a skewed tablet) closes the break at its start instead of leaving it open forever. */
+  const byShift = Object.create(null), at = function (e) { return e.hlc ? [e.hlc.t || 0, e.hlc.c || 0] : [e.payload.at, 0]; };
+  evs.slice().sort(function (a, b) { const x = at(a), y = at(b); return (x[0] - y[0]) || (x[1] - y[1]) || String(a.id).localeCompare(String(b.id)); }).forEach(function (e) {
     const p = e.payload, list = byShift[p.shiftId] = byShift[p.shiftId] || [];
     if (e.type === 'break.start') { if (!list.some(function (b) { return b.end == null; })) list.push({ start: p.at, end: null }); }
-    else if (e.type === 'break.end') { const open = list.filter(function (b) { return b.end == null; })[0]; if (open && p.at >= open.start) open.end = p.at; }
+    else if (e.type === 'break.end') { const open = list.filter(function (b) { return b.end == null; })[0]; if (open) open.end = Math.max(p.at, open.start); }
   });
   return { byShift: byShift };
 }
+/* a shift id a break may name: an event id (station/…), as every clock-in's is — judged on NEW facts only (law 1) */
+const SHIFT_ID = /^[A-Za-z0-9_.:-]{1,64}\/[A-Za-z0-9_.:-]{1,128}$/;
+/* @facts @timeclock — a new break must name a real-looking shift id */
+function admitBreak(p) { return SHIFT_ID.test(String(p.shiftId)) ? null : 'a break names its shift by the clock-in\'s id'; }
+/* @facts @timeclock @payroll — a wage on a clock-in is a pay figure: only an owner or someone with "payroll" writes one (stage-2 review: a
+   clerk could set their own rate on every shift; the app now sends none, and the person's wage from setup applies) */
+function wageRule(p, who, staff) { return p.wage != null && !staff.isOwner(who) && !staff.can(who, 'payroll') ? 'only an owner or someone with "payroll" writes a wage' : null; }
 
 /* @facts @timeclock — local HH:MM, as the clock station shows the wall clock */
 function hm(ms) { return new Date(ms).toTimeString().slice(0, 5); }
@@ -2482,8 +2507,11 @@ function punches(facts, staff) {
     /* the wage written at punch time; none written is null (not 0), so pos.html falls back to the person's wage as DB.punches always did — a 0 would cost the shift nothing (10/31: the history fixture caught a manual shift costed at $0) */
     const who = byId.get(String(s.empId)), from = src.get(s.id), wage = from && typeof from.payload.wage === 'number' ? from.payload.wage : null;
     const out = s.out != null ? s.out : null;
+    /* a break ends no later than its shift: a closed shift with a break never ended would count as on break until NOW, and pos.html's
+       paid time (clocked minus breaks, floored at 0) would fall to nothing (stage-2 review) */
+    const cap = function (t) { return out != null ? Math.min(t, out) : t; };
     return { staffId: s.empId, name: who ? who.name : String(s.empId), in: hm(s.in), inTs: s.in, out: out != null ? hm(out) : null, outTs: out,
-      breaks: (brk.byShift[s.id] || []).map(function (b) { return { start: hm(b.start), startTs: b.start, end: b.end != null ? hm(b.end) : null, endTs: b.end }; }), wage: wage };
+      breaks: (brk.byShift[s.id] || []).map(function (b) { const st = cap(b.start), en = b.end != null ? cap(b.end) : (out != null ? out : null); return { start: hm(st), startTs: st, end: en != null ? hm(en) : null, endTs: en }; }), wage: wage };
   }).sort(function (a, b) { return a.inTs - b.inTs; });
 }
 /* @facts @timeclock — the open shift of a person (its id is the clock.in fact's), or null */
@@ -2495,11 +2523,11 @@ const TIMECLOCK = defineModule({
   name: 'timeclock', version: 1, layer: 'operations', requires: ['staff'],
   aggregate: { name: 'breaks', fold: foldBreaks, doc: 'unpaid breaks inside a shift (Custom POS\'s; the engine\'s clock has none)' },
   facts: {
-    'clock.in': Object.assign({ adopt: true }, PUNCH), 'clock.out': Object.assign({ adopt: true }, PUNCH),
+    'clock.in': Object.assign({ adopt: true, rule: wageRule }, PUNCH), 'clock.out': Object.assign({ adopt: true }, PUNCH),
     'clock.edit': Object.assign({ adopt: true }, FIX), 'clock.void': Object.assign({ adopt: true }, FIX), 'clock.manual': Object.assign({ adopt: true }, FIX),
     'clock.autoclose': { adopt: true, authority: 'hub-only' },
-    'break.start': Object.assign({ validate: vBreak, doc: 'A break starts inside a shift. payload {empId, shiftId, at}' }, PUNCH),
-    'break.end': Object.assign({ validate: vBreak, doc: 'The open break of a shift ends. payload {empId, shiftId, at}' }, PUNCH)
+    'break.start': Object.assign({ validate: vBreak, admit: admitBreak, doc: 'A break starts inside a shift. payload {empId, shiftId, at}' }, PUNCH),
+    'break.end': Object.assign({ validate: vBreak, admit: admitBreak, doc: 'The open break of a shift ends. payload {empId, shiftId, at}' }, PUNCH)
   },
   views: { shifts: function (facts) { return TC.fold(facts.filter(function (e) { return /^clock\./.test(e.type); })); }, breaks: foldBreaks, punches: punches },
   needsConfig: { 'labor.mealAfterHrs': 5, 'labor.mealMins': 30, 'labor.restEveryHrs': 4, 'labor.restMins': 10, 'timeclock.autoCloseAfterHrs': 0 }
