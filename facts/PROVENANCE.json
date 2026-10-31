@@ -1,0 +1,110 @@
+{
+  "what": "the facts engine, from the origin shop's v2 through its private exporter (docs/V2-MODULAR-IMPORT.md)",
+  "unit": "0.2 engine + engine laws",
+  "sourceCommit": "9a984fb5fe0b84f76a7d581da23d944f3a10c86b",
+  "exported": "2026-10-31T19:54:03.707Z",
+  "node": "v24.15.0",
+  "proofs": [
+    {
+      "file": "facts/test/engine-laws.test.js",
+      "passed": 114
+    }
+  ],
+  "files": [
+    {
+      "path": "facts/aggregates/timeclock.js",
+      "bytes": 36855,
+      "sha256": "0e61f2dc5abc08b07872ee240d7be8ec4a85f51d4d689caf0c05dc7bfa2c7e40"
+    },
+    {
+      "path": "facts/core/event.js",
+      "bytes": 10840,
+      "sha256": "9140aa0f330ca57fea1b078f2073b0f793278aa8870a14e28bac8d434af4cd9f"
+    },
+    {
+      "path": "facts/core/hlc.js",
+      "bytes": 5391,
+      "sha256": "f2199dd56602cd9478e9de5463faed6e7e5dd8a624b3e10682ff6a7361ac38c0"
+    },
+    {
+      "path": "facts/core/incfold.js",
+      "bytes": 11421,
+      "sha256": "3ab1b9c5f77f4f2391cb02566a51e86753fb286e580b9761e1676458a5884320"
+    },
+    {
+      "path": "facts/core/log.js",
+      "bytes": 13610,
+      "sha256": "114ffd162a128f66e20d7132a3adbb70e4bd740d3e987c9883a0dfe4b582474e"
+    },
+    {
+      "path": "facts/core/registry.js",
+      "bytes": 9073,
+      "sha256": "bc564a080a78cdd0939c33c0936a3ba7fe0ef5448799e19df54a7840fa9b8e92"
+    },
+    {
+      "path": "facts/core/station.js",
+      "bytes": 65767,
+      "sha256": "a360690e6f1010c3a35b22e0e426f903ab113834715b421558eca8fc895d86e3"
+    },
+    {
+      "path": "facts/hub/buildwatch.js",
+      "bytes": 2668,
+      "sha256": "910610c23f09bfbe412e77d44f629d32fd338cec297521b8fc03ca4e39e34ea7"
+    },
+    {
+      "path": "facts/hub/hub.js",
+      "bytes": 64722,
+      "sha256": "ad7f54a116513f98d592aa52bd7c8203e9b47ba3dbce05643dde794f53916fc9"
+    },
+    {
+      "path": "facts/hub/projections.js",
+      "bytes": 10433,
+      "sha256": "485f30ae9d84fab78c8b33f5ab596c87c7edac9b2798ac6cc1a60ac9a0018fa7"
+    },
+    {
+      "path": "facts/hub/sqlite-store.js",
+      "bytes": 12186,
+      "sha256": "f607ddbf7f8122c24ec5b8c81d0d0790042228a5edcf7309adafd6988d87f4a9"
+    },
+    {
+      "path": "facts/station/crypto-shim.js",
+      "bytes": 5774,
+      "sha256": "7dfb734ee6b174f2914be0555ac76b668d01c93eb6927c0371159105dc2a68b7"
+    },
+    {
+      "path": "facts/store/browser.js",
+      "bytes": 12827,
+      "sha256": "8a39cd7fdd774810c66fdb9933eacf6e400f764f238d6c648807d924ef6329b7"
+    },
+    {
+      "path": "facts/sync/http.js",
+      "bytes": 5523,
+      "sha256": "5fdb82c1f4a8e08568bce31998899a14a8f09178ffed276a4ae4b244e846e1a9"
+    },
+    {
+      "path": "facts/sync/sync.js",
+      "bytes": 7691,
+      "sha256": "74f4f22d86890ad42fd560287b8184d15cce771b1871bae7dde64b95018ac8c1"
+    },
+    {
+      "path": "facts/test/engine-laws.test.js",
+      "bytes": 116760,
+      "sha256": "d1f4998265e763780e0292a80ae792503ade2f0d2adabb35f21cb12bdcca8526"
+    },
+    {
+      "path": "facts/test/fake-idb.js",
+      "bytes": 4094,
+      "sha256": "98c9b863ee65cf9bf40295eb15c7cfba989330ccf9fa436b56226366213fa858"
+    },
+    {
+      "path": "facts/test/harness.js",
+      "bytes": 9278,
+      "sha256": "ccd24aecf97d823aa5abfd6754231dad9b940bbb34482cf27ca8cbf31e16a5a9"
+    },
+    {
+      "path": "facts/test/shards.js",
+      "bytes": 5703,
+      "sha256": "f82b97b9747e695edff7b1a5049b2b043c82ab619d1e554b7c39c12c129d3f23"
+    }
+  ]
+}
