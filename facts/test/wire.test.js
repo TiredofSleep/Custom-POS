@@ -234,4 +234,17 @@ H.testAsync('a hub restored from an OLDER copy is caught: a tablet past it is an
   } finally { await srv.close(); rmDb(f); try { fs.unlinkSync(bak); } catch (e) {} }
 });
 
+H.testAsync('a page opened from a file or another host may talk to the hub (CORS): the pre-check is answered, and every answer allows any origin — no door trusts cookies', async function () {
+  const f = dbFile('w13'); const srv = await startHubServer({ db: f, adminKey: ADMIN });
+  try {
+    const pre = await fetch(srv.url + '/v2/receive', { method: 'OPTIONS', headers: { origin: 'null', 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type, x-custompos-token' } });
+    H.eq(pre.status, 204, 'the pre-check is answered');
+    H.eq(pre.headers.get('access-control-allow-origin'), '*');
+    H.ok(/x-custompos-token/.test(pre.headers.get('access-control-allow-headers') || ''), 'the device-token header may come');
+    const h = await fetch(srv.url + '/v2/health'); H.eq(h.headers.get('access-control-allow-origin'), '*', 'an answer allows any origin');
+    /* the negative control: allowing the origin opens no door — a request with no token is still refused */
+    const r = await fetch(srv.url + '/v2/admin/watch', { headers: { origin: 'https://elsewhere.example' } }); H.eq(r.status, 403, 'the watch still needs the operator key');
+  } finally { await srv.close(); rmDb(f); }
+});
+
 H.done();

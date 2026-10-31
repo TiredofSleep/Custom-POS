@@ -15,9 +15,11 @@ const path = require('path');
 
 const ROOT = __dirname;
 const FILES = ['station/crypto-shim.js', 'core/hlc.js', 'core/event.js', 'core/registry.js', 'core/incfold.js', 'core/log.js', 'core/station.js',
-  'sync/sync.js', 'sync/http.js', 'store/browser.js', 'aggregates/timeclock.js'];
+  'sync/sync.js', 'sync/http.js', 'store/browser.js', 'aggregates/timeclock.js',
+  'modules/define.js', 'modules/staff.js', 'modules/timeclock.js'];   /* Stage 2 (Unit 2.4): the modules a station runs — the contract, the staff, the time clock */
 const EXPOSE = { station: 'core/station.js', sync: 'sync/sync.js', http: 'sync/http.js', browserStore: 'store/browser.js', registry: 'core/registry.js',
-  event: 'core/event.js', hlc: 'core/hlc.js', incfold: 'core/incfold.js', log: 'core/log.js', timeclock: 'aggregates/timeclock.js' };
+  event: 'core/event.js', hlc: 'core/hlc.js', incfold: 'core/incfold.js', log: 'core/log.js', timeclock: 'aggregates/timeclock.js',
+  modules: 'modules/define.js', staff: 'modules/staff.js', clock: 'modules/timeclock.js' };
 
 /* @facts @station — each module's requires, resolved: spec → module key; throws on anything the bundle cannot serve */
 function resolveAll(key, src, have) {

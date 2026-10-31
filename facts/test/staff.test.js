@@ -102,4 +102,13 @@ H.test('a pass is honoured only for a fact made inside it, and only until GRACE 
   H.ok(!other.check([pass], 'p', 'tab', fact(pass.since + 1)), 'a hub with another secret does not honour it');
 });
 
+H.testAsync('a PIN hashed in a browser (WebCrypto) is the same as the hub\'s (Node), both ways; a wrong PIN matches neither', async function () {
+  const r = S.pinRecord('4321');
+  H.eq(await S.pinHashAsync('4321', r.salt, r.iter), r.hash, 'the browser makes the hub\'s hash from the same salt');
+  const b = await S.pinRecordAsync('9876');
+  H.ok(S.pinMatches(b, '9876') && await S.pinMatchesAsync(b, '9876'), 'a browser-made record matches in both');
+  H.ok(!S.pinMatches(b, '9877') && !(await S.pinMatchesAsync(r, '4322')), 'a wrong PIN matches neither (the negative control)');
+  H.ok(S.validate({ staffId: 'z', set: { pin: b } }) === null, 'and the hub takes the browser\'s record as a valid staff.set');
+});
+
 H.done();

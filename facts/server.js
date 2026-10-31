@@ -82,6 +82,11 @@ function startHubServer(opts) {
 
   const server = http.createServer(function (req, res) {
     const url = String(req.url || '').split('?')[0];
+    /* CORS (Unit 2.4): a downloaded POS page is opened from a file or another host and talks to this hub across origins. Any origin may
+       ask, because no door here trusts the browser's ambient credentials: there are no cookies, and every door needs a device token
+       or the operator key in the request itself. A browser's pre-check (OPTIONS) is answered here and says which headers may come. */
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.method === 'OPTIONS') { res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'content-type, accept, x-custompos-token, x-custompos-admin', 'Access-Control-Max-Age': '600', 'Content-Length': '0' }); res.end(); return; }
     try {
       if (req.method === 'GET' && url === '/v2/health') {
         /* a store that refuses writes is NOT healthy: one retry, then 503, so a monitor or a proxy's health check sees a full disk

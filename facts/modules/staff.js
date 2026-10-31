@@ -60,6 +60,25 @@ function pinMatches(rec, pin) {
   return crypto.timingSafeEqual(got, Buffer.from(rec.hash, 'hex'));
 }
 
+/* the same two in a BROWSER (Unit 2.4): WebCrypto's PBKDF2, asynchronous; Node 20+ has the same globalThis.crypto.subtle, so a proof
+   checks the browser's hash equals the hub's */
+const subtleOf = function (s) { const c = s || (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.subtle); if (!c) throw new Error('no WebCrypto here (crypto.subtle) — a PIN cannot be hashed'); return c; };
+const toHex = function (buf) { return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); };
+const fromHex = function (h) { const a = new Uint8Array(h.length / 2); for (let i = 0; i < a.length; i++) a[i] = parseInt(h.substr(i * 2, 2), 16); return a; };
+/* @facts @employee — a PIN's hash in a browser (WebCrypto PBKDF2-SHA256), the same bytes pinRecord makes in Node */
+async function pinHashAsync(pin, saltHex, iter, subtle) {
+  const s = subtleOf(subtle), key = await s.importKey('raw', new TextEncoder().encode(String(pin == null ? '' : pin)), 'PBKDF2', false, ['deriveBits']);
+  return toHex(await s.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: fromHex(saltHex), iterations: iter }, key, 256));
+}
+/* @facts @employee — a PIN made into its record, in a browser (a random salt from crypto.getRandomValues) */
+async function pinRecordAsync(pin, subtle) { const salt = new Uint8Array(16); globalThis.crypto.getRandomValues(salt); const sh = toHex(salt); return { salt: sh, hash: await pinHashAsync(pin, sh, PIN_ITER, subtle), iter: PIN_ITER }; }
+/* @facts @employee — does a PIN match its record, in a browser */
+async function pinMatchesAsync(rec, pin, subtle) {
+  if (!rec || !HEX(32).test(String(rec.salt)) || !HEX(64).test(String(rec.hash))) return false;
+  const iter = Number.isInteger(rec.iter) && rec.iter >= PIN_ITER_MIN && rec.iter <= PIN_ITER_MAX ? rec.iter : PIN_ITER;
+  const got = await pinHashAsync(pin, rec.salt, iter, subtle); let diff = 0; for (let i = 0; i < 64; i++) diff |= got.charCodeAt(i) ^ String(rec.hash).charCodeAt(i); return diff === 0;
+}
+
 /* the hub reads the list often (every person-naming fact): the facts already read are kept, and only new ones are added */
 const memo = { seen: 0, facts: [], first: null, list: null, n: -1 };
 /* @facts @fold @permission — the staff list as the hub judges by it: its facts so far, with this send's own laid on top */
@@ -82,4 +101,5 @@ const STAFF = defineModule({
   provides: { staff: staffNow }
 });
 
-module.exports = { STAFF: STAFF, fold: fold, isOwner: isOwner, can: can, pinRecord: pinRecord, pinMatches: pinMatches, validate: validate, ROLES: ROLES };
+module.exports = { STAFF: STAFF, fold: fold, isOwner: isOwner, can: can, pinRecord: pinRecord, pinMatches: pinMatches, validate: validate, ROLES: ROLES,
+  pinRecordAsync: pinRecordAsync, pinMatchesAsync: pinMatchesAsync, pinHashAsync: pinHashAsync };
