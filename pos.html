@@ -1217,12 +1217,115 @@ function fileIncident(staff, type, note, urgent){ DB=loadDB(); DB.incidents=DB.i
   if(phone && FLOW.endpoints && FLOW.endpoints.notify){ try{ notifyAdapter().send(phone, (urgent?"🆘 HELP NOW — ":"⚠️ Incident — ")+rec.name+": "+type+(note?" — "+note:"")+" @ "+rec.at); }catch(e){} }
   incidentSent = urgent?"help":"filed"; saveDB(DB); render();
 }
-function clockIn(staff){ DB.punches.push({ staffId:staff.id, name:staff.name, in:nowHM(), inTs:Date.now(), out:null, outTs:null, breaks:[], wage:+staff.wage||0 }); clockWelcome={ name:staff.name, inbound:true, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); logActivity("clock", staff.name+" clocked in"); render(); }
-function clockOut(staff){ const p=openPunch(staff.id); if(!p) return; const b=curBreak(p); if(b){ b.end=nowHM(); b.endTs=Date.now(); } p.out=nowHM(); p.outTs=Date.now(); clockWelcome={ name:staff.name, inbound:false, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); logActivity("clock", staff.name+" clocked out"); render(); }
-function startBreak(staff){ const p=openPunch(staff.id); if(!p||onBreak(p)) return; p.breaks.push({ start:nowHM(), startTs:Date.now(), end:null, endTs:null }); saveDB(DB); render(); }
-function endBreak(staff){ const p=openPunch(staff.id); const b=curBreak(p); if(!b) return; b.end=nowHM(); b.endTs=Date.now(); saveDB(DB); render(); }
+/* ===================================================== FACTS MODE (Stage 2 — docs/V2-MODULAR-IMPORT.md): the time clock on the v2 engine.
+   On when the flow says storage:"facts" and the engine bundle is on the page (globalThis.CustomPOSFacts, from facts/bundle.js — the
+   builder puts it in the download). Each device keeps its own log of facts in IndexedDB and sends them to the hub (facts/server.js);
+   a clock-in on one tablet is on every tablet, and nothing is lost while a tablet is offline. DB.punches is REBUILT from the facts
+   after every change — the time clock module's compat projection, the exact shape DB.punches has always had — so the tip pool,
+   labor cost, pay estimate and reports read it unchanged. Staff and their PIN hashes come from the hub's staff facts; a brand-new
+   hub is given the team from setup once (factsSeedStaff). Nothing here touches the blob sync (SYNC). */
+const FACTS = { on:false, ready:false, need:null, error:null, st:null, remote:null, hub:"", passes:[], staff:null, timer:null, seeding:false };
+function factsWanted(){ return !!(FLOW && FLOW.storage==="facts" && typeof globalThis.CustomPOSFacts==="object" && globalThis.CustomPOSFacts); }
+function factsKey(){ return "custompos_facts_"+flowId(); }
+function factsCfg(){ try{ return JSON.parse(localStorage.getItem(factsKey())||"null"); }catch(e){ return null; } }
+/* start this device's station: its log from IndexedDB, its token, the hub over HTTP, a pull every few seconds */
+async function factsBoot(){
+  FACTS.on = factsWanted(); if(!FACTS.on) return;
+  const cfg = factsCfg();
+  if(!cfg || !cfg.hub || !cfg.station){ FACTS.need = "connect"; render(); return; }
+  const F = globalThis.CustomPOSFacts;
+  try{
+    const store = await F.browserStore.openBrowserStore(cfg.station, { prefix: "custompos-facts-" });
+    const st = F.station.makeStation({ id: cfg.station, persist: store });
+    if(cfg.token){ st.setAccess(cfg.token); delete cfg.token; localStorage.setItem(factsKey(), JSON.stringify(cfg)); }   // handed over once; it lives with the log, never in the page's storage
+    if(!st.accessToken){ FACTS.need = "connect"; render(); return; }
+    const remote = F.http.httpHub(cfg.hub, { timeoutMs: 8000 });
+    st.setTransport(function(b){ b.grants = FACTS.passes; return remote.receive(b); });   // a hub-checked PIN pass rides with the facts that need one
+    FACTS.st = st; FACTS.remote = remote; FACTS.hub = cfg.hub.replace(/\/+$/,""); FACTS.ready = true; FACTS.need = null; FACTS.error = null;
+    await factsPull();
+    if(FACTS.timer) clearInterval(FACTS.timer);
+    FACTS.timer = setInterval(factsPull, 5000);
+  }catch(e){ FACTS.error = String(e && e.message || e); render(); }
+}
+async function factsPull(){ if(!FACTS.ready) return; try{ await FACTS.st.commit("pull"); }catch(e){} try{ await globalThis.CustomPOSFacts.sync.pullAsync(FACTS.st, FACTS.remote); }catch(e){} factsRefresh(); }
+async function factsSettle(){ for(let i=0; i<400 && FACTS.st && FACTS.st.inFlight; i++) await new Promise(r=>setTimeout(r,20)); }
+/* DB.punches from the facts (the compat projection), saved locally only, then the clock redrawn */
+function factsRefresh(){
+  if(!FACTS.ready) return;
+  const F = globalThis.CustomPOSFacts, all = FACTS.st.log.all();
+  FACTS.staff = F.staff.fold(all);
+  const db = loadDB(); db.punches = F.clock.punches(all, FACTS.staff); persistDB(db);
+  const s = boundStation(); if(s && s.type==="timeclock") render();
+}
+async function factsRecord(type, key, payload, actor){ FACTS.st.record(type, key, payload, { actor: actor }); await factsSettle(); factsRefresh(); }
+function factsStaff(){ return FACTS.staff ? Array.from(FACTS.staff.byId.values()).filter(s=>s.active!==false) : []; }
+function factsOwed(){ try{ return FACTS.st ? FACTS.st.outbox().length : 0; }catch(e){ return 0; } }
+/* a brand-new hub gets the team from setup, once: the owner first (a new shop admits its first person), then the owner's PIN is checked
+   BY THE HUB for a short pass, and the rest are added under it (facts/modules/staff.js — a staff change needs the right and that pass) */
+async function factsSeedStaff(){
+  if(FACTS.seeding || !FACTS.ready) return; FACTS.seeding = true; render();
+  try{
+    const F = globalThis.CustomPOSFacts, list = (FLOW.staff||[]).filter(s=>s && s.id && s.name && s.pin);
+    if(!list.length) throw new Error("add your team (name + PIN) in the builder first");
+    const owner = list.find(s=>s.role==="owner") || list[0];
+    const setOf = async function(s){ const o = s===owner; return { name: String(s.name).slice(0,60), role: o ? "owner" : (s.role==="manager" ? "manager" : "staff"), rights: o ? [] : (s.role==="manager" ? ["payroll","employees"] : []), pin: await F.staff.pinRecordAsync(String(s.pin)) }; };
+    await factsRecord("staff.set", owner.id, { staffId: owner.id, set: await setOf(owner) }, null);
+    const r = await fetch(FACTS.hub + "/v2/pin", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ token: FACTS.st.accessToken, staffId: owner.id, pin: String(owner.pin) }) }).then(x=>x.json());
+    if(!r.grant) throw new Error("the hub did not accept "+owner.name+"'s PIN ("+(r.refused||"no answer")+")");
+    FACTS.passes = [r.grant];
+    for(const s of list){ if(s!==owner) await factsRecord("staff.set", s.id, { staffId: s.id, set: await setOf(s) }, owner.id); }
+    FACTS.passes = [];
+    flash("Your team is on the hub");
+  }catch(e){ FACTS.error = String(e && e.message || e); }
+  FACTS.seeding = false; factsRefresh(); render();
+}
+/* the four punches as facts: the person themselves is the actor, so the hub admits a clock-in without asking for anything else */
+async function factsClockIn(staff){ clockWelcome={ name:staff.name, inbound:true, staffId:staff.id }; clockAction=null; pinBuf=""; await factsRecord("clock.in", staff.id, { empId: staff.id, at: Date.now(), wage: staffWage(staff.id) }, staff.id); }
+async function factsClockOut(staff){
+  const F = globalThis.CustomPOSFacts, sid = F.clock.openShift(FACTS.st.log.all(), staff.id); if(!sid) return;
+  if(onBreak(openPunch(staff.id))) await factsRecord("break.end", staff.id, { empId: staff.id, shiftId: sid, at: Date.now() }, staff.id);
+  clockWelcome={ name:staff.name, inbound:false, staffId:staff.id }; clockAction=null; pinBuf="";
+  await factsRecord("clock.out", staff.id, { empId: staff.id, at: Date.now(), shiftId: sid }, staff.id);
+}
+async function factsBreak(staff, starting){
+  const F = globalThis.CustomPOSFacts, sid = F.clock.openShift(FACTS.st.log.all(), staff.id); if(!sid) return;
+  await factsRecord(starting ? "break.start" : "break.end", staff.id, { empId: staff.id, shiftId: sid, at: Date.now() }, staff.id);
+}
+/* what the clock shows before its PIN pad in facts mode: connect this device, connecting, a problem, or bring the team on — true when it drew one */
+function renderFactsGate(app, station, staff){
+  if(FACTS.need==="connect"){
+    const c=document.createElement("div"); c.className="card"; c.style.maxWidth="440px";
+    c.innerHTML="<h2 style='margin:2px 0'>Connect this device</h2><p class='muted'>This time clock is shared through your hub, so every station sees the same punches. Ask whoever runs the hub for this device's name and setup token.</p>";
+    const f=(id,label,val,type)=>{ const l=document.createElement("label"); l.style.cssText="display:block;margin:6px 0"; l.textContent=label; const i=document.createElement("input"); i.id=id; i.value=val||""; if(type) i.type=type; i.style.cssText="display:block;width:100%"; l.appendChild(i); c.appendChild(l); return i; };
+    const hub=f("factsHub","Hub address", FLOW.factsHub||""), name=f("factsStation","Device name (as the hub knows it)",""), tok=f("factsToken","Setup token","","password");
+    const go=document.createElement("button"); go.className="primary"; go.textContent="Connect"; go.style.marginTop="8px";
+    go.onclick=()=>{ const h=hub.value.trim(), n=name.value.trim(), t=tok.value.trim();
+      if(!/^https?:\/\/[^\s]+$/.test(h) || !/^[A-Za-z0-9_.:-]{1,64}$/.test(n) || t.length<20){ flash("Enter the hub address, the device name and its setup token"); return; }
+      localStorage.setItem(factsKey(), JSON.stringify({ hub:h, station:n, token:t })); FACTS.need=null; factsBoot(); };
+    c.appendChild(go); app.appendChild(c); return true;
+  }
+  if(FACTS.error){ const e=document.createElement("div"); e.className="card"; e.style.cssText="border-color:var(--bad)"; e.innerHTML="<b>The shared time clock has a problem</b><div class='muted'></div>"; e.querySelector(".muted").textContent=FACTS.error; const r=document.createElement("button"); r.textContent="Try again"; r.onclick=()=>{ FACTS.error=null; factsBoot(); }; e.appendChild(r); app.appendChild(e); return true; }
+  if(!FACTS.ready){ const w=document.createElement("div"); w.className="card muted"; w.textContent="Connecting to the hub…"; app.appendChild(w); return true; }
+  if(!staff.length){
+    const c=document.createElement("div"); c.className="card"; c.innerHTML="<h2 style='margin:2px 0'>Bring your team onto the hub</h2><p class='muted'>This hub has nobody on staff yet. Your team from setup will be added, with the first person as the owner; each PIN is kept only as a scrambled hash.</p>";
+    const b=document.createElement("button"); b.className="primary"; b.textContent=FACTS.seeding?"Adding…":"Add my team"; b.disabled=FACTS.seeding; b.onclick=factsSeedStaff; c.appendChild(b); app.appendChild(c); return true;
+  }
+  return false;
+}
+/* the PIN pad's ✓: a plain compare in blob mode; in facts mode each person's PIN hash is checked (WebCrypto) */
+async function clockEnter(staff){
+  const buf=pinBuf; let who=null;
+  if(FACTS.on){ const F=globalThis.CustomPOSFacts; for(const s of staff){ if(s.pin && await F.staff.pinMatchesAsync(s.pin, buf)){ who=s; break; } } }
+  else who=staff.find(s=>String(s.pin)===buf)||null;
+  if(who){ if(openPunch(who.id)){ clockAction={staffId:who.id}; pinBuf=""; render(); } else clockIn(who); } else { pinBuf=""; flash("PIN not recognized"); render(); }
+}
+function clockIn(staff){ if(FACTS.on){ factsClockIn(staff); return; } DB.punches.push({ staffId:staff.id, name:staff.name, in:nowHM(), inTs:Date.now(), out:null, outTs:null, breaks:[], wage:+staff.wage||0 }); clockWelcome={ name:staff.name, inbound:true, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); logActivity("clock", staff.name+" clocked in"); render(); }
+function clockOut(staff){ if(FACTS.on){ factsClockOut(staff); return; } const p=openPunch(staff.id); if(!p) return; const b=curBreak(p); if(b){ b.end=nowHM(); b.endTs=Date.now(); } p.out=nowHM(); p.outTs=Date.now(); clockWelcome={ name:staff.name, inbound:false, staffId:staff.id }; clockAction=null; pinBuf=""; saveDB(DB); logActivity("clock", staff.name+" clocked out"); render(); }
+function startBreak(staff){ if(FACTS.on){ factsBreak(staff, true); return; } const p=openPunch(staff.id); if(!p||onBreak(p)) return; p.breaks.push({ start:nowHM(), startTs:Date.now(), end:null, endTs:null }); saveDB(DB); render(); }
+function endBreak(staff){ if(FACTS.on){ factsBreak(staff, false); return; } const p=openPunch(staff.id); const b=curBreak(p); if(!b) return; b.end=nowHM(); b.endTs=Date.now(); saveDB(DB); render(); }
 function renderTimeclock(app, station){
-  const staff=FLOW.staff||[];
+  const staff=FACTS.on ? factsStaff() : (FLOW.staff||[]);   // facts mode: the hub's staff (PIN hashes); blob mode: the setup's
+  if(FACTS.on && !clockWelcome && !clockAction && renderFactsGate(app, station, staff)) return;
   // keep real-time earnings ticking while anyone is on the clock (guarded to this station only)
   if(clockTimer){ clearInterval(clockTimer); clockTimer=null; }
   if(staff.some(s=>openPunch(s.id))) clockTimer=setInterval(()=>{ const st=boundStation(); if(st&&st.type==="timeclock") render(); }, 30000);
@@ -1282,8 +1385,9 @@ function renderTimeclock(app, station){
   ["1","2","3","4","5","6","7","8","9"].forEach(d=>{ const b=document.createElement("button"); b.textContent=d; b.onclick=()=>press(d); grid.appendChild(b); });
   const clr=document.createElement("button"); clr.textContent="⌫"; clr.onclick=()=>{ pinBuf=pinBuf.slice(0,-1); render(); }; grid.appendChild(clr);
   const zero=document.createElement("button"); zero.textContent="0"; zero.onclick=()=>press("0"); grid.appendChild(zero);
-  const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=()=>{ const who=staff.find(s=>String(s.pin)===pinBuf); if(who){ if(openPunch(who.id)){ clockAction={staffId:who.id}; pinBuf=""; render(); } else clockIn(who); } else { pinBuf=""; flash("PIN not recognized"); render(); } }; grid.appendChild(ent);
+  const ent=document.createElement("button"); ent.className="primary"; ent.textContent="✓"; ent.onclick=()=>clockEnter(staff); grid.appendChild(ent);
   pad.appendChild(grid); app.appendChild(pad);
+  if(FACTS.on){ const n=factsOwed(), sh=document.createElement("div"); sh.className="muted"; sh.id="factsStatus"; sh.style.margin="4px 0 8px"; sh.textContent="Shared through the hub"+(n? " · "+n+" punch"+(n===1?"":"es")+" waiting to send (kept on this device until the hub has them)" : " · up to date"); app.appendChild(sh); }
   // who's on the clock — with live hours, break state, and (if waged) earnings
   const on=staff.filter(s=>openPunch(s.id));
   const oc=document.createElement("div"); oc.className="card"; oc.innerHTML="<div class='row'><b>On the clock</b></div>";
@@ -2387,6 +2491,7 @@ function renderCheckout(app, station){
 
 window.addEventListener("storage",(e)=>{ if(e.key===dkey()||e.key===skey()||e.key==="custompos_flow") render(); });
 if(SYNC.on){ SYNC.pull(); setInterval(()=>SYNC.pull(), 3000); }   // poll the hub when configured
+if(factsWanted()) factsBoot();   // Stage 2: the time clock on the shared v2 engine (FACTS above)
 // scaffold notice — set the expectation up front (a foundation to build on, not a turnkey product), remembered once
 (function(){ try{ const bar=document.getElementById("scaffoldBar"); if(!bar) return;
   if(localStorage.getItem("custompos_scaffold_ack")!=="1") bar.hidden=false;
