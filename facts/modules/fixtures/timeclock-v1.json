@@ -1,0 +1,386 @@
+{
+ "note": "Time clock module, version 1: a saved fact log every later version must still fold to the same punches (docs/V2-MODULAR-IMPORT.md, law 1 and history fixtures). Times are America/Chicago. Generated once, 2026-10-31 — never regenerated.",
+ "tz": "America/Chicago",
+ "facts": [
+  {
+   "id": "fixture-v1/mvwspq52-1-8ddbfe4cc97c",
+   "type": "staff.set",
+   "aggregate": "staff",
+   "key": "own",
+   "payload": {
+    "staffId": "own",
+    "set": {
+     "name": "Ola",
+     "role": "owner"
+    }
+   },
+   "hlc": {
+    "t": 1793475009686,
+    "c": 0,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": null,
+   "at": 1793475009686,
+   "hash": "dc689fa8d3f0814dd4c11ef8e38a97054d96a0ec7545eb9cade0b173b260e069",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq53-2-fb633ce86ec9",
+   "type": "staff.set",
+   "aggregate": "staff",
+   "key": "mgr",
+   "payload": {
+    "staffId": "mgr",
+    "set": {
+     "name": "Mo",
+     "role": "manager",
+     "rights": [
+      "payroll"
+     ]
+    }
+   },
+   "hlc": {
+    "t": 1793475009687,
+    "c": 0,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "own",
+   "at": 1793475009687,
+   "hash": "b64820180e09b8a329fce2191c0d0bec4adeef5638298c3a92bd33417d7809c8",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq53-3-52e9681e9a5f",
+   "type": "staff.set",
+   "aggregate": "staff",
+   "key": "clk",
+   "payload": {
+    "staffId": "clk",
+    "set": {
+     "name": "Cam"
+    }
+   },
+   "hlc": {
+    "t": 1793475009687,
+    "c": 1,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "own",
+   "at": 1793475009687,
+   "hash": "7d66d483141f3c91a688293a478e7a984f94248764fc78fad5e70e578700fb70",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq53-4-0b36585aa824",
+   "type": "clock.in",
+   "aggregate": "timeclock",
+   "key": "clk",
+   "payload": {
+    "empId": "clk",
+    "at": 1793019600000,
+    "wage": 15
+   },
+   "hlc": {
+    "t": 1793475009687,
+    "c": 2,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "clk",
+   "at": 1793475009687,
+   "hash": "9f0f196e6f7e4b081b6804846fe6eed33710dc952b11ce350816b14da41882bb",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq54-5-9bf48cbd1b84",
+   "type": "break.start",
+   "aggregate": "breaks",
+   "key": "clk",
+   "payload": {
+    "empId": "clk",
+    "shiftId": "fixture-v1/mvwspq53-4-0b36585aa824",
+    "at": 1793030400000
+   },
+   "hlc": {
+    "t": 1793475009688,
+    "c": 0,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "clk",
+   "at": 1793475009688,
+   "hash": "ce7cc17acf32874f1aa60dc29e3e61c2709ffc02468405d51f7e11216b919529",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq54-6-486c2d22dd4a",
+   "type": "break.end",
+   "aggregate": "breaks",
+   "key": "clk",
+   "payload": {
+    "empId": "clk",
+    "shiftId": "fixture-v1/mvwspq53-4-0b36585aa824",
+    "at": 1793032200000
+   },
+   "hlc": {
+    "t": 1793475009688,
+    "c": 1,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "clk",
+   "at": 1793475009688,
+   "hash": "dddbb8962f1a4d8428dac05df4fe92446326a29eb5c54b1288556e93e7733230",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq54-7-c5aeb3a81fd7",
+   "type": "clock.out",
+   "aggregate": "timeclock",
+   "key": "clk",
+   "payload": {
+    "empId": "clk",
+    "at": 1793048400000,
+    "shiftId": "fixture-v1/mvwspq53-4-0b36585aa824"
+   },
+   "hlc": {
+    "t": 1793475009688,
+    "c": 2,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "clk",
+   "at": 1793475009688,
+   "hash": "18f1f718741f5171669217effc5e07696215a8029794c69c707372cae665fbde",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq54-8-a2e0e4268792",
+   "type": "clock.in",
+   "aggregate": "timeclock",
+   "key": "mgr",
+   "payload": {
+    "empId": "mgr",
+    "at": 1793023200000,
+    "wage": 22
+   },
+   "hlc": {
+    "t": 1793475009688,
+    "c": 3,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "mgr",
+   "at": 1793475009688,
+   "hash": "7fc69c5e4b6ba2fa446426a50d95cba379aea82fe0a8e17242e1611a61dafdcc",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq54-9-f3fe776609c4",
+   "type": "clock.autoclose",
+   "aggregate": "timeclock",
+   "key": "mgr",
+   "payload": {
+    "empId": "mgr",
+    "at": 1793080800000,
+    "reason": "forgotten",
+    "shiftId": "fixture-v1/mvwspq54-8-a2e0e4268792"
+   },
+   "hlc": {
+    "t": 1793475009688,
+    "c": 4,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": null,
+   "at": 1793475009688,
+   "hash": "6110522ad79614d1b3657fdd4ef9da5744b427af49bffa49fde47233c340b332",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq55-a-93de23c0a14e",
+   "type": "clock.edit",
+   "aggregate": "timeclock",
+   "key": "mgr",
+   "payload": {
+    "empId": "mgr",
+    "shiftId": "fixture-v1/mvwspq54-8-a2e0e4268792",
+    "out": 1793052000000
+   },
+   "hlc": {
+    "t": 1793475009689,
+    "c": 0,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "mgr",
+   "at": 1793475009689,
+   "hash": "a20754c1ddef43880925b814d80025bdc7b34cf2769735873d9ab8398b01edea",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq55-b-bdd52533d002",
+   "type": "clock.in",
+   "aggregate": "timeclock",
+   "key": "clk",
+   "payload": {
+    "empId": "clk",
+    "at": 1793106000000,
+    "wage": 15
+   },
+   "hlc": {
+    "t": 1793475009689,
+    "c": 1,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "clk",
+   "at": 1793475009689,
+   "hash": "bab849f547ae9496639948953cd1fdb0ac8d048e11ddea72c931054218937706",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq55-c-d7af159e5e59",
+   "type": "clock.void",
+   "aggregate": "timeclock",
+   "key": "clk",
+   "payload": {
+    "empId": "clk",
+    "shiftId": "fixture-v1/mvwspq55-b-bdd52533d002",
+    "reason": "tapped by mistake"
+   },
+   "hlc": {
+    "t": 1793475009689,
+    "c": 2,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "mgr",
+   "at": 1793475009689,
+   "hash": "ff1e269a10e61531a518dfa5270d26f9194c9dca88bf4bfe8f1ba3d5ef280998",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq55-d-4e31b7e8d3a5",
+   "type": "clock.manual",
+   "aggregate": "timeclock",
+   "key": "clk",
+   "payload": {
+    "empId": "clk",
+    "in": 1793109600000,
+    "out": 1793124000000
+   },
+   "hlc": {
+    "t": 1793475009689,
+    "c": 3,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "mgr",
+   "at": 1793475009689,
+   "hash": "746988d2badd7065cb28f6b1fcb26b1188fc5b1680c589c80ece47ab418afd9f",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvwspq55-e-5c8bc60f5c66",
+   "type": "clock.in",
+   "aggregate": "timeclock",
+   "key": "own",
+   "payload": {
+    "empId": "own",
+    "at": 1793192400000,
+    "wage": 0
+   },
+   "hlc": {
+    "t": 1793475009689,
+    "c": 4,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "own",
+   "at": 1793475009689,
+   "hash": "5028b4845b966603da7cddd74a8d597cd1812fd09b51889a0eb8f6fd20afbdb3",
+   "pos": null,
+   "epoch": null
+  }
+ ],
+ "punches": [
+  {
+   "staffId": "clk",
+   "name": "Cam",
+   "in": "08:00",
+   "inTs": 1793019600000,
+   "out": "16:00",
+   "outTs": 1793048400000,
+   "breaks": [
+    {
+     "start": "11:00",
+     "startTs": 1793030400000,
+     "end": "11:30",
+     "endTs": 1793032200000
+    }
+   ],
+   "wage": 15
+  },
+  {
+   "staffId": "mgr",
+   "name": "Mo",
+   "in": "09:00",
+   "inTs": 1793023200000,
+   "out": "17:00",
+   "outTs": 1793052000000,
+   "breaks": [],
+   "wage": 22
+  },
+  {
+   "staffId": "clk",
+   "name": "Cam",
+   "in": "09:00",
+   "inTs": 1793109600000,
+   "out": "13:00",
+   "outTs": 1793124000000,
+   "breaks": [],
+   "wage": null
+  },
+  {
+   "staffId": "own",
+   "name": "Ola",
+   "in": "08:00",
+   "inTs": 1793192400000,
+   "out": null,
+   "outTs": null,
+   "breaks": [],
+   "wage": 0
+  }
+ ]
+}
