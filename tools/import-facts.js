@@ -21,7 +21,12 @@ const ROOT = path.join(__dirname, '..');
 const FACTS = path.join(ROOT, 'facts');
 const PROV = path.join(FACTS, 'PROVENANCE.json');
 /* this repo's own files under facts/: written here, never by an import */
-const OWN = ['facts/README.md', 'facts/PROVENANCE.json', 'facts/server.js', 'facts/bundle.js', 'facts/test/wire.test.js', 'facts/test/bundle.test.js'];
+const OWN = ['facts/README.md', 'facts/PROVENANCE.json', 'facts/server.js', 'facts/bundle.js', 'facts/test/wire.test.js', 'facts/test/bundle.test.js',
+  'facts/test/modules.test.js', 'facts/test/staff.test.js', 'facts/test/timeclock-module.test.js'];
+/* this repo's own folders under facts/: the modules (Stage 2) — an import never writes inside them */
+const OWN_DIRS = ['facts/modules/'];
+/* @facts — is a path this repo's own (a listed file, or inside an own folder) */
+function own(p) { return OWN.indexOf(p) >= 0 || OWN_DIRS.some(function (d) { return p.indexOf(d) === 0; }); }
 
 /* @facts — SHA-256 of a text file as git stores it (LF), so a Windows checkout that turned LF into CRLF still verifies */
 function shaLF(buf) { return crypto.createHash('sha256').update(Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8')).digest('hex'); }
@@ -33,7 +38,7 @@ function walk(dir, base) {
   return out;
 }
 /* @facts — a path that is this repo's own in any letter case (a case-insensitive disk would land it on the own file) */
-function ownAnyCase(p) { const l = String(p).toLowerCase(); return OWN.some(function (o) { return o.toLowerCase() === l; }); }
+function ownAnyCase(p) { const l = String(p).toLowerCase(); return OWN.some(function (o) { return o.toLowerCase() === l; }) || OWN_DIRS.some(function (d) { return l.indexOf(d.toLowerCase()) === 0; }); }
 
 /* @facts @import — the import: refuses anything the manifest does not vouch for, then copies, then writes the provenance */
 function importFrom(src) {
@@ -60,7 +65,7 @@ function importFrom(src) {
   const lower = new Map();
   m.files.forEach(function (f) { const l = f.path.toLowerCase(); if (lower.has(l)) no('two listed paths differ only in letter case: ' + lower.get(l) + ', ' + f.path); lower.set(l, f.path); });
   /* a file a previous import brought in that this one no longer lists would linger unvouched: refuse rather than guess */
-  const stale = walk(FACTS).filter(function (p) { return OWN.indexOf(p) < 0 && !listed.has(p); });
+  const stale = walk(FACTS).filter(function (p) { return !own(p) && !listed.has(p); });
   if (stale.length) no('facts/ holds files neither this import nor this repo owns (remove them on purpose first): ' + stale.slice(0, 5).join(', '));
   m.files.forEach(function (f) { const to = path.join(ROOT, f.path); fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(path.join(src, f.path), to); });
   const prov = { what: 'the facts engine, from the origin shop\'s v2 through its private exporter (docs/V2-MODULAR-IMPORT.md)', unit: m.unit,
@@ -82,7 +87,7 @@ function verify(root) {
     if (!have.has(f.path)) { bad.push(f.path + ' is missing (by its exact name)'); return; }
     if (shaLF(fs.readFileSync(path.join(R, f.path))) !== f.sha256) bad.push(f.path + ' was changed after it was imported (change it upstream and re-export)');
   });
-  have.forEach(function (q) { if (OWN.indexOf(q) < 0 && !listed.has(q)) bad.push(q + ' is in facts/ but neither imported nor this repo\'s own'); });
+  have.forEach(function (q) { if (!own(q) && !listed.has(q)) bad.push(q + ' is in facts/ but neither imported nor this repo\'s own'); });
   return bad;
 }
 
@@ -92,4 +97,4 @@ if (require.main === module) {
   else if (a) importFrom(path.resolve(a));
   else { console.error('usage: node tools/import-facts.js <export folder> | --verify'); process.exit(2); }
 }
-module.exports = { verify: verify, OWN: OWN };
+module.exports = { verify: verify, OWN: OWN, OWN_DIRS: OWN_DIRS, own: own };

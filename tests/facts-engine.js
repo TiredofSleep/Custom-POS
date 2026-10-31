@@ -45,7 +45,7 @@ const upstream = (prov.proofs || []).reduce(function (n, p) { return n + (p.pass
 })();
 
 const env = Object.assign({}, process.env); Object.keys(env).forEach(function (k) { if (/^CUSTOMPOS_(SHARD|SHARDS|SMOKE)/.test(k)) delete env[k]; });
-[['test/engine-laws.test.js', upstream, 'the engine laws'], ['test/wire.test.js', 12, 'the wire'], ['test/bundle.test.js', 3, 'the bundle']].forEach(function (t) {
+[['test/engine-laws.test.js', upstream, 'the engine laws'], ['test/wire.test.js', 12, 'the wire'], ['test/bundle.test.js', 3, 'the bundle'], ['test/modules.test.js', 4, 'the module contract'], ['test/staff.test.js', 4, 'the staff module and the PIN the hub checks']].forEach(function (t) {
   const r = spawnSync(process.execPath, [path.join(FACTS, t[0])], { cwd: FACTS, encoding: 'utf8', env: env, timeout: 600000 });
   const m = /(\d+) passed, (\d+) failed\s*$/.exec(String(r.stdout || '').trim());
   const ok = r.status === 0 && m && +m[2] === 0 && +m[1] === t[1];
