@@ -12,7 +12,7 @@ const { startHubServer } = require('../server');
 const S = require('../modules/staff');
 const G = require('../modules/pingrant');
 
-const ADMIN = 'test-operator-key-staff-0001', SECRET = 'test-grant-secret-0001';
+const ADMIN = 'test-operator-key-staff-0001', SIGNER = 'test-pass-signer-0001';   /* a made-up signing value for the proofs' hub */
 /* @proof — a database file in temp, and its removal */
 function dbFile(tag) { return path.join(os.tmpdir(), 'custompos-staff-' + tag + '-' + process.pid + '-' + Date.now() + '.db'); }
 function rmDb(f) { ['', '-journal', '-wal', '-shm'].forEach(function (s) { try { fs.unlinkSync(f + s); } catch (e) {} }); }
@@ -44,7 +44,7 @@ H.test('a staff.set is refused when malformed — above all a PIN that is digits
 });
 
 H.testAsync('over HTTP: the first owner, then every change needs the right AND a PIN the hub checked; wrong PINs lock; passes cannot be moved, forged or kept', async function () {
-  const f = dbFile('s1'); const srv = await startHubServer({ db: f, adminKey: ADMIN, modules: [S.STAFF], grantSecret: SECRET });
+  const f = dbFile('s1'); const srv = await startHubServer({ db: f, adminKey: ADMIN, modules: [S.STAFF], grantSecret: SIGNER });
   try {
     const A = await tablet(srv, 'tabA'), B = await tablet(srv, 'tabB');
     H.ok(await put(A, 'own', { name: 'Ola', role: 'owner', pin: S.pinRecord('1111') }, null), 'a brand-new shop writes its first owner');
