@@ -1,7 +1,19 @@
 # Bringing the origin shop's v2 into Custom POS, as modules
 
-*Roadmap, written 2026-10-10. Status: **plan only.** No v2 code is in this repository yet, and none will be until
-the private exporter described in Stage 0 exists and passes its own gates.*
+*Roadmap, written 2026-10-10.*
+
+*Status, 2026-10-31: **Stage 0 done** (in the origin shop's private repo) and **Stage 1 built here** and published that day with the owner's yes, after a second review.
+The owner's direction that day: **v2 is to be the face of Custom POS.** The engine therefore leads, not sits behind the
+blob-mode builder as an opt-in.*
+
+- *Stage 0.* The private exporter exists. It refuses while anything real survives. It runs the engine laws inside its own output,
+  traced, so every engine file is loaded. Its self-test proves each of its detectors on a sample only that detector catches, and
+  two code-running reviewers tried to break it before it was trusted.
+- *Stage 1.* The engine is in [`../facts/`](../facts/), imported through `tools/import-facts.js` and checked against the export's
+  manifest. It comes with a small hub of this repo's own (`facts/server.js`), a browser bundler (`facts/bundle.js`), and the
+  public refusal suite (`tests/public-refusal.js`).
+- *Tests.* `tests/facts-engine.js` runs the 114 engine laws, the hub over HTTP and the bundle.
+- *Not yet.* The builder does not yet emit a facts-mode download. That is Stage 2, with the Time clock module.
 
 ---
 
@@ -349,7 +361,8 @@ Every stage ends at the same **standing gate**, on top of its own:
   - every existing suite is untouched and green (blob mode is not changed);
   - the hub refuses an unenrolled device;
   - durability before witness: a store that refuses a write makes the hub refuse to acknowledge.
-- **Budget:** about 150 KB added to a facts-mode download (station side). Blob downloads add 0 bytes.
+- **Budget:** about 150 KB added to a facts-mode download (station side). Blob downloads add 0 bytes. *(As built: ~187 KB raw
+  with the engine's comments kept, ~57 KB gzipped; facts/test/bundle.test.js bounds it at 200 KB raw and 70 KB gzipped.)*
 - **Runtime:** the facts hub needs Node 22 or newer (`node:sqlite`). The existing open `hub.js` stays as it is for
   blob mode.
 

@@ -1358,3 +1358,77 @@ unsold lots. The pack's README lists them as questions for the auction company. 
 differences between the two versions, and every one of them traces back to one of those written-down readings. The
 independent version had two small gaps of its own, a date it didn't check and a number type it accepted, and those were
 fixed in it as well. 105 suites.
+
+## 2026-10-31 — v2 comes in: the exporter, the engine, a small hub
+
+The owner said it plainly today: v2 is to be the face of Custom POS. v2 is the origin shop's second system, the one where every
+tablet writes down what happened as a permanent fact, and one small hub keeps the official copy. Until today, that sentence in
+our roadmap had a gate in front of it. Nothing of the shop's code could come here until a scrubber existed that refuses to run
+while anything real survives. So the day started on the private side.
+
+### A scrubber that has to prove it can say no
+The exporter lives in the shop's private repo and never ships itself. It copies an allowlist of the engine, about 400 KB with its
+laws, into a folder outside every repository, and maps the shop's brand out of identifiers. Its prose maps are explicit,
+each with the number of times it must match, so a file that changed upstream refuses instead of half-scrubbing. Then it scans
+for what must never leave: names, phones, e-mails, addresses, server details, the shop's towns, secrets.
+
+The name check is the interesting part. The shop's customer list cannot come here. A private list of salted hashes, made from a
+quiet copy of the shop's data, lets the exporter recognise every customer's and employee's name, phone and e-mail without
+holding any of them in plain text. Even so, a hash of a phone number reverses by guessing, so that file is treated exactly like
+the plain list. It never enters a repo, and never a synced folder.
+
+The first version passed its own self-test, and then two reviewers were given the code and told to break it. They found 22
+holes, and they reproduced every one in a sandbox:
+- A customer written the way the shop stores one, `{ first: 'A', last: 'B' }`, got past the scan. So did a name inside
+  `camelCase`.
+- So did a phone with a +1 in front.
+- Handed the wrong folder, it would have deleted it.
+- A missing name list switched the name check off without a word.
+- The self-test still passed with several detectors weakened.
+
+All 22 are fixed. The self-test now gives each of its 48 detectors a sample that only that detector catches, and requires it to
+be refused with the detector on and to pass with it off. Then, as its own negative control, eight deliberate weakenings were run
+against it in throwaway copies. Two survived at first. Their samples were sharpened until all eight failed it. A test that cannot
+fail is not evidence, and that includes the test of the tests.
+
+### The laws run inside the export
+A scrubbed engine that no longer works is not a distribution. The exporter runs the engine's own laws inside its output: 114
+proofs, under a trace that records every file each one loads. Every load has to stay inside the export, and every engine file has
+to be loaded by some proof. The one exception is written down by name: the HTTP transport, whose proofs need a server, which is
+today's other job. To show the laws can fail, a copy whose log accepts the same fact twice has to fail them. The first attempt at
+that copy didn't fail, because a second guard caught the duplicate, so both guards come out in the control.
+
+### What came in here
+`facts/` holds the engine, imported by `tools/import-facts.js`. It takes only the files the export's manifest names, checks each
+one's SHA-256, and records them in `facts/PROVENANCE.json`. A hand edit to an imported file fails the suite. The rule is to change
+it upstream and export again, so the record of where this code came from stays true.
+
+Three files are our own. `facts/server.js` is the hub on HTTP and nothing else: enrol a device, take its facts, hand out what's
+new, say it's alive. The shop's server is many times larger, with its cards, texts and e-mail behind it, and none of that belongs
+here. `facts/bundle.js` puts the engine in one file for a browser and refuses to build if anything asks for a module it can't
+serve. `tests/public-refusal.js` scans every module for phones, e-mails, IPs, server paths, personal folders, the shop's brand and
+secret shapes, and plants one sample of each to prove it can.
+
+The proofs that matter most for a business run over real HTTP:
+- an unenrolled device lands nothing, and is told why;
+- a retry after a lost answer lands once;
+- a hub that is down means "not yet," never "lost";
+- a disk that refuses a write makes the hub refuse to acknowledge, so a tablet is never told a fact is safe before it is.
+
+### A second look, as a stranger would read it
+Before the first push, two more reviewers read everything as the public will. Between them they found 25 things.
+
+The ones that mattered most were quiet. The small hub was dropping one field of every pull: the field that lets the engine notice a hub restored from an older backup. Without it, a tablet that had read past the restore point would simply never see what was written after it, with no alert. The engine was right; our wrapper had thrown its evidence away. Other things the reviewers found:
+- The health check said "ok" while the disk refused every write.
+- A revoke that could not be saved answered "ok", while the lost tablet kept its access.
+- A refused sender could keep streaming a body for a minute.
+- One check could be fooled by letter case on Windows.
+- Several tests would still have passed with the thing they test broken.
+
+All of that is fixed now, and each fix has a proof that fails without it.
+
+The reviewers also caught two words that would have been published for the first time: the private name of a scripting identity, and the hosting service in our own scanner's pattern. Fixing those in a later commit would not do, because a pushed history publishes every commit. So the commits were rebuilt before anything left the machine. The private exporter now reads a private word list as well, so that class is refused at the source next time.
+
+### Not yet
+The builder doesn't emit a facts-mode download yet. That comes with the first module, the time clock, in Stage 2. Nothing here
+is published until the owner says so.
