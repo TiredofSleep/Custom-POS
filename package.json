@@ -8,7 +8,11 @@
     "hub": "node hub.js",
     "pay": "node payments/pay-server.js",
     "build": "node build.js",
-    "validate:cc": "node tools/validate-cardconnect.js"
+    "validate:cc": "node tools/validate-cardconnect.js",
+    "facts:test": "node tests/facts-engine.js",
+    "facts:hub": "node facts/server.js",
+    "facts:bundle": "node facts/bundle.js",
+    "facts:import": "node tools/import-facts.js"
   },
   "devDependencies": {
     "playwright-core": "^1.61.1"
