@@ -13,7 +13,17 @@ blob-mode builder as an opt-in.*
   manifest. It comes with a small hub of this repo's own (`facts/server.js`), a browser bundler (`facts/bundle.js`), and the
   public refusal suite (`tests/public-refusal.js`).
 - *Tests.* `tests/facts-engine.js` runs the 114 engine laws, the hub over HTTP and the bundle.
-- *Not yet.* The builder does not yet emit a facts-mode download. That is Stage 2, with the Time clock module.
+- *Stage 2, built the same night:*
+  - `facts/modules/` holds the contract (`defineModule` / `assemble`, one judge for the hub) and the staff, with a PIN the hub checks
+    itself (`staff.js`, `pingrant.js`). It also holds the **Time clock module** (`timeclock.js`), with breaks, a compat projection to
+    `DB.punches`, and a history fixture.
+  - The app's time clock runs on it in **facts mode**. The builder's *Several computers* turns that on and puts the engine in the
+    download.
+  - One hub answers both the facts and the blob records (`facts/server.js --with-blob`).
+  - The gate is held: the two-station test (in Node and in a real browser), authority and PIN over a real hub, the history fixture,
+    the time clock drawn in facts mode, and the tip pool and labor cost equal from the compat projection and from `DB.punches`.
+- *Not yet:* the optional hub job that closes a forgotten shift (`timeclock.autoCloseAfterHrs`) — the fact type is ready and only
+  the hub may write it.
 
 ---
 

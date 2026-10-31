@@ -21,7 +21,14 @@ const b64 = Buffer.from(engine, 'utf8').toString('base64');
 const inject = '<script>window.__ENGINE_SRC__ = new TextDecoder().decode(Uint8Array.from(atob("'
   + b64 + '"), c=>c.charCodeAt(0)));<\/script>\n';
 
-const out = builder.replace('<script>', inject + '<script>');   // prepend before the builder's own script
+// Stage 2 (docs/V2-MODULAR-IMPORT.md): the v2 engine for a browser, which the builder puts into a 'several stations' download.
+// The repo keeps it beside pos.html (facts.bundle.js, kept fresh by tests/facts-engine.js) for the hosted builder to fetch; here it
+// is inlined the same UTF-8-safe way, built fresh from facts/.
+const factsBundle = require('./facts/bundle').build();
+const inject2 = '<script>window.__FACTS_BUNDLE__ = new TextDecoder().decode(Uint8Array.from(atob("'
+  + Buffer.from(factsBundle, 'utf8').toString('base64') + '"), c=>c.charCodeAt(0)));<\/script>\n';
+
+const out = builder.replace('<script>', inject + inject2 + '<script>');   // prepend before the builder's own script
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 const dest = path.join(root, 'dist', 'custompos.html');
 fs.writeFileSync(dest, out);

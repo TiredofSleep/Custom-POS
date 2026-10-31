@@ -18,7 +18,8 @@
    Tokens ride in the body, never the URL. Every refusal is a JSON answer that says why: malformed 400, a sender with no key and a
    body over 64 KB 401, no or wrong operator key 403, no such route 404, too large 413.
    It listens on 127.0.0.1 by default; put a TLS proxy in front for anything beyond this machine (docs/HUB-SYNC.md).
-   usage:  CUSTOMPOS_ADMIN_KEY=<long random> node facts/server.js --db hub-data/facts.db [--port 8790] [--host 127.0.0.1]
+   usage:  CUSTOMPOS_ADMIN_KEY=<long random> node facts/server.js --db hub-data/facts.db [--port 8790] [--host 127.0.0.1] [--with-blob]
+           (--with-blob: the repo's hub.js also answers here — /api/db for records and the app's files — so a shop runs ONE hub)
    Needs Node 22 or newer (node:sqlite). */
 'use strict';
 const http = require('http');
@@ -87,6 +88,10 @@ function startHubServer(opts) {
        or the operator key in the request itself. A browser's pre-check (OPTIONS) is answered here and says which headers may come. */
     res.setHeader('Access-Control-Allow-Origin', '*');
     if (req.method === 'OPTIONS') { res.writeHead(204, { 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'content-type, accept, x-custompos-token, x-custompos-admin', 'Access-Control-Max-Age': '600', 'Content-Length': '0' }); res.end(); return; }
+    /* ONE HUB FOR BOTH (Stage 2, docs/V2-MODULAR-IMPORT.md): while a shop's records still sync as blobs and its punches are facts, one
+       process answers both, so a shop has one hub address. opts.fallback gets every request that is not a /v2/ door (the CLI's
+       --with-blob mounts the repo's own hub.js: /api/db and the app's files, exactly as that hub serves them on its own). */
+    if (opts.fallback && url.indexOf('/v2/') !== 0) { opts.fallback(req, res); return; }
     try {
       if (req.method === 'GET' && url === '/v2/health') {
         /* a store that refuses writes is NOT healthy: one retry, then 503, so a monitor or a proxy's health check sees a full disk
@@ -146,7 +151,9 @@ if (require.main === module) {
   if (!db || db[0] === '-') usage('--db needs a file');
   if (!/^\d{1,5}$/.test(String(port)) || +port < 1 || +port > 65535) usage('--port needs a number from 1 to 65535');   /* never a random port a proxy cannot find */
   if (!host || host[0] === '-') usage('--host needs an address');
-  startHubServer({ db: db, port: +port, host: host })
+  /* --with-blob: the repo's hub.js answers everything outside /v2/ (records as blobs, and the app's files) — one hub for both */
+  const fallback = a.indexOf('--with-blob') >= 0 ? (function () { const blob = require('../hub.js'), h = blob.server.listeners('request')[0]; return function (req, res) { h(req, res); }; })() : null;
+  startHubServer({ db: db, port: +port, host: host, fallback: fallback })
     .then(function (s) { console.log('facts hub on ' + s.url + ' · epoch ' + s.hub.epoch + ' · head ' + s.hub.head); })
     .catch(function (e) { console.error('the hub did not start: ' + e.message); process.exit(1); });
 }

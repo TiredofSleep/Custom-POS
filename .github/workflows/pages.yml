@@ -35,6 +35,7 @@ jobs:
           node tools/gen-landing.js                       # (re)generate per-trade SEO landing pages
           cp index.html builder.html pos.html _site/
           cp dist/custompos.html _site/app.html
+          cp facts.bundle.js _site/              # the v2 engine for a browser: the builder puts it in a several-stations download
           cp restaurant.html retail.html salon.html repair-shop.html dry-cleaner.html jewelry.html _site/
           # the Single-PC Edition: its landing page, the one-file app (Try it / Download), and the page's screenshot
           cp single-pc.html _site/

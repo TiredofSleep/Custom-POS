@@ -247,4 +247,21 @@ H.testAsync('a page opened from a file or another host may talk to the hub (CORS
   } finally { await srv.close(); rmDb(f); }
 });
 
+H.testAsync('one hub for both: with the repo’s hub.js mounted, /api/db (records as blobs) is answered beside the facts doors; without it, /api/db is not here', async function () {
+  const f = dbFile('w14'), dataFile = path.join(os.tmpdir(), 'custompos-blob-' + process.pid + '-' + Date.now() + '.json');
+  const keep = process.env.DATA; process.env.DATA = dataFile;   /* hub.js reads its data file’s place when it is loaded */
+  const blob = require('../../hub.js'), h = blob.server.listeners('request')[0];
+  if (keep == null) delete process.env.DATA; else process.env.DATA = keep;
+  const both = await startHubServer({ db: f, adminKey: ADMIN, fallback: function (req, res) { h(req, res); } });
+  const f2 = dbFile('w14b'); const only = await startHubServer({ db: f2, adminKey: ADMIN });
+  try {
+    const r = await fetch(both.url + '/api/db'); H.eq(r.status, 200, 'the blob hub answers /api/db through the facts hub'); const j = await r.json();
+    H.ok(j && typeof j === 'object' && (Array.isArray(j.records) || (j.db && Array.isArray(j.db.records))), 'with the shared records');
+    H.eq((await (await fetch(both.url + '/v2/health')).json()).ok, true, 'and the facts doors are still the facts hub’s');
+    H.eq((await fetch(both.url + '/v2/nothing-here', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 404, 'an unknown /v2/ door is never handed to the blob hub');
+    /* the negative control: a facts hub with nothing mounted has no /api/db */
+    H.eq((await fetch(only.url + '/api/db')).status, 404, 'without --with-blob, /api/db is not here');
+  } finally { await both.close(); await only.close(); rmDb(f); rmDb(f2); try { fs.unlinkSync(dataFile); } catch (e) {} }
+});
+
 H.done();

@@ -1432,3 +1432,51 @@ The reviewers also caught two words that would have been published for the first
 ### Not yet
 The builder doesn't emit a facts-mode download yet. That comes with the first module, the time clock, in Stage 2. Nothing here
 is published until the owner says so.
+
+## 2026-10-31 (night) — Stage 2: the time clock, shared
+
+Stage 1 put the engine in the repo. Stage 2 put it in front of someone: the time clock, which until tonight lived on one device.
+A clock-in on the counter's tablet never reached the back room, because `DB.punches` was the one collection the hub never synced.
+
+### Who may write what
+The first piece was the module contract. A module names each kind of fact it owns, and for each one says who may write it: anyone,
+only the person it is about, that person or someone holding a named right, an owner, or the hub alone. It can also ask that the
+hub check a PIN itself. Modules are put together into one judge that the hub runs on every fact, so a rule is the hub's, not each
+tablet's.
+
+The tests for this all have the same shape. Each fact the rules refuse is sent once to a hub with the rules and once to a hub
+without them. It must land on the second, which shows the refusal came from the rule and not from a broken wire.
+
+### A PIN the hub checks
+The hard question was the stolen tablet. Every fact carries the name of the person who made it, but that name is whatever the
+tablet put there. So the facts that matter (fixing a shift, voiding one, changing who works here) need a PIN the hub checks itself.
+The tablet sends the PIN once, the hub checks it against that person's hash, and it hands back a pass. The pass is signed, lasts 30
+minutes, and is good for that one person on that one tablet. Five wrong tries lock that pair for a while.
+
+Clocking in and out are deliberately *not* behind the pass. Nobody should be kept off the clock because the internet is down.
+
+### Rebuilt, not copied
+The time clock module adopts the engine's clock facts and their fold, which works out which clock-out closes which shift, keeps
+orphans visible, and never lets a guess outrank a punch. It adds what Custom POS already had: unpaid breaks, and the wage at punch
+time.
+
+Then it rebuilds `DB.punches`, in exactly the shape the app always had, from the facts. So the tip pool, labor cost, pay estimate
+and reports read shared punches without a line of them changing. A test gives both versions the same punches and checks the numbers
+come out the same.
+
+A saved history from this first version is now part of the suite, and every later version must still read it the same way. The
+history found a bug on its first run. A shift a manager adds by hand carries no wage, and it came out as $0, which the labor-cost
+code would have counted as free. It reads as "no wage recorded" now, so the person's own wage applies, as it always did.
+
+### In a browser
+The last piece was the app itself. In facts mode each device keeps its own log in the browser and sends it to the hub. The first
+device brings the team over from setup: the owner first, then everyone else under the owner's PIN, checked by the hub. Only hashes
+ever leave the page.
+
+The proof is two browser tablets and one real hub. Alex clocks in on one, appears on the other, takes a break there and clocks out
+there, and the first tablet sees the shift closed. The same steps in the old mode, as the negative control, show the second tablet
+never hears of it.
+
+The builder's *Several computers* now produces such a download. Its test found that a download with the engine inside was broken:
+JavaScript's string `replace` reads `$&` in a replacement as a code, and the engine's own source has one. It is a one-word fix
+(a replacer function), and every *several stations* download would have been broken without it.

@@ -44,7 +44,7 @@ function resolveAll(key, src, have) {
 /* @facts @station — the bundle's text (opts.extra: more modules by key, for the proofs) */
 function build(opts) {
   const extra = (opts && opts.extra) || {}, keys = FILES.concat(Object.keys(extra));
-  const src = function (k) { return Object.prototype.hasOwnProperty.call(extra, k) ? extra[k] : fs.readFileSync(path.join(ROOT, k), 'utf8'); };
+  const src = function (k) { return Object.prototype.hasOwnProperty.call(extra, k) ? extra[k] : fs.readFileSync(path.join(ROOT, k), 'utf8').replace(/\r\n/g, '\n'); };   /* LF, as git stores it: the same bundle from any checkout */
   const parts = keys.map(function (k) {
     const s = src(k), table = resolveAll(k, s, keys);
     return '__def(' + JSON.stringify(k) + ', ' + JSON.stringify(table) + ', function (module, exports, require) {\n' + s + '\n});';

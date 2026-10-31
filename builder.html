@@ -453,7 +453,7 @@ function chooseTrade(k){ tradeKey=k; cfg=JSON.parse(JSON.stringify(TEMPLATES[k])
 /* ---- guided interview: a plain-language path for non-technical owners (Shape → Config → People → Pay → Run) ---- */
 const DEPLOY_NOTE = {
   one:     "**One computer.** Everything lives in this browser on that device — no server, no monthly fee. Use **Data & backup → Backup (JSON)** now and then (or let Claude Code automate it) so a copy lives somewhere safe.",
-  several: "**Several computers.** Run the small sync hub (`hub.js`) on one always-on machine (a spare PC or a ~a-few-dollars/month cloud box) and point each device at it with `?hub=…`; every register shares one live POS. Each device still keeps its own local copy, so a dropped connection never stops a sale.",
+  several: "**Several computers.** Run one small sync hub on an always-on machine (a spare PC or a ~a-few-dollars/month cloud box): `CUSTOMPOS_ADMIN_KEY=<a long random key> node facts/server.js --db hub-data/facts.db --with-blob` (Node 22+). It answers both the time clock, which runs on the v2 engine so every punch is on every station, and the shared records. Give each device a name and a setup token from the hub (`POST /v2/admin/enroll` with your key — ask Claude Code to do it for you); the time clock asks for them once. Each device keeps its own copy, so a dropped connection never stops a sale or a punch. The records part is open, as the sync hub always was: keep the hub on your own network, or put a proxy with a password in front before opening it to the internet.",
   backup:  "**Several computers + off-site backup.** As above with the sync hub, plus schedule the hub's rolling snapshots to copy off-site (another drive or cloud) on a timer — so a dead hard drive is never the end of your data. Ask Claude Code to set the backup schedule up for you."
 };
 function startGuide(){ step='guide'; gstep=1; guide={}; render(); }
@@ -467,7 +467,12 @@ function guideTeam(has){ guide.team=has;
   else { dropStation('timeclock'); dropStation('schedule'); dropStation('worker'); }
   render();
 }
-function guideFinish(){ buildAndShow(); }
+/* several stations → facts mode for the time clock, with the hub's address if it is known (the device asks for it otherwise) */
+function guideFinish(){
+  if(guide.deploy==='several' || guide.deploy==='backup'){ cfg.storage='facts'; cfg.factsHub=(guide.hub||'').trim(); }
+  else { delete cfg.storage; delete cfg.factsHub; }
+  buildAndShow();
+}
 
 /* ---- flow preview (clickable stations) ---- */
 function flowPreview(cfg, clickable){
@@ -732,8 +737,18 @@ async function assemble(cfg){
   const verM = engine.match(/CUSTOMPOS_VERSION\s*=\s*"([^"]+)"/);
   const build = { version: verM?verM[1]:"?", builtAt: new Date().toISOString().slice(0,10), business: cfg.branding.name };
   const banner = "<!-- customPOS · "+build.business+" · engine v"+build.version+" · built "+build.builtAt+" · your software, your data -->\n";
-  const inject = "<script>window.CUSTOMPOS_FLOW = "+JSON.stringify(cfg)+"; window.CUSTOMPOS_BUILD = "+JSON.stringify(build)+";<\/script>\n";
-  const html = banner + engine.replace("<script>", inject+"<script>");
+  let inject = "<script>window.CUSTOMPOS_FLOW = "+JSON.stringify(cfg)+"; window.CUSTOMPOS_BUILD = "+JSON.stringify(build)+";<\/script>\n";
+  /* Stage 2: a 'several stations' download carries the v2 engine (facts/bundle.js, built by build.js) and points both the time clock
+     (facts) and the records (blob sync) at the same hub — one hub answers both (facts/server.js --with-blob) */
+  if(cfg.storage==='facts'){
+    let fb = (typeof window!=="undefined" && window.__FACTS_BUNDLE__) ? window.__FACTS_BUNDLE__ : null;
+    if(!fb){ try{ const r=await fetch('facts.bundle.js'); if(r.ok) fb=await r.text(); }catch(e){} }   // facts.bundle.js sits beside pos.html (generated: node facts/bundle.js --out facts.bundle.js)
+    if(!fb) throw new Error('the v2 engine bundle (facts.bundle.js) could not be loaded beside the builder');
+    inject = "<script>"+fb.replace(/<\/script/gi,"<\\/script")+"<\/script>\n" + inject + (cfg.factsHub ? "<script>window.CUSTOMPOS_HUB = "+JSON.stringify(cfg.factsHub)+";<\/script>\n" : "");
+  }
+  /* a replacer FUNCTION, not a string: a replacement string reads $& $' $` $1 as codes, and the engine bundle holds such text (Stage 2:
+     a "several stations" download broke with "Invalid or unexpected token" until this) */
+  const html = banner + engine.replace("<script>", function(){ return inject+"<script>"; });
   const claudeMd = genClaudeMd(cfg, build);
   window.__build = { flow:cfg, html, claudeMd, build };
   return { html, claudeMd };
@@ -834,6 +849,13 @@ function render(){
         h('button',{class:'trade'+(guide.deploy==='several'?' on':''), onclick:()=>{ guide.deploy='several'; render(); }},[h('b',{},['Several computers']), h('small',{},['Add a small sync hub so registers share one live POS. ~a few $/mo.'])]),
         h('button',{class:'trade'+(guide.deploy==='backup'?' on':''), onclick:()=>{ guide.deploy='backup'; render(); }},[h('b',{},['…and off-site backup']), h('small',{},['The hub plus rolling off-site snapshots — a dead drive is never the end.'])]) ]));
       app.appendChild(h('p',{class:'hint', style:'margin-top:10px'},['However you run it: your POS works offline on your own device (cash sales need no internet), your data lives with you, and you can export a backup any time. It\'s one file — keep a copy somewhere safe.']));
+      /* Stage 2 (docs/V2-MODULAR-IMPORT.md): several stations run the time clock on the v2 engine — every punch on every station, through one hub */
+      if(guide.deploy==='several' || guide.deploy==='backup'){
+        const hubIn=h('input',{id:'guideHub', placeholder:'https://hub.example (you can add it later)', value: guide.hub||'', style:'display:block;width:100%;max-width:420px;margin-top:4px'});
+        hubIn.oninput=()=>{ guide.hub=hubIn.value.trim(); };
+        app.appendChild(h('div',{class:'card', style:'margin-top:10px'},[ h('b',{},['Your hub\'s address']),
+          h('p',{class:'hint'},['Your stations share one hub. The time clock runs on the v2 engine there: a clock-in on one station is on every station, and nothing is lost while one is offline. Leave this blank to fill it in on each device later.']), hubIn ]));
+      }
       if(guide.deploy) app.appendChild(h('div',{style:'margin-top:12px'},[ back(5), ' ', h('button',{class:'primary big', onclick:guideFinish},['✨ Build my POS']) ]));
       return;
     }

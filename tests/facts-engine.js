@@ -44,8 +44,16 @@ const upstream = (prov.proofs || []).reduce(function (n, p) { return n + (p.pass
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 })();
 
+/* the bundle beside pos.html (facts.bundle.js — the hosted builder fetches it for a 'several stations' download) is exactly what facts/
+   builds now; a stale one would ship an old engine in every download */
+(function () {
+  const want = require('../facts/bundle').build().replace(/\r\n/g, '\n'), file = path.join(ROOT, 'facts.bundle.js');
+  const have = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n') : null;
+  check(have === want, 'facts.bundle.js is what facts/ builds now' + (have === want ? '' : ' — rebuild it: node facts/bundle.js --out facts.bundle.js'));
+})();
+
 const env = Object.assign({}, process.env); Object.keys(env).forEach(function (k) { if (/^CUSTOMPOS_(SHARD|SHARDS|SMOKE)/.test(k)) delete env[k]; });
-[['test/engine-laws.test.js', upstream, 'the engine laws'], ['test/wire.test.js', 13, 'the wire'], ['test/bundle.test.js', 3, 'the bundle'], ['test/modules.test.js', 4, 'the module contract'], ['test/staff.test.js', 5, 'the staff module and the PIN the hub checks'], ['test/timeclock-module.test.js', 4, 'the time clock module']].forEach(function (t) {
+[['test/engine-laws.test.js', upstream, 'the engine laws'], ['test/wire.test.js', 14, 'the wire'], ['test/bundle.test.js', 3, 'the bundle'], ['test/modules.test.js', 4, 'the module contract'], ['test/staff.test.js', 5, 'the staff module and the PIN the hub checks'], ['test/timeclock-module.test.js', 4, 'the time clock module']].forEach(function (t) {
   const r = spawnSync(process.execPath, [path.join(FACTS, t[0])], { cwd: FACTS, encoding: 'utf8', env: env, timeout: 600000 });
   const m = /(\d+) passed, (\d+) failed\s*$/.exec(String(r.stdout || '').trim());
   const ok = r.status === 0 && m && +m[2] === 0 && +m[1] === t[1];

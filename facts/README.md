@@ -7,7 +7,8 @@ copy. Every screen is worked out from the facts. Nothing is overwritten or delet
 so the record always shows what really happened.
 
 The plan, and why it is built this way, is in [../docs/V2-MODULAR-IMPORT.md](../docs/V2-MODULAR-IMPORT.md). This is
-**Stage 1**: the engine, imported, with a small hub of our own. The modules (time clock first) come in Stage 2.
+**Stage 1** is the engine, imported, with a small hub of our own. **Stage 2** adds the module system, the staff and a hub-checked
+PIN, and the first module, the **time clock**. It runs in the app today: pick *Several computers* in the builder.
 
 ## What is here
 
@@ -23,6 +24,11 @@ The plan, and why it is built this way, is in [../docs/V2-MODULAR-IMPORT.md](../
 | `server.js` | the hub on HTTP: enrol, receive, pull, health, watch, and nothing else | **this repo** |
 | `bundle.js` | the engine for a browser, one file, zero dependencies | **this repo** |
 | `test/wire.test.js`, `test/bundle.test.js` | the hub over HTTP, the bundle | **this repo** |
+| `modules/define.js` | the module contract: `defineModule()` checks a manifest; `assemble()` gives the hub ONE judge of who may write what | **this repo** (Stage 2) |
+| `modules/staff.js` | the people as facts: name, role, rights, a PBKDF2 PIN hash (never the digits) | **this repo** (Stage 2) |
+| `modules/pingrant.js` | the PIN the hub checks itself: a 30-minute signed pass for one person on one tablet | **this repo** (Stage 2) |
+| `modules/timeclock.js` | the Time clock module: shared punches, breaks, corrections, and `punches()`, which rebuilds the app's own `DB.punches` | **this repo** (Stage 2) |
+| `test/modules.test.js`, `staff.test.js`, `timeclock-module.test.js` | the contract, the staff and PINs, the time clock (with a history fixture) | **this repo** (Stage 2) |
 
 **Imported files are never edited here.** They arrive only through the origin shop's private exporter, which refuses while
 any real name, phone, address, server detail or secret survives, and which runs the engine laws inside its own output first.
@@ -33,15 +39,22 @@ change is made upstream and re-exported, never by hand here.
 ## Run it
 
 ```
-node tests/facts-engine.js          # the engine laws, the wire, the bundle (Node 22+)
+node tests/facts-engine.js          # the engine laws, the wire, the bundle, the modules (Node 22+)
 node tests/public-refusal.js        # nothing that must never be published is in facts/ or packs/
-CUSTOMPOS_ADMIN_KEY=<long random> node facts/server.js --db hub-data/facts.db
-node facts/bundle.js --out dist/facts.bundle.js
+CUSTOMPOS_ADMIN_KEY=<long random> node facts/server.js --db hub-data/facts.db --with-blob
+node facts/bundle.js --out facts.bundle.js   # the bundle beside pos.html, which the builder puts in a "several stations" download
 ```
 
 The hub needs **Node 22 or newer** (it uses the built-in `node:sqlite`) and an operator key of 16 or more characters. It
 listens on 127.0.0.1. For anything beyond this one machine, put a TLS proxy in front (see [../docs/HUB-SYNC.md](../docs/HUB-SYNC.md)).
-The existing open `hub.js` at the repo root is unchanged and still serves blob mode.
+
+`--with-blob` makes it **one hub for both**: the repo's `hub.js` also answers `/api/db` (records, still synced as blobs until their
+modules move) and serves the app's files. ⚠️ That blob API is open, as `hub.js` has always been: on its own it is for a LAN, and
+beyond one, the proxy in front must guard it. The facts doors keep their own tokens and keys either way.
+
+**A device**: the operator enrols it (`POST /v2/admin/enroll {station}` with the operator key) and gives the device its name and the
+token shown once. The app's time clock asks for both the first time. A brand-new hub is then given the team from setup: the owner
+first, then everyone else under the owner's PIN, which the hub checks itself.
 
 ## What it promises, and how that is checked
 
@@ -54,6 +67,16 @@ The existing open `hub.js` at the repo root is unchanged and still serves blob m
 - **One hub per database.** A second hub on the same file will not start. (`engine-laws`, `wire`)
 - **Offline is normal.** A station records with no hub, and nothing is lost when it comes back. (`engine-laws`)
 - **The browser and Node agree.** A fact made in the bundle verifies in Node. (`bundle`, `engine-laws`)
+- **Who may write what is decided by the hub**, not by each tablet:
+  - a clerk clocks only themselves in or out, and never needs a PIN pass for it, so nobody is kept off the clock by the internet;
+  - a correction needs "payroll" AND a PIN the hub checked;
+  - only an owner makes an owner;
+  - a forgotten shift is closed by the hub alone.
+  Every refusal is shown to land on a hub with no modules, so the refusal is the rule's, not the wire's.
+  (`modules`, `staff`, `timeclock-module`)
+- **A clock-in on one tablet is on every tablet**, in a real browser with two tablets and one hub. The tip pool and labor cost
+  come out the same from the shared punches as from the old local ones. (`tests/facts-clock.js`)
 
-It is honest about what it does not do: the hub cannot tell who is holding a tablet. A PIN checked by the hub (Stage 2) and an
-instant revoke are the defence, not a guarantee.
+It is honest about what it does not do: the hub cannot tell who is holding a tablet. A PIN checked by the hub, and an instant
+revoke, are the defence for the facts that matter, not a guarantee. A PIN is short, and every tablet holds the PIN hashes, so a
+lost tablet should be revoked at once.
