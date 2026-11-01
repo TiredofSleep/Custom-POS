@@ -234,7 +234,9 @@ let DB = load();
 
 function cors(res){ res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS'); }
 
-const server = http.createServer((req, res) => {
+// every request goes through handle(); a throw inside one (a malformed escape, a NUL in a path) is answered 400 by the server below,
+// never a dead hub — hub.js on its own has no login, so one bad GET must not stop every register's sync
+function handle(req, res) {
   const url = req.url.split('?')[0];
   cors(res);
   if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
@@ -273,7 +275,8 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url.startsWith('/api/blob/') && req.method === 'GET') {          // serve an externalized image by its cpblob ref
-    const name = path.basename(decodeURIComponent(url.slice('/api/blob/'.length)));   // basename -> no path traversal
+    let ref; try { ref = decodeURIComponent(url.slice('/api/blob/'.length)); } catch (e) { res.statusCode = 400; return res.end('bad blob ref'); }
+    const name = path.basename(ref);   // basename -> no path traversal
     if (!/^[0-9a-f]{64}\.[a-z0-9]{1,8}$/.test(name)) { res.statusCode = 400; return res.end('bad blob ref'); }
     return fs.readFile(path.join(BLOB_DIR, name), (e, buf) => {
       if (e) { res.statusCode = 404; return res.end('not found'); }
@@ -285,13 +288,20 @@ const server = http.createServer((req, res) => {
   if (url === '/favicon.ico') { res.statusCode = 204; return res.end(); }
 
   // static files
-  let f = path.join(ROOT, decodeURIComponent(url === '/' ? '/builder.html' : url));
-  if (!f.startsWith(ROOT)) { res.statusCode = 403; return res.end('forbidden'); }   // no path traversal
+  let dec; try { dec = decodeURIComponent(url === '/' ? '/builder.html' : url); } catch (e) { res.statusCode = 400; return res.end('bad request'); }   // a malformed % escape is a 400, never a crash
+  if (dec.indexOf(String.fromCharCode(0)) >= 0) { res.statusCode = 400; return res.end('bad request'); }   // a NUL in a path makes fs throw
+  let f = path.join(ROOT, dec);
+  const rel = path.relative(ROOT, f);   // no path traversal — and no SIBLING folder whose name merely starts like this one (startsWith was not enough)
+  if (rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel)) { res.statusCode = 403; return res.end('forbidden'); }
   fs.readFile(f, (e, buf) => {
     if (e) { res.statusCode = 404; return res.end('not found'); }
     res.setHeader('Content-Type', TYPES[path.extname(f)] || 'text/plain');
     res.end(buf);
   });
+}
+const server = http.createServer((req, res) => {
+  try { handle(req, res); }
+  catch (e) { if (!res.headersSent) { res.statusCode = 400; res.end('bad request'); } else { try { res.destroy(); } catch (e2) {} } }
 });
 
 if (require.main === module) {

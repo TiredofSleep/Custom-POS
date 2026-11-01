@@ -32,6 +32,7 @@ Chromium via Playwright and asserts behavior end-to-end (and fails on any consol
 | `build-stamp.js` | downloads carry a build banner + CUSTOMPOS_BUILD (version/date/business); CLAUDE.md + setup screen show the version |
 | `pwa.js` | install-as-app — a branded web manifest, theme-color, apple web-app meta, and a generated home-screen icon |
 | `hub-merge.js` | hub conflict resolution (unit) — version-aware last-write-wins: newer `upd` wins, stale push rejected, union add, seq-max |
+| `hub-bad-requests.js` | the sync hub survives bad requests — a malformed % escape or a NUL in a path is a 400, never a crash; a path into a sibling folder named like the hub's own is refused (a copy of hub.js runs as a child, so a crash shows) |
 | `tax-included.js` | VAT-style tax-included pricing — tax extracted from the price (total unchanged), net-of-tax in the report |
 | `line-return.js` | line-level returns — refund selected items' share of the total; report nets sales/tax/refunds proportionally |
 | `station-reorder.js` | builder flow editing — move a workstation earlier/later reorders the generated flow |
