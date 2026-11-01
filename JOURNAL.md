@@ -1504,3 +1504,58 @@ added later under a manager's PIN, and a name full of HTML. The gate is also str
 modes. Now blob mode's own clock runs the same actions at the same moments under a fixed browser clock, and every shift time must
 match. The negative control now goes through a real hub that does carry records, so "the punch never arrived" cannot be blamed on
 a dead hub.
+
+### A skeptic pass, and a pause
+Before pushing, a second set of reviewers checked the fixes themselves: three skeptics, each followed by a verifier. Of 21 findings,
+19 held up and 2 were refuted. **The paragraph above is wrong in one claim.** Several fixes had no test that failed before them
+(finding 2.5 below).
+
+The one that mattered most was already public: **the published `hub.js` died on a single bad GET**, a malformed `%` escape or a NUL
+in a path. Its folder check also served files from a neighbouring folder whose name merely began like its own. That fix went out
+alone, with a test that runs a copy of the hub as its own process, so a crash shows as a dead process. Nine of that test's 13 checks
+fail on the old hub.
+
+Then the owner looked at the shape of the work and said: *"seems like you are hand building every module instead of planning a
+modular system."* He was right about half of it:
+- **The hub side is modular.** A module declares its facts, who may write them, and its rules, and the hub builds one judge from them.
+- **The app side was not.** The shared time clock was about 190 lines wired into `pos.html` by hand, plus 14 places that asked "are
+  we in facts mode?". Nearly every app-side finding in the last two reviews came from that glue. Each next module would have needed
+  another chunk like it, and we would have found the same bugs again.
+
+So Stage 2's app half is held back, unpublished. Three designers wrote competing designs for the app side, and a judge scored them
+against the code and merged them. The result is Part 3b of [the plan](docs/V2-MODULAR-IMPORT.md):
+- a module file gains an `app` part: the collections it rebuilds, the stations it serves, and named commands;
+- one runtime in the bundle does connect, status, people and PINs, the pull loop, rebuilding, redrawing and refusals, for every module;
+- `pos.html` chooses its storage once and writes through one `act()`;
+- one conformance kit every module must pass.
+
+The time clock is rebuilt on it before any of Stage 2 is published.
+
+The findings, by number (Part 3b refers to them):
+
+| # | Finding | Where it went |
+|---|---|---|
+| 0.1 | `hub.js` killed by one GET (`%E0%A4%A`, `%00`) | fixed and published alone |
+| 0.2 | a device name with a space: Connect takes it, every break on its shifts is refused | Part 3b: one id grammar |
+| 0.4 | `role: null` on the last owner slipped past the last-owner rule | fixed |
+| 0.5 | the "data outside the served folder" check fooled by a folder named `..x` | fixed |
+| 0.6 | the hub-in-one could not serve record images | fixed |
+| 1.0 | a manager-approved refund in facts mode logged, but the order stayed paid | Part 3b: gather, then change by id |
+| 1.1 | a punch open from before the hub stayed open forever | Part 3b: closed at the switch, and the list is shown |
+| 1.2 | staff names still ran as HTML in the Office report | Part 3b rollout, step 1 |
+| 1.3 | the 3-second sync redraw wiped what someone was typing | Part 3b: one redraw path, never over typing |
+| 1.4 | the refusal from 0.2 was never shown | Part 3b: refusals shown on every screen |
+| 1.5 | a refused team add said "is on the hub" | Part 3b: checked before, waits for the hub |
+| 1.6 | a read-only second tab saved its frozen punches over the real ones | Part 3b: rebuilt views are never saved |
+| 1.7 | a double tap on Connect locked the tablet for 30 s | Part 3b: one connect at a time |
+| 1.8 | the "Checking…" message stayed after a PIN was accepted | Part 3b: cleared every time, error or not |
+| 2.0 | the builder's banner fix had no test | open |
+| 2.1 | the bound on PIN passes had no test | fixed: counted, not timed |
+| 2.2 | the cap of breaks at clock-out had no test | Part 3b: a module law the kit proves |
+| 2.3 | the two `hub.js` fixes had no test | fixed with 0.1 |
+| 2.4 | "redraw only on a change" and the refusal status line had no test | Part 3b: kit checks B3, B4 |
+| 2.5 | "every fix has a test that failed before it" was not true | corrected here |
+| 2.6 | the *Several computers* note gave a command only that machine could reach | open |
+
+Refuted: a clerk putting a break on a coworker's shift, and a future-dated break. Neither gets around anything. Punches carry no PIN
+by design, and that trust is the same in blob mode.
