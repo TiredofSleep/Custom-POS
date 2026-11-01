@@ -405,6 +405,9 @@ in the same shape.
 1. **In the shop's v2 (the owner's yes; deployed at 7 PM):** move the generic app code out of `station/app.js`, unchanged:
    `station/views.js` (the folds the screens read, the followers, the screen check) and `station/record.js` (the door and one
    `onSave` helper). The shop's full suite and the screen check prove it. Nothing changes at the counter.
+   *Built 2026-10-31, not deployed yet.* The 24 hand-written `onSave` wirings are now one `saveAs()`. The shop's suite passes 1,659
+   of 1,659, including a new section that pins what the two files promise. The tablet page loads in Chrome. The deploy waits for
+   the owner's yes, at 7 PM.
 2. **In the shop's v2, a separate deploy:** untangle the staff rules. The discount helpers leave `core/staff.js` (they reach into
    the shop's price rules), and the list of abilities (Void, Un-rack, Payroll…) becomes one a shop's modules add to, with the
    shop's own list added at start. This touches the shop's permissions, so it is its own step, with its own proofs.
@@ -426,7 +429,7 @@ in the same shape.
 
 ### 10. Decisions for the owner
 
-The first version asked five questions. The shop already answers four of them.
+The first version asked five questions. The shop already answers four of them, and the owner answered the fifth (2026-10-31).
 
 1. **Moving to several computers while people are on the clock.** *The shop's answer, adopted:* old punches come over as history,
    and an open shift ends at that person's next clock-out. Nobody has to clock in again.
@@ -435,9 +438,10 @@ The first version asked five questions. The shop already answers four of them.
    clock-out never wait.
 3. **Going back to one computer.** *The shop's answer, adopted:* only by a deliberate step, never automatically. That is how the
    shop's own way back from v2 to v1 was planned.
-4. **Customer and bidder contact details.** *Open, not needed before Stage 4.* The shop keeps them in its facts and never deletes
-   them. A business that must erase a person's details on request (an auction's bidders, for example) would need an erasable list
-   instead. If that is built, it is built in v2 first, so both systems share it.
+4. **Customer and bidder contact details.** *Decided by the owner: erasable on request, the shop's way.* In his words: *"yes
+   erasable on request... same as mine basically, it still lives in the history and activity log... just cleared from the UI"*.
+   A request clears the person's details from every screen. The facts and the activity log keep them, as the shop's history keeps
+   every retired record. It is built in v2 first (Stage 4), so both systems share it.
 5. **Download size.** *Not a shop question.* The shop's tablets load a 2.9 MB page (912 KB compressed) every day. This repo's own
    limit is raised as shared files arrive, measured compressed. A builder that packs only the modules a shop uses comes later.
 
