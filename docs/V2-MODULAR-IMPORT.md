@@ -34,6 +34,9 @@ blob-mode builder as an opt-in.*
     hand for each module. **Stage 2's app half is held back, unpublished, until the time clock runs on the planned system in
     [Part 3b](#part-3b--the-app-side-module-system).** The findings key is in the JOURNAL (2026-10-31, night, "A skeptic pass, and
     a pause").
+  - *Part 3b, rewritten the same night.* Its first version was designed from this repo alone and rebuilt the shop's own app design
+    under new names. It now follows the shop's app, and where the two overlap they share one copy: generic code the shop runs comes
+    here through the exporter, and fixes go into the shop's v2 first.
 - *Not yet:* the optional hub job that closes a forgotten shift (`timeclock.autoCloseAfterHrs`) — the fact type is ready and only
   the hub may write it.
 
@@ -141,6 +144,10 @@ If the owner ever wants an exact copy of the shop's v2 for a second location of 
 private build. It is never published.
 
 Why not A alone: the engine is about one-twentieth of v2. The value people want is in the modules.
+
+*Amended 2026-10-31, late (the owner: "the point is for all the systems to grow stronger together").* "Rebuilt rather than copied"
+now covers only the shop's own screens and rules. Generic code the shop runs is shared through the exporter, unedited, and never
+rebuilt here. See [Part 3b, section 1](#1-the-rule-where-the-two-systems-overlap-they-share-one-copy).
 
 ---
 
@@ -289,449 +296,150 @@ closed as a visible guess.
 
 ## Part 3b — The app-side module system
 
-*Designed 2026-10-31, not built yet.* Part 3's contract covers the hub: what facts a module has, who may write each one, and its
-rules. The app had no such contract. Stage 2 wired the time clock into pos.html by hand, about 190 lines plus 14 `if(FACTS.on)`
-branches, and most of the 44 findings in its last two reviews were in that hand-wired code. The owner's words: *"seems like you are hand
-building every module instead of planning a modular system."* This part is that plan.
+*Rewritten 2026-10-31, late, to follow the origin shop's own app. Not built yet.* The first version of this part (commit
+`6165c46`, from a three-designer panel) was drawn from this repo alone. None of its designers read the shop's tablet app, which
+had already solved the same problem and has run it every day since the shop switched to v2 on 9/30. So it rebuilt most of the
+shop's design under new names. The owner, on reading it: *"i thought this was all organized and modeled around the POS i have
+running at my shop... ?"* And on the rewrite: *"the point is for all the systems to grow stronger together... and to be sure that
+what i am sharing with people is functional because i use it daily."*
 
-A panel wrote three competing designs:
-- **module file first:** each module is one file that declares everything;
-- **fit the existing app first:** least change to pos.html;
-- **design out each kind of review finding first.**
+Rebuilding had already cost something. Finding 0.4, a `role: null` that slipped past the last-owner rule, was in this repo's
+rebuilt staff module. The shop's own staff fold never had it: a null role there leaves the person's role as it was.
 
-A judge scored the three against the code and checked their load-bearing claims, then merged them:
-- **the fit-the-existing-app design won;**
-- **from the module-file design:** the facts-mode screens live in the bundle, along with `strip`, `money:` and the module list;
-- **from the findings design:** `writes`; open shifts from before the hub are closed at the switch; views are rebuilt in memory and
-  never saved; one rule for ids; a double tap runs once; and the controls runner.
+Finding numbers (0.1 to 2.6) refer to the skeptic pass's list in [the JOURNAL](../JOURNAL.md) (2026-10-31, night, "A skeptic
+pass, and a pause").
 
-Nothing of Stage 2 is published until the time clock runs on this design. Finding numbers (0.1 to 2.6) refer to the skeptic
-pass's list in [the JOURNAL](../JOURNAL.md) (2026-10-31, night, "A skeptic pass, and a pause").
+### 1. The rule: where the two systems overlap, they share one copy
 
-### 1. Thesis
-
-pos.html already reads data the right way. `render()` starts with `DB = loadDB()`, and every screen reads `DB.<collection>` without waiting. What Stage 2 hand-built is everything around the time clock's facts: connect, status, people and PINs, the pull loop, projection, redraw and refusals. That is about 190 lines plus 14 `FACTS.on` branches.
-
-So reads stay as they are, and only writes change. A module is defined once, in `facts/modules/<name>.js`. That file keeps the hub part it has today and gains an `app` part, made of declarations and small pure functions:
-- the `DB` collections it rebuilds;
-- the stations it serves;
-- named commands that turn a tap into facts.
-
-pos.html gets one seam, chosen once at boot (`STORE`), and one write path, `act(name, args, who)`. In blob mode, `act` runs the old body, kept in pos.html under the same command name. In facts mode, one generic runtime in the bundle does the work for every module. The next module is a module file plus one `MODULES` line, with no new plumbing.
-
-### 2. The module definition
-
-The time clock keeps its hub half byte for byte and adds the following.
-
-```js
-const IDS = require('./ids');
-const SHIFT_ID = IDS.FACT_ID;   /* one grammar for device names: Connect, the hub's enrolment and this admit (findings 0.2, 1.4); admit may widen (law 1) */
-const isClock = function (e) { return /^clock\./.test(e.type); }, isBreak = function (e) { return /^break\./.test(e.type); };
-/* @facts @fold @timeclock — what a plan reads: a person's open shift and whether it is on a break, over the facts the runtime hands in
-   (what the hub witnessed, plus this tablet's own not yet sent, never one the hub refused) */
-function clockView(facts, people) {
-  const sh = TC.fold(facts.filter(isClock)), br = foldBreaks(facts.filter(isBreak));
-  return { open: function (emp) { const id = TC.openShiftId(sh, emp); return id ? { id: id, onBreak: (br.byShift[id] || []).some(function (b) { return b.end == null; }) } : null; },
-           punches: function () { return punches(facts, people); } };
-}
-/* @facts @timeclock — one punch fact, its shift named when it has one */
-function punchFact(type, a, c, sid) { return { type: type, key: a.staffId, payload: sid ? { empId: a.staffId, shiftId: sid, at: c.now } : { empId: a.staffId, at: c.now } }; }
-/* @facts @timeclock — clock in: someone already on is a refusal, never a silent no-op */
-function planIn(a, c) { return c.view.open(a.staffId) ? { refuse: c.name(a.staffId) + ' is already on the clock' }
-  : { facts: [punchFact('clock.in', a, c)], log: ['clock', c.name(a.staffId) + ' clocked in'] }; }
-/* @facts @timeclock — clock out: an open break ends first, in the same send */
-function planOut(a, c) { const s = c.view.open(a.staffId); if (!s) return { refuse: c.name(a.staffId) + ' is not on the clock' };
-  return { facts: (s.onBreak ? [punchFact('break.end', a, c, s.id)] : []).concat([punchFact('clock.out', a, c, s.id)]), log: ['clock', c.name(a.staffId) + ' clocked out'] }; }
-/* @facts @timeclock — a break starts or ends inside the open shift */
-function planBreak(starting) { return function (a, c) { const s = c.view.open(a.staffId);
-  if (!s || s.onBreak === starting) return { refuse: c.name(a.staffId) + (!s ? ' is not on the clock' : starting ? ' is already on a break' : ' is not on a break') };
-  return { facts: [punchFact(starting ? 'break.start' : 'break.end', a, c, s.id)] }; }; }
-/* @timeclock @storage — a punch from before the hub, sealed once at the switch: an open one and its open break close at that moment (finding 1.1) */
-function sealPunch(p, at) { if (p.out != null) return p; const cl = function (b) { return b.end != null ? b : Object.assign({}, b, { end: hm(at), endTs: at }); };
-  return Object.assign({}, p, { out: hm(at), outTs: at, sealed: true, breaks: (p.breaks || []).map(cl) }); }
-/* @proof @timeclock — a law the kit proves over every fixture and generated history: a break lies inside its shift (finding 2.2) */
-function breakInside(rows) { return rows.every(function (p) { return (p.breaks || []).every(function (b) { return b.startTs >= p.inTs && (p.outTs == null || (b.endTs != null && b.endTs <= p.outTs)); }); }); }
-
-/* in defineModule({...}) beside facts/views/needsConfig: */
-app: {
-  stations: ['timeclock'], noun: ['punch', 'punches'],
-  view: clockView,
-  collections: { punches: { rows: function (v) { return v.punches(); }, legacy: 'seal', seal: sealPunch } },
-  commands: {
-    'clock.in':    { writes: ['clock.in'],               actor: 'self',         plan: planIn },
-    'clock.out':   { writes: ['break.end', 'clock.out'], actor: 'self',         plan: planOut },
-    'break.start': { writes: ['break.start'],            actor: 'self',         plan: planBreak(true) },
-    'break.end':   { writes: ['break.end'],              actor: 'self',         plan: planBreak(false) },
-    'clock.fix':   { writes: ['clock.edit'],             actor: 'pass:payroll', plan: planFix }   /* waits for the hub: clock.edit is pin:true */
-  },
-  laws: { 'a break lies inside its shift': breakInside },
-  parity: function (p) { return [p.staffId, p.inTs, p.outTs, (p.breaks || []).map(function (b) { return [b.startTs, b.endTs]; })]; },
-  fixtures: ['fixtures/timeclock-v1.json'], budgetKB: 6
-}
-```
-
-The staff module's app part:
-- `stations: ['worker']`. PIN screens need the hub's hashes, so the gate stands in front of them.
-- `people(facts)`, the fold the people service reads. Only the module that provides staff may set it.
-- `fromSetup`, which is today's `setOf`.
-- Commands:
-  - `'staff.first'` with `actor: 'first'`;
-  - `'staff.add'` with `actor: 'pass:employees'`.
-
-  Both write `staff.set`. PINs are hashed while the details are gathered, so a command carries `{salt, hash, iter}` and never the digits.
-
-**What is declared (data):**
-- name, version, requires, authority, `pin`, and the new `money: true` on a fact type;
-- `stations`, `noun`, and each collection's `legacy` policy (`seal`, `import` or `none`);
-- for each command, `writes` and `actor`.
-
-`actor` takes one of these forms:
-
-| Form | Meaning |
+| The code is… | Then |
 |---|---|
-| `self` | The person matched by PIN on this screen, matched less than 60 s ago. |
-| `right:<r>` | Asked now; a local PIN match of someone holding `r`. |
-| `pass:<r>` | Asked now, plus a pass from the hub's PIN check. |
-| `first` | Allowed only while the hub has no staff yet. |
-| `device` | No person. |
+| generic, and running at the shop | it comes here through the exporter, unedited, with the shop's own proofs. It is never rebuilt. |
+| generic, but tangled with the shop's own rules | it is untangled **in the shop's v2 first** (a normal v2 change: the shop's suite, a 7 PM deploy with the owner's yes, then daily use), and exported after that. |
+| the shop's own: its screens (v1's code, copied verbatim), its price rules, its card processor, its text provider | it stays private. A module here is written in the shop's shape, not copied. |
+| needed here and not at the shop (breaks, auctions) | it is this repo's own module, in the same shape. If the shop ever wants it, it moves into v2 the same way. |
 
-Whether a command waits for the hub (`confirm`) is worked out, not written. A command that writes any `pin: true` type waits for the hub's answer before it says done. Every other command confirms on the tablet; a command may also set `confirm: 'hub'` itself, as `gift.redeem` does.
+Two consequences:
+- **Fixes flow both ways.** A bug found here in a shared file is fixed in v2, proven by the shop's suite, and exported again. An
+  imported file is never patched here (already the rule; `PROVENANCE.json` checks it). A good idea that starts here and touches a
+  shared file goes into v2 first.
+- **What is shared is what the shop runs.** The exporter will refuse a file that changed after the build the shop is running, so
+  every shared file has run at a real shop before it is published here. `PROVENANCE.json` names the shop build it came from.
 
-**What is code (pure, no DOM, runs in Node):** validate, admit, rule, fold, `view`, `plan`, `rows`, `seal`, the `laws` and `parity`. A plan returns `{ facts, log }` or `{ refuse }`. Returning nothing is a module bug, and the kit catches it.
+This amends Part 2's "rebuilt rather than copied". That still holds for the shop's screens and rules (about 1.57 MB of v1 code
+copied verbatim, with the shop's rules inside). It no longer holds for generic pieces.
 
-**What define.js checks** (repo-owned, about 60 lines): the app part's shape, that `seal` is present for `legacy: 'seal'`, and that the actor forms are valid. `assemble` then checks the whole build:
-- every `writes` type is owned by this module or one it requires;
-- a `pin` type is asked with `pass:` (or `first`);
-- a `money` type never has authority `any` and is never written by a `device` command;
-- no command or collection has two homes.
+### 2. How the shop's app is built
 
-```js
-/* @facts @module @permission — the app parts against the judge: a command writes only what this hub judges, a PIN-checked type is asked with a hub pass, money names a person, one home per command */
-mods.forEach(function (m) { if (!m.app) return; Object.keys(m.app.commands).forEach(function (n) { const c = m.app.commands[n];
-  if (cmds[n]) throw new Error('command ' + n + ' is claimed by both ' + cmds[n] + ' and ' + m.name); cmds[n] = m.name;
-  c.writes.forEach(function (t) { const r = rules[t];
-    if (!r || (r.module !== m.name && m.requires.indexOf(r.module) < 0)) throw new Error(m.name + ' · ' + n + ' writes ' + t + ', which it neither owns nor requires');
-    if (r.pin && !/^(pass:|first$)/.test(c.actor)) throw new Error(m.name + ' · ' + n + ': ' + t + ' needs a PIN the hub checked — actor pass:<right>');
-    if (r.money && (r.kind === 'any' || c.actor === 'device')) throw new Error(m.name + ' · ' + n + ': ' + t + ' is money and must name a person'); }); }); });
-```
+The shop's tablet page is `station/app.js` (7,110 lines). Beside it are 89 files in `core/` (the engine, the rules and the
+screens), 22 folds in `aggregates/`, and the engine this repo already imported. Its pattern has five parts:
 
-**One module list.** A new file, `facts/modules/index.js`, lists the modules with plain `require`s. server.js uses it instead of the hard-coded list at line 188, and `/v2/health` adds `modules: [{name, version}]`. bundle.js works out `FILES` by following requires from its entry points, so a new module is one line in `index.js`.
-
-**Shared id rules.** `facts/modules/ids.js` holds `STATION = [A-Za-z0-9][A-Za-z0-9 _.:-]{0,63}` and `FACT_ID`. Connect in gate.js, enrolment in server.js (which refuses names outside the grammar) and `admitBreak` all use it.
-
-### 3. The browser runtime
-
-**Where it lives:** two new repo-owned files, both in the bundle's `FILES` and exposed as `CustomPOSFacts.app`. The hub never loads either file.
-- `facts/app/runtime.js`, about 280 lines, with no DOM.
-- `facts/app/gate.js`, about 120 lines. It draws the facts-mode cards using `textContent` only and pos.html's CSS classes, and keeps today's DOM ids.
-
-Rules for these files, enforced by bundle.js: none of the words `arguments` or `eval`, and no `Function(`, even in comments; no DOM or storage access when the file loads; plain relative `require`s only.
-
-**Size.** About 36 KB raw and 10 KB gzipped at this repo's density, which brings the bundle to about 253 KB raw and 77 KB gzipped. Move the cap in bundle.test.js to 280/85 KB and print a size report per file. Blob downloads add 0 bytes.
-
-**API**
-
-```
-rt = CustomPOSFacts.app.start(host, moduleNames)
-     host: { flow, flowId, cfgKey, setupStaff, now, requestRender(why), report(words, kind), busy(label, promise), activity(type, words) }
-rt.ready() / rt.status() → { state, text, owed: {punch: 2}, refused: [{ id, what, why }] }
-rt.connect(hub, name, token)   one at a time: a second call gets the first call's promise
-rt.disconnect({force}) / rt.retry()      retry: a lease tick only, never a save
-rt.owns(col) / rt.overlay(db) / rt.strip(db) / rt.serves(stationType) / rt.handles(cmd)
-rt.people() / rt.whoByPin(pin, ok) / rt.pass(who, pin)
-rt.act(name, args, who) → { ok, why?, pending, settled: Promise }      returns at once
-rt.gate(app, station) → true when a card was drawn                    (gate.js)
-```
-
-**What it owns**
-
-| Concern | Behaviour |
-|---|---|
-| Connect | One at a time. Checks the name with `ids.STATION`. Sends an empty receive so the hub judges name and token. The token goes only to the station's own access store. Keeps today's `custompos_facts_<flow>` key and `custompos-facts-` IndexedDB prefix. |
-| Status | One text. It never says "up to date" while anything is refused, read-only, revoked or on a wrong clock. Owed facts are counted by module noun ("1 punch waiting to send"). |
-| Lease / read-only | `tick()` on every cycle, close on `pagehide`. A read-only tab has no write path. It shows its own log as it was when opened, labelled "read-only here: figures as of 14:02". |
-| People / PIN | `whoByPin` checks one PIN at a time, tries the last match first, and always clears busy in a `finally`. It returns a person object the runtime remembers for 60 s; a bare id is never accepted as an actor. `pass` calls `/v2/pin`. Passes are kept in memory until they expire and ride only with the sends whose facts name that person. |
-| Pull loop | One cycle in flight: tick, commit, `pullAsync`, then the redraw check. Every 5 s. |
-| Views | Folded over the facts the hub witnessed plus this tablet's own unsent facts, minus refused ones. Memoized by (log length, refused count). |
-| Projection | `rows(view)` plus the sealed legacy rows. Kept in memory only, never saved (finding 1.6). |
-| Redraw | `host.requestRender` is called only when (log length, refused count, status text) moved. |
-| Refusals | A transport wrapper reads every `eventAcks` entry. The first time a fact is refused, it is said once with the command's words; a later admission clears it. |
-| Version | An "update this tablet" card when the hub lacks a module or version this tablet runs. |
-
-**The command path:**
-
-```js
-/* @facts @storage @invariant — one command: refused, or its facts recorded together and the views redrawn; nothing waits between reading the view and recording */
-function act(name, args, who) {
-  const c = cmds[name];
-  if (!c) return no('no module here has "' + name + '"');
-  if (!ready()) return no(status().text);                                    /* not connected, read-only, revoked, wrong clock (1.6, 1.7) */
-  const k = name + '|' + JSON.stringify(args); if (inflight.has(k)) return inflight.get(k);   /* a double tap is one command */
-  const bad = actorProblem(c, args, who); if (bad) return no(bad);
-  const out = c.plan(args, { view: viewOf(c.module), now: host.now(), name: nameOf, station: st.id });
-  if (!out || (!out.refuse && !(Array.isArray(out.facts) && out.facts.length))) return no('the ' + name + ' command said nothing (a module bug)');
-  if (out.refuse) return no(out.refuse);
-  const why = precheck(out.facts, who); if (why) return no(why);             /* validate, admit, then the hub's own judge over the staff the hub witnessed (1.5) */
-  const ids = out.facts.map(function (f, i) { return st.record(f.type, f.key, f.payload, { actor: who ? String(who.id) : null, defer: i < out.facts.length - 1 }).id; });
-  label(ids, name, who); if (out.log) host.activity(out.log[0], out.log[1]); changed();
-  const r = { ok: true, pending: c.confirm === 'hub', settled: c.confirm === 'hub' ? verdict(ids, 10000) : Promise.resolve({ ok: true }) };
-  inflight.set(k, r); r.settled.then(function () { inflight.delete(k); }, function () { inflight.delete(k); }); return r;
-}
-/* @sync @facts — every send carries the passes its facts need, and every answer is read here first: a refusal is kept by fact id and said once, an admission clears it and settles whoever waits */
-st.setTransport(function (b) { b.grants = passesFor(b.events);
-  return remote.receive(b).then(function (res) { (res && Array.isArray(res.eventAcks) ? res.eventAcks : []).forEach(noteAck); return res; }); });
-```
-
-How the pieces behave:
-- `no(why)` always calls `host.report`, so a screen that ignores the result still cannot hide a refusal.
-- `precheck` is `assemble(mods, { noPins: true }).judge` with these inputs:
-  - `master` is the facts the hub witnessed;
-  - `staged` is the earlier facts in the same plan;
-  - "that person is not on staff" is let through as waiting, because the hub may know them.
-- `verdict` settles as admitted, as refused with the hub's reason, or after 10 s as "saved here, not confirmed yet", which is never shown as success.
-
-### 4. The storage seam
-
-The seam goes just before `let DB = loadDB()` (pos.html:485).
-
-```js
-/* @storage — this device's hub settings key: the address and the name only, never the token */
-function factsKey(){ return "custompos_facts_"+flowId(); }
-/* @storage @startup — THE SEAM, chosen once, before the shop is first read: this file alone, or the bundle's runtime for its modules' collections; everything else stays here, SYNC included */
-const HOST = { flow:FLOW, flowId:flowId(), cfgKey:factsKey(), setupStaff:FLOW.staff||[], now:()=>Date.now(), requestRender, report, busy, activity:logActivity };
-const RT = FLOW.storage!=="facts" ? null : (globalThis.CustomPOSFacts && CustomPOSFacts.app) ? CustomPOSFacts.app.start(HOST, factsModules()) : missingEngine();
-const STORE = { mode:RT?"facts":"blob", owns:c=>!!(RT&&RT.owns(c)), overlay:d=>RT?RT.overlay(d):d, strip:d=>RT?RT.strip(d):d, gate:(a,s)=>RT?RT.gate(a,s):false,
-  people:()=>RT?RT.people():(FLOW.staff||[]),
-  whoByPin:(pin,ok)=>RT?RT.whoByPin(pin,ok):Promise.resolve((FLOW.staff||[]).find(s=>(!ok||ok(s)) && String(s.pin)===String(pin))||null) };
-/* @storage @permission — every write a screen makes: one command by name, in this shop's mode; a refusal is said, never drawn as success */
-function act(name, args, who){
-  if(RT && RT.handles(name)) return RT.act(name, args, who);
-  const fn=BLOB[name]; if(!fn){ report("This POS has no "+name); return { ok:false }; }
-  DB=loadDB(); const r=fn(DB, args, who)||{};
-  if(r.refuse){ report(r.refuse); return { ok:false, why:r.refuse }; }
-  saveDB(DB); if(r.log) logActivity(r.log[0], r.log[1]); return { ok:true, settled:Promise.resolve({ ok:true }) }; }
-/* @render @input — the one way anything but a tap redraws (a pull, SYNC, a timer, another tab): never over typing; a held redraw runs at the next tick that finds nobody typing */
-function requestRender(why){ if(typing()){ requestRender.held=true; return; } requestRender.held=false; render(); }
-/* @input — is someone typing in a box on this screen right now */
-function typing(){ const a=document.activeElement, app=document.getElementById("app"); return !!(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && app && app.contains(a)); }
-```
-
-Supporting pieces:
-- `BLOB` is built from the `MODULES` registry. For example, `clock: { label:"Time clock", stationTypes:["timeclock"], facts:"timeclock", blob:CLOCK_BLOB }`.
-- `factsModules()` names the enabled entries that have `facts:`.
-- `missingEngine()` draws "this download is missing its engine" on those stations. Today such a page silently falls back to blob mode and the data splits.
-- A held redraw is deliberately **not** released on `focusout`, because a redraw between the blur and the click would swallow the tap.
-
-**Reads.** `loadDB()` ends with `return STORE.overlay(dbDefaults(d))`, so every reader, backups included, sees the projections. Until the runtime is ready, an owned collection holds only its legacy rows, and the gate shows "Connecting to the hub…".
-
-**Writes.** Every write goes through `act(cmd, {ids…})`, with ids and never record objects. `persistDB` starts with `db=STORE.strip(db)`: owned collections are written as their legacy rows only, never as a projection. Both `overlay` and `strip` do nothing in blob mode, so blob writes stay byte-identical. Approvals become "gather, then change":
-
-```js
-const who = await person({ action:"refund", label, ok:s=>s.role==="owner"||s.role==="manager" });   /* busy() clears in finally (1.8) */
-if(who) withApprovalOn(r.id, who, rec=>refundRecord(rec));                                          /* the record read fresh by its id (1.0) */
-```
-
-**SYNC.** `applyRemote` compares the `fingerprint` of records, customers and seq before and after the merge, and calls `requestRender("sync")` only when something changed (finding 1.3). `push` and the merge skip any collection where `STORE.owns()` is true. Today that is none; in Stage 4 it is `customers`. The `storage` listener and the 30 s clock timer call `requestRender` instead of `render`.
-
-**The 14 `FACTS.on` branches**
-
-| Today | After |
-|---|---|
-| 800, 803 `withApproval` | `person()`; "connect first" is a runtime refusal |
-| 1415 `clockEnter` | `STORE.whoByPin(pinBuf)` inside `busy()` |
-| 1419-1422, the four punches | `act("clock.in" …)` etc.; the old bodies move to `CLOCK_BLOB` |
-| 1424 staff list | `STORE.people()` |
-| 1425, 1848 gates; 1487 status line; 1496 team card | one `if(STORE.gate(app, station)) return;` in `render()`, drawn only for stations a module serves |
-| 1862 (two uses) worker PIN | `STORE.whoByPin` |
-| 2594 `factsBoot()` | building `STORE` |
-
-A static check, `tests/seam-guard.js`, keeps three things out of the screens:
-- any `FACTS.` reference;
-- `render()` inside timers or `fetch` callbacks;
-- direct writes to an owned collection outside `BLOB` bodies.
-
-### 5. Porting the time clock
-
-```js
-/* @timeclock — clock in from the PIN pad, in either mode: the Welcome only for a punch that was recorded; a refusal is said by act() */
-function clockIn(staff){ const r=act("clock.in", { staffId:staff.id }, staff); if(r.ok){ clockWelcome={ name:staff.name, inbound:true, staffId:staff.id }; clockAction=null; pinBuf=""; } render(); }
-```
-
-`CLOCK_BLOB` holds the four old bodies, keyed by command name, each running on a DB read fresh for it. The blob `clock.in` adds the "already on the clock" refusal. Through the PIN pad nothing changes, because `clockEnter` already sends someone who is on the clock to the action screen. The four functions stay as globals that return at once, because tests/facts-clock.js:156 calls them.
-
-| | Before | After |
+| Part | Where in v2 | What it does |
 |---|---|---|
-| Facts glue in pos.html | 1222-1409, 188 lines | 0 (moved to runtime.js and gate.js) |
-| `FACTS.on` branches | 14 | 0 |
-| Added to pos.html | none | seam, `act`, `person`, `requestRender`/`typing`/`report`/`busy`, `esc` (renamed from `factsEsc`): about 45 lines; `CLOCK_BLOB` about 10 |
-| Edited | none | about 30 lines: the clock functions, `clockEnter`, the head of `renderTimeclock`, the worker gate and PIN, `withApproval` and its 2 call sites, `applyRemote`, the listener, the timer, `loadDB`/`persistDB`, the `render()` gate line, the Office `esc` sites |
+| **One door** | `rec(type, key, payload, actor)` in `station/app.js` | Records one fact on this tablet under the person whose PIN approved it, or else whoever is working the screen. A refused fact shows why and returns false. |
+| **Screens read folds** | `views()`, `logFold(name)`, `foldOnce`, `followerOf` in `station/app.js`, over `core/incfold.js` | Every number on screen is folded from the facts, one fold per subject (orders, money, customers, clock, staff…). Each fold follows the log one fact at a time, so a tap costs the same in year five as on day one. An answer is reused until a fact arrives. A "screen check" switch freezes the answers and compares each followed fold with a whole fold, so a screen that writes into shared data names itself. |
+| **Each function is a kit** | `core/<name>.js`: `kit(env)`, and below `/*ADAPTER*/`, `kitFor(folds, ctx)` | The kit is the screen code, written against a `DB` in the old shape and handed its doors (`toast`, `modal`, `can`, `saveDB`…). The adapter builds that `DB` from the folds, and gives the kit a `saveDB` that compares the `DB` with what it was and hands the differences to `ctx.onSave(facts)`. Example: `core/stafftime.js`, where a signed time change becomes a `punch.ack` fact. |
+| **Redraw only on change** | `syncNow`, `syncRepaint`, `typing()`, `homeDue()` in `station/app.js` | One sync tick every 5 seconds. The screen is redrawn only when the tick brought new facts, never while someone is typing in a box, and Home only when something it shows changed. |
+| **The hub checks the PIN** | `hub/pingrant.js`, `PIN_CHECKED` in `core/staff.js`, `hub/authority.js` | A PIN checked by the hub earns that person on that tablet a 30-minute pass. Privileged facts (people, roles, payroll edits, refunds…) are admitted only with one. Clock-in and clock-out are never checked, so the internet never keeps anyone off the clock. A change made after a pass ended waits on the tablet until that person's next PIN sends it. |
 
-The net is about −135 lines (2,601 to about 2,465), with roughly 10% of the file touched and no screen rewritten.
+Under it all, the registry (`core/registry.js`, already imported) gives every fact type its one fold and its checks, including
+the id rule (letters, digits and `_ . : -`, 1 to 64 of them) for any id a new fact creates.
 
-**What stays:** `renderTimeclock`'s screens, `openPunch`, `workedMs`, `breakDue`, the tip pool, labor cost and reports. All of them read `DB.punches` as before. `factsKey()` and every DOM id the suite selects also stay, so tests/facts-clock.js and builder-facts.js should pass unedited.
+### 3. What this repo has today, and what replaces it
 
-**How existing data moves.** On the first boot as the writer:
-- the legacy rows are `db.punchesBeforeFacts` if present (Stage 2 test devices only; Stage 2 was never published), otherwise `db.punches`;
-- each open row is sealed at that moment, and a notice names it;
-- `factsSince` marks that it was done, so running it twice changes nothing;
-- the IndexedDB log and the token are untouched, so no tablet has to reconnect.
-
-### 6. Fitting the next modules
-
-**Stage 3 - `rowModule()`.** Booking, schedule, floor, KDS and route mostly save rows whole. One helper gives each of them `<p>.put` and `<p>.void` facts:
-- the latest put wins;
-- the engine already stamps `basedOn` on each fact, so a write based on an older copy shows as a conflict;
-- `legacy: 'import'` brings in each device's rows once, de-duplicated by blob id;
-- it is never used for money.
-
-Each Stage 3 module is about 30 lines plus its `BLOB` table, with no screen changes.
-
-**Customers (Stage 4).**
-- Collection `customers`, keyed by phone, with `legacy: 'import', once: 'shop'`. These rows already ride SYNC, so one device imports them under an owner pass, and SYNC then stops carrying them.
-- Commands: `customer.save`; `gift.redeem` (`money`, `confirm: 'hub'`, so an offline device cannot spend the same card twice); `account.charge` (`pass:checkout`).
-- Balances are folds over facts, never fields that get set.
-
-**Orders (Stage 5).**
-- Collection `records`, projected field for field, with the shop-once import.
-- Fact types:
-  - `order.open`;
-  - `order.line`;
-  - `order.stage`, whose `admit` comes from the flow's `stateMachine` (law 3);
-  - `order.pay` (`money`, `right:checkout`);
-  - `order.refund` (`pass:refunds`, never more than was paid);
-  - `order.close`.
-- The 73 `saveDB(` sites can move to `act()` before Stage 5. Commands no module claims run their `BLOB` body in both modes, so the orders module later takes them over without touching the call sites.
-
-**Auction lots.** The generic part is public; each company's premium and terms live in its private flow and its own prefixed module.
-
-```js
-defineModule({ name: 'auction', version: 1, layer: 'pack:auction', requires: ['staff', 'customers'],
-  aggregate: { name: 'auction', fold: foldSale, inc: incSale },                 /* bids ranked by hub position, never by a tablet's clock */
-  facts: { 'lot.set':    { authority: 'needs:catalog',    validate: vLot },
-           'bid.floor':  { authority: 'needs:clerk',      validate: vBid, rule: aboveHigh, reads: 'own' },
-           'bid.online': { authority: 'hub-only',         validate: vBid, rule: aboveHigh, reads: 'own' },
-           'lot.hammer': { authority: 'needs:auctioneer', pin: true, money: true, validate: vHammer, rule: lotOpen, reads: 'own' },
-           'settle.pay': { authority: 'needs:cashier',    pin: true, money: true, validate: vPay, rule: notOverpaid, reads: 'own' } },
-  hubServices: [{ door: 'POST /v2/svc/auction/bid', writes: ['bid.online'] }],
-  app: { stations: ['auction-block', 'auction-settle'], collections: { lots: { rows: lotsRows, legacy: 'none' } }, screens: 'auction.screens.js',
-         commands: { 'bid.take':  { writes: ['bid.floor'],  actor: 'right:clerk',      confirm: 'hub', plan: planBid },
-                     'lot.sell':  { writes: ['lot.hammer'], actor: 'pass:auctioneer',  plan: planHammer } } } });
-```
-
-Invoices and statements call `packs/auction/feemath.js`. A facts-only module adds 0 lines to pos.html: `render()`'s dispatch gains one generic "a module screen for this station type" line.
-
-**Gaps the shape does not yet cover:**
-- **G1. Rules that read the module's own state** (above the high bid, a refund within what was paid, a lot still open). Pass the hub's `readers` into `rule(p, who, staff, e, own)`, with this send's staged facts folded on top. Allow `reads:'own'` only with `aggregate.inc`, so the hub steps one shared follower instead of keeping a copy.
-- **G2. People who are not staff** (online bidders). server.js runs declared `hubServices` doors, checks a bidder token there, and writes `hub-only` facts.
-- **G3. Numbers people read** (order numbers, paddles, lot numbers). A `sequences` declaration: the hub assigns the number when it admits the fact, and the screen shows "#pending" until then.
-- **G4. Per-shop bundles.** Every download carries every module; feemath alone is 61.8 KB. The builder should pack only the modules a shop uses (Stage 8, pulled forward for the auction).
-- **G5. Personal details kept forever.** Decide before Stage 4 (see the decisions below).
-- **G6. Outside effects.** `refundRecord` charges the card before it saves. Effects move to after the hub's verdict (Stage 6, law 5).
-- **G7. Big collections.** Records need incremental `rows` from `aggregate.inc`, not refolds.
-
-### 7. Conformance kit
-
-Every module in `modules/index.js` gets these checks for free. Each check ships a deliberately broken copy that it must fail on; `tools/controls.js` applies `{file, find, replace}` and requires the check to go red.
-
-**Node checks** (`facts/test/module-kit.test.js`):
-- **N1 Manifest closure:** the define and assemble checks above.
-- **N2 Ids:** station names across the whole grammar (spaces, dots, colons, 64 characters); every planned fact passes validate and admit.
-- **N3 Plans:** run on a deep-frozen view; deterministic; facts or a refusal, never a throw or nothing.
-- **N4 Judge parity:** for every role and right, the browser precheck and the hub judge agree (PINs aside).
-- **N5 Folds:** the same view in any arrival order; duplicates change nothing; fixtures fold to their saved views; the declared `laws` hold.
-- **N6 Pass cost:** for every pin type, 200 facts carrying 5,000 junk passes cost at most 800 HMACs, counted rather than timed.
-
-**Browser checks** (`tests/module-kit.js`, run on a real hub at 127.0.0.1, both modes):
-- **B1 Parity:** the module's script run in blob mode and in facts mode under a fixed clock gives equal `parity()` results; the `BLOB` names equal the command names.
-- **B2 Hostile strings:** on every station, the Office included, `window.__pwned` stays undefined and there are 0 console errors.
-- **B3 Typing:** typing key by key survives 7 s of pulls, SYNC polls and timers.
-- **B4 Refusals:** a precheck refusal and a late hub refusal are both shown on whatever screen is open; the refused fact leaves every view; no success text appears.
-- **B5 Two tabs:** the read-only tab changes nothing in localStorage or in the writer tab's view.
-- **B6 Connect races:** a double Connect, Connect during boot, and Disconnect during a pull all end with one station and one timer.
-- **B7 Stale gather:** an `applyRemote` injected during every `person()` step; the change still lands on the fresh record.
-- **B8 Busy:** no busy message survives a PIN check.
-- **B9 Switch:** an open legacy row, then the switch to facts mode; that person can still act; switching twice is the same as once.
-- **B10 Write guard:** owned collections are handed to screens as Proxies whose traps throw. pos.html is not in strict mode, so freezing alone fails silently.
-
-**The findings**
-
-| Finding | Result |
+| Stage 2 today (unpublished) | Replaced by |
 |---|---|
-| 0.2, 1.4 name vs `SHIFT_ID`; silent refusal | Impossible: `ids.js`, and `report()` shows on every screen. N2, B4 |
-| 1.0 stale record after an approval | Impossible for `act` writes: gather first, then re-read by id. B7 |
-| 1.1 open pre-hub punch stuck | Impossible: sealed at the switch; a plan never returns nothing. N3, B9 |
-| 1.2 Office XSS | Caught: one `esc`; the Office sites are fixed in step 1. B2 |
-| 1.3 redraw over typing | Impossible: `requestRender`. B3 |
-| 1.5 refused team add claims success | Impossible: precheck with the hub's judge; `staff.add` waits for the hub; refused facts leave views. N4, B4 |
-| 1.6 read-only tab saves frozen data | Impossible: projections are never saved; a read-only tab has no write path. B5 |
-| 1.7 double Connect | Impossible: one connect at a time, plus in-flight dedup. B6 |
-| 1.8 "Checking…" stuck | Impossible: `busy()` clears in `finally`. B8 |
-| 2.1 pass bound untested | Caught by N6 for every pin type |
-| 2.2 break cap untested | Caught by N5 where the module states the law (the time clock does) |
-| 2.4 redraw and status untested | Caught by B3 and B4 for every module |
-| 2.5 "every fix has a failing test" | Turned into a printed check by the controls runner |
-| 0.4, 2.0, 2.3, 2.6 (and 0.1, 0.5, 0.6) | Left to the staff module, the builder, the docs and the hub fix |
+| the FACTS MODE block in `pos.html` (about 190 lines: connect, pull, refresh, record, status) | the shop's door and folds, exported (rollout steps 1 and 3) |
+| 16 places in `pos.html` that ask `FACTS.on` | none: the time clock becomes a kit, and a kit does not know which mode it runs in |
+| `facts/modules/staff.js`, rebuilt, with its own fact type `staff.set` | the shop's `aggregates/staff.js` and `core/staff.js`: `employee.set`, field by field, and `staff.roles` |
+| `facts/modules/pingrant.js`, rebuilt | the shop's `hub/pingrant.js` (91 lines, nothing of the shop's in it) |
+| a planned `ids.js` | nothing new: the registry's id rule is already here |
+| a planned way to close old open shifts at the switch | the shop's way: old punches come over as history (`aggregates/punches.js`), and an open one ends at that person's next clock-out (`station/app.js`: "a shift begun on v1 ends here") |
+| the time clock module, `facts/modules/timeclock.js` | kept: it already uses the shop's `clock.*` types and fold. Breaks stay this repo's own (`clock.break`), because the shop has no breaks. |
+| `define.js`: a module declares its facts, who may write them and which need a PIN | kept for this repo's own modules. In the shop the same rules are central lists (`hub/authority.js`, `PIN_CHECKED`); see section 6. |
+
+### 4. The time clock, rebuilt in the shop's shape
+
+- **`clockKit(env)`**: today's blob-mode clock code (`clockIn`, `clockOut`, `startBreak`, `endBreak`, the PIN pad), moved into one
+  function. It reads `DB.staff` and `DB.punches` and calls `saveDB()`. In blob mode, `env` is the real `DB` and the real `saveDB`,
+  so nothing changes.
+- **`clockKitFor(folds, ctx)`**: the adapter. It builds `DB.punches` from the clock fold and the breaks fold (Stage 2's compat
+  projection already does this). Its `saveDB` compares the punches with what they were: a new punch becomes `clock.in`, an out time
+  becomes `clock.out`, a break becomes `clock.break`. Those go to `ctx.onSave(facts)`, then through the door, under the person
+  whose PIN was entered.
+- **The wiring is the shop's.** The shop's page repeats the same few lines of `onSave` (record each fact under the right person,
+  then sync) 24 times. That becomes one helper in v2 first, and this repo uses the same helper.
+- **What goes:** the FACTS MODE block and the `FACTS.on` checks.
+
+### 5. The findings, and how this design answers them
+
+| # | Finding | How it is answered |
+|---|---|---|
+| 0.2, 1.4 | a device name with a space was taken, and the refusal was never shown | the registry's id rule, checked at Connect; the door shows every refusal |
+| 1.0 | a manager-approved refund logged, but the order stayed paid | the approval runs as a kit, and its save becomes the facts |
+| 1.1 | an open punch from before the hub stayed open forever | carried over as history; it ends at the next clock-out |
+| 1.2 | staff names ran as HTML in the Office report | one `esc()`, handed to every kit |
+| 1.3, 2.4 | the sync redraw wiped typing; "redraw only on a change" had no test | the shop's redraw rule, with its proofs |
+| 1.5 | a refused team add said "is on the hub" | the PIN pass: a privileged change without one waits on the tablet, counted in "waiting to send" |
+| 1.6 | a read-only second tab saved its frozen punches | folds are never saved, and only one tab writes (`store/browser.js`, already imported) |
+| 1.7, 1.8 | a double tap on Connect; "Checking…" left on screen | this repo's own (the shop connects by setup codes, which are v1's code): fixed and tested here |
+| 2.2 | the cap on breaks had no test | a law of the breaks fold, proven here |
+
+### 6. What the shop gains
+
+- Its generic app code moves out of the 7,110-line `station/app.js` into small files with their own proofs, easier to read and test.
+- The 24 copies of the `onSave` wiring become one.
+- Every shared file gets a second set of reviewers: this repo's tests and reviews run against the same file the shop runs. This
+  rewrite already checked one: the role-null gap above is not in the shop's code.
+- **Later, only if the owner wants it:** this repo's idea of a module declaring its own write rules and PIN checks (`define.js`)
+  could replace the shop's central lists, in v2 first. Then the two would share one module format.
+
+### 7. Fitting the next modules (Stage 3 and on)
+
+Checklists, time off, support tickets and supplies each have a small fold in v2 (`aggregates/checklist.js`, `timeoff.js`,
+`support.js`, `supplies.js`). They come over shared once checked for the shop's own rules. Their screens in v2 are v1's code copied
+verbatim, so the screens here are written as this repo's own kits, in the shop's shape. The auction modules are this repo's own,
+in the same shape.
 
 ### 8. Rollout
 
-Each step ships on its own, and every suite stays green at each step.
+1. **In the shop's v2 (the owner's yes; deployed at 7 PM):** move the generic app code out of `station/app.js`, unchanged:
+   `station/views.js` (the folds the screens read, the followers, the screen check) and `station/record.js` (the door and one
+   `onSave` helper). The shop's full suite and the screen check prove it. Nothing changes at the counter.
+2. **In the shop's v2, a separate deploy:** untangle the staff rules. The discount helpers leave `core/staff.js` (they reach into
+   the shop's price rules), and the list of abilities (Void, Un-rack, Payroll…) becomes one a shop's modules add to, with the
+   shop's own list added at start. This touches the shop's permissions, so it is its own step, with its own proofs.
+3. **The exporter:** add those files and `hub/pingrant.js`, `aggregates/staff.js`, `core/staff.js` and `aggregates/punches.js`,
+   with the suite sections that prove them. Add the check that a file has not changed since the build the shop is running.
+4. **Here:** import them. Replace the rebuilt staff and PIN files, and the `staff.set` type.
+5. **Here:** the time clock as a kit and an adapter. Delete the FACTS MODE block and the `FACTS.on` checks. The parity tests
+   (`tests/facts-clock.js`, `tests/builder-facts.js`) must pass, changed only where they name the old staff fact.
+6. **One skeptic pass, then the owner's yes to publish.**
 
-1. **pos.html host seam, blob behaviour only.**
-   - `requestRender` and `typing`; SYNC redraws only on a change.
-   - `person()` and `busy()`; approvals change the record by id.
-   - `esc`, and the Office escapes staff names.
+### 9. Risks
 
-   This fixes 1.0, 1.2, 1.3 and 1.8 in both modes. Add B2, B3, B7 and B8 for blob mode.
-2. **The contract.**
-   - `ids.js`, used by Connect, enrolment and `admitBreak`.
-   - define.js `app`, `money` and `writes` checks; `modules/index.js` read by server.js and bundle.js; the module list in health.
-   - App parts for staff and the time clock.
-   - Node kit N1-N6.
+- **Steps 1 and 2 touch the shop's live tablet page and its permissions.** Step 1 is a pure move, step 2 a careful one, and the shop
+  runs on both. Each gets the full suite, the screen check, a 7 PM deploy, the owner's yes, and a one-commit revert.
+- **An adapter can misread a change**, since it compares before and after. The shop has run its kits this way every day since 9/30.
+  Here, the parity test guards it: the same taps in blob mode and facts mode must give the same hours, tips and labor cost.
+- **Shared files tie the two together.** A change in v2 can break this repo at the next import. That is the point: it is found
+  here, and fixed in v2 for both.
 
-   pos.html does not change.
-3. **`act()` and `CLOCK_BLOB` in pos.html, still blob only.** The clock globals become thin wrappers, with identical behaviour.
-4. **The runtime.**
-   - runtime.js and gate.js go into the bundle, with the new cap, and `facts.bundle.js` is rebuilt.
-   - Facts mode switches to `STORE`; the FACTS block is deleted; legacy punches are sealed.
-   - Acceptance: facts-clock.js and builder-facts.js pass unedited.
-5. **The browser kit and the controls runner.**
-6. **Acceptance of the design:** the first Stage 3 module, built with `rowModule`. A facts-only module touches 0 lines of pos.html; a dual-mode one touches about 12, its `BLOB` table.
+### 10. Decisions for the owner
 
-**What not to do:**
-- Never save projections.
-- Never let SYNC and a module own the same collection.
-- Never put DOM code in a file the hub loads.
-- Never move a dual-mode module's screens into the bundle while blob mode lives.
-- Never narrow a released validator.
-- Never edit the imported `facts/` files listed in PROVENANCE.json.
-- Never change the cfg key or the IndexedDB prefix.
-- Do not rewrite the 162 `innerHTML` sites.
+The first version asked five questions. The shop already answers four of them.
 
-### 9. Risks, and what to cut
-
-**Risks:**
-- **Two bodies per command (blob and facts).** B1 parity is the guard, and it is only as good as each module's script. Blob bodies retire when a module becomes facts-only.
-- **The precheck can run behind the hub.** It may admit something the hub refuses. The hub stays final and the refusal is shown.
-- **Refused facts are sent again on every commit,** by the engine's own design. The precheck keeps this rare; setting them aside needs an engine change at the origin.
-- **Size.** About 253 KB now, and growing with every module until per-shop bundles exist.
-- **Gating only served stations** means approvals on other stations depend on `person()` refusing politely when not connected.
-- **Projection cost at Stage 5.** Records need G7 before orders move.
-
-**Cut first:**
-1. Module screens for facts-only modules, until the auction needs them.
-2. The controls runner beyond a declared list of broken copies.
-3. Generated histories in N5; keep the fixtures plus hand-written hostile histories.
-4. The version card; health plus a status line is enough at first.
-
-**Never cut:** one write path, one redraw path, refusals shown on every screen, projections never saved, connecting one at a time, and B1-B6.
-
-### 10. Decisions for the owner (open)
-
-1. **Moving to several computers while people are on the clock.** We can close every open shift at the moment of the switch and list the closed shifts on screen, so people clock in again and lose at most a minute. Or we can carry the open shifts onto the hub, which only works once everyone is on the hub, and more can go wrong. *Recommendation: close them at the switch and show the list.*
-2. **Which actions wait for the hub before they say "done".** *Recommendation:* only staff changes, PIN-checked hour corrections, refunds, and gift-card or charge-account spending. Punches and sales say "saved" at once and send later, so a dead internet never keeps anyone off the clock or the register.
-3. **Going back to one computer.** *Recommendation:* the shared hours stay on the hub. A single computer gets them only by a deliberate "take a copy" step, never automatically, so a stale copy can never overwrite real hours.
-4. **Customer and bidder contact details.** Facts are kept forever. *Recommendation:* before customers move (Stage 4), keep names, phones and emails in a changeable list on the hub that can be erased on request, and put only an id in the facts.
-5. **Download size.** *Recommendation:* raise the size limit now to about 280 KB so the shared engine fits. Before the auction module ships (its fee math alone is 62 KB), make the builder pack only the modules each shop uses.
+1. **Moving to several computers while people are on the clock.** *The shop's answer, adopted:* old punches come over as history,
+   and an open shift ends at that person's next clock-out. Nobody has to clock in again.
+2. **Which actions wait for the hub.** *The shop's answer, adopted:* nothing waits when it is written. A privileged change needs a
+   pass from a PIN the hub checked; one made without a pass waits on the tablet until that person's next PIN. Clock-in and
+   clock-out never wait.
+3. **Going back to one computer.** *The shop's answer, adopted:* only by a deliberate step, never automatically. That is how the
+   shop's own way back from v2 to v1 was planned.
+4. **Customer and bidder contact details.** *Open, not needed before Stage 4.* The shop keeps them in its facts and never deletes
+   them. A business that must erase a person's details on request (an auction's bidders, for example) would need an erasable list
+   instead. If that is built, it is built in v2 first, so both systems share it.
+5. **Download size.** *Not a shop question.* The shop's tablets load a 2.9 MB page (912 KB compressed) every day. This repo's own
+   limit is raised as shared files arrive, measured compressed. A builder that packs only the modules a shop uses comes later.
 
 ---
 
@@ -837,8 +545,9 @@ Every stage ends at the same **standing gate**, on top of its own:
   blob mode.
 
 ### Stage 2 — Module system, plus the first module (Time clock)
-*Status, 2026-10-31: the hub half is built. The app half is held until it runs on [Part 3b](#part-3b--the-app-side-module-system)'s
-runtime; Part 3b's rollout replaces the hand-wired facts mode in `pos.html`.*
+*Status, 2026-10-31: the hub half is built. The app half is held until the time clock runs in the shop's shape, on files shared
+with the shop ([Part 3b](#part-3b--the-app-side-module-system)). Part 3b's rollout replaces the hand-wired facts mode in `pos.html`,
+and the rebuilt staff and PIN files with the shop's own.*
 
 - **What:**
   - `defineModule()`, the manifest checks (requires-closure, authority entries for every privileged type,

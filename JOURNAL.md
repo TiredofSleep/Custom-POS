@@ -1559,3 +1559,29 @@ The findings, by number (Part 3b refers to them):
 
 Refuted: a clerk putting a break on a coworker's shift, and a future-dated break. Neither gets around anything. Punches carry no PIN
 by design, and that trust is the same in blob mode.
+
+### Built like the shop, not beside it
+The owner read the panel's design and asked: *"i thought this was all organized and modeled around the POS i have running at my
+shop... ?"* Only the engine was. The panel had read this repo and nothing else. The shop's own tablet app had solved the same
+problem, and has run its answer every day since the 9/30 switch:
+- one door for every change;
+- screens that read folds;
+- each function a kit with an adapter;
+- a redraw only when a fact arrives;
+- a PIN the hub checks.
+
+The panel's design rebuilt most of that under new names.
+
+Rebuilding had already cost a bug. Finding 0.4, a `role: null` that got past the last-owner rule, was in this repo's rebuilt staff
+module. The shop's staff fold never had it: there, a null role leaves the role as it was.
+
+Then the owner set the rule: *"the point is for all the systems to grow stronger together... and to be sure that what i am sharing
+with people is functional because i use it daily."* So Part 3b of [the plan](docs/V2-MODULAR-IMPORT.md) is rewritten:
+- where the two systems overlap, they share one copy;
+- generic code the shop runs comes here through the exporter, unedited;
+- code tangled with the shop's own rules is untangled in the shop's v2 first, then exported;
+- a fix to a shared file goes into v2 first.
+
+The rebuilt staff and PIN files will be replaced by the shop's own. The time clock becomes a kit, the way the shop runs its
+functions. The shop answers four of the first version's five open questions itself. The "Where it went" column above is that first
+version's; Part 3b section 5 has the answers now.
