@@ -49,7 +49,8 @@ function rule(p, who, staff) {
   if (String(p.staffId) === String(who.id) && !can(who, 'employees') && Object.keys(s).some(function (k) { return k !== 'pin'; })) return who.name + ' may change only their own PIN';
   /* the shop always keeps an active owner: the last one may not be demoted or switched off (stage-2 review: it could, and then nobody
      could ever make an owner again) */
-  if (target && target.role === 'owner' && target.active !== false && ((s.role != null && s.role !== 'owner') || s.active === false)) {
+  /* any role key counts, null included: the fold copies a null in, and a role of null is no owner (skeptic pass: it slipped past) */
+  if (target && target.role === 'owner' && target.active !== false && ((Object.prototype.hasOwnProperty.call(s, 'role') && s.role !== 'owner') || s.active === false)) {
     let others = 0; staff.byId.forEach(function (x) { if (x.id !== target.id && x.role === 'owner' && x.active !== false) others++; });
     if (!others) return 'the shop must keep an active owner — make someone else an owner first';
   }

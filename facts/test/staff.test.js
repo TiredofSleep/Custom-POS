@@ -121,6 +121,7 @@ H.test('stage-2 review: a new shop starts with its owner; the last active owner 
   const pass = g.issue(S.fold(master), 'own', 'tab', '1111').grant, b = { grants: [pass] };
   H.ok(/must keep an active owner/.test(String(A.judge(fact('own', { role: 'manager' }, 'own'), master, [], b))), 'the last owner cannot demote themselves');
   H.ok(/must keep an active owner/.test(String(A.judge(fact('own', { active: false }, 'own'), master, [], b))), 'nor switch themselves off');
+  H.ok(/must keep an active owner/.test(String(A.judge(fact('own', { role: null }, 'own'), master, [], b))), 'nor clear their role to nothing (skeptic pass: a null role slipped past)');
   const two = master.concat([fact('own2', { name: 'Oz', role: 'owner' }, 'own')]);
   H.eq(A.judge(fact('own', { role: 'manager' }, 'own'), two, [], b), null, 'the negative control: with a second owner, the first may step down');
   /* made-up staff ids: refused before anything is kept */
@@ -131,6 +132,12 @@ H.test('stage-2 review: a new shop starts with its owner; the last active owner 
   const junk = []; for (let i = 0; i < 5000; i++) junk.push({ staffId: 'own', station: 'tab', since: 1, until: Date.now() + 1e6, sig: 'f'.repeat(64) });
   const t0 = Date.now(), r = g.check(junk, 'own', 'tab', { hlc: { t: Date.now() } }); const took = Date.now() - t0;
   H.ok(r === false && took < 200, '5,000 junk passes judged in ' + took + ' ms (refused)');
+  /* counted, not timed (skeptic pass: one unbounded check is only ~35 ms, so the timing alone passed without the bound; the hub checks
+     once per PIN-checked fact, so a 200-fact send with 5,000 junk passes was a million signatures): a check computes at most 4 */
+  const crypto = require('crypto'), real = crypto.createHmac; let sigs = 0;
+  crypto.createHmac = function () { sigs++; return real.apply(crypto, arguments); };
+  try { for (let i = 0; i < 200; i++) g.check(junk, 'own', 'tab', { hlc: { t: Date.now() } }); } finally { crypto.createHmac = real; }
+  H.ok(sigs <= 200 * 4, '200 checks of 5,000 junk passes computed ' + sigs + ' signatures (at most 4 each)');
 });
 
 H.done();

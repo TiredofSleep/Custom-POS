@@ -38,7 +38,7 @@ const PREAUTH_MS = 15000;           /* and how long it has to send it */
 const MAX_CONN = 256;               /* connections at once (a small shop has a handful of tablets) */
 const SERVED_ROOT = path.resolve(__dirname, '..');   /* the folder the repo's hub.js serves when mounted (--with-blob) */
 /* what the mounted hub.js may answer here: its shared records and the app's own files — nothing else under the folder (stage-2 review) */
-const FALLBACK_OK = /^\/(?:api\/[A-Za-z0-9_\/-]*|pos\.html|builder\.html|index\.html|facts\.bundle\.js|favicon\.ico)?$/;
+const FALLBACK_OK = /^\/(?:api\/[A-Za-z0-9_\/-]*|api\/blob\/[0-9a-f]{64}\.[a-z0-9]{1,8}|pos\.html|builder\.html|index\.html|facts\.bundle\.js|favicon\.ico)?$/;   /* api/blob/<sha256>.<ext>: a record's image, exactly as hub.js names it */
 /* station names this hub's own services use, or that the judge trusts: never handed to a device over the operator door */
 const RESERVED = /^(?:hub-services|v1-shadow|scriptdesk.*)$/i;
 
@@ -62,8 +62,8 @@ function startHubServer(opts) {
   /* stage-2 review: a hub that also serves files (opts.fallback, --with-blob) must keep its data OUTSIDE the folder it serves — its
      database and its PIN-pass signing key would otherwise be one GET away (that was found, and a forged pass made an owner) */
   if (opts.fallback && opts.db && !opts.store) {
-    const rel = path.relative(SERVED_ROOT, path.resolve(opts.db));
-    if (!rel.startsWith('..') && !path.isAbsolute(rel)) return Promise.reject(new Error('with --with-blob the hub serves the app\'s folder, so its data must live outside it — for example --db ../custompos-hub-data/facts.db'));
+    const rel = path.relative(SERVED_ROOT, path.resolve(opts.db));   /* outside means a real parent step: a folder NAMED '..x' is inside (skeptic pass) */
+    if (!(rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel))) return Promise.reject(new Error('with --with-blob the hub serves the app\'s folder, so its data must live outside it — for example --db ../custompos-hub-data/facts.db'));
   }
   let store = null;
   try {
