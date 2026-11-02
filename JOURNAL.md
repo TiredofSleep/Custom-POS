@@ -1651,3 +1651,50 @@ The time clock's history fixture was written as version 1 of the time clock and 
   send's earlier staff facts not counting for its later ones, which is the shop's own "lay this send on top". It needed a new test,
   and now that break turns it red too.
 - The bundle grew to about 242 KB raw and 74 KB gzipped. The plan raises the limit as shared files arrive, measured compressed.
+
+### The time clock, as a kit
+
+The plan's step 5 made the time clock the way the shop makes each of its functions: one kit, written against the old shape of the
+data, and handed its save. In `pos.html` that is `clockKit(env)`: clock in, clock out, start a break, end a break. It is the code one
+computer always ran, now written once.
+
+On a hub, `clockKitFor()` is its adapter. It builds the punches from the facts and gives the kit a save that compares what changed:
+- a new punch becomes a clock-in;
+- an out time becomes a clock-out;
+- a new break becomes a break start, and its end a break end.
+
+Those go through the shop's own door, `station/record.js`, under the person who punched. The staff list is folded one fact at a time
+by the shop's `station/views.js`, the way its tablets keep it.
+
+The old facts mode asked "are we on a hub?" in 16 places across the screens. Now only the host asks, in eight small functions: which
+kit, whose staff, whose PIN, the gate, the status line, the team card, the boot, and "not connected yet". The kit and the clock screen
+never ask, and a test reads their code to check it.
+
+What the block that connects a device does is still this repo's own. The shop connects its tablets with setup codes, which are v1's
+code, so there was nothing to share. It is named the *station host* now, which is what it is.
+
+### Two old faults, found by the new test
+
+The new test made the device refuse a punch on purpose, then checked what the person sees. Two faults, both in the old facts mode
+too:
+- a refused punch kept the typed PIN, so the next PIN was added onto it and read as "not recognized";
+- a refused clock-out kept the on-shift screen up, which hid the refusal.
+
+A refusal now ends that PIN entry: the typed PIN is cleared and the on-shift screen closes, so the refusal is seen.
+
+### A shift left open, ended
+
+The skeptic pass's finding 1.1: a shift left open on a device when it joined the hub stayed open forever, because a clock-out only
+knew the hub's shifts. Now the kit ends it at that person's next clock-out. That shift is the device's own history, so closing it
+writes no fact. The person's next clock-in is a fact like any other.
+
+At the shop, v1's old punches became facts, so every tablet sees them. Here they still stay on the device that held them. The shop's
+history fact has no breaks and no wage, and these punches have both. Moving them is its own design step.
+
+### How it was checked
+
+- The two browser tests that drive the real page on several tablets pass unchanged. Every shift time, the tip pool and labor cost
+  equal one computer's.
+- The new browser test checks the points above.
+- Eleven deliberate breaks were made in a copy of the page, one rule of the kit or its adapter at a time. Every one turned a browser
+  test red.

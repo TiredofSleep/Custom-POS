@@ -2558,6 +2558,130 @@ registry.registerAggregate(AGG, { fold: fold, inc: INC, detectConflicts: functio
 module.exports = { fold: fold, emp: emp, AGG: AGG, FIELDS: FIELDS };
 
 });
+__def("station/record.js", {}, function (module, exports, require) {
+'use strict';
+/* ============================================================================
+ * RECORD — the tablet's one door for a fact, and the one way a kit's save reaches it (moved out of station/app.js 2026-10-31)
+ * @fact @employee @station — a fact recorded under the person who authorised it, a refusal said and never thrown; a kit's facts recorded, then sent
+ * ----------------------------------------------------------------------------
+ * Moved here from station/app.js (owner 10/31: "the point is for all the systems to grow stronger together... and to be sure that
+ * what i am sharing with people is functional because i use it daily"). The page's rec() is put() with the page's own default
+ * actor (the person working the screen) and its toast; every kit's onSave is one saver(), where the page used to write the same
+ * three steps out by hand at each kit (record each fact under the right person, then sync), 24 times.
+ * ========================================================================== */
+
+/* @fact @employee — records one fact on station S under actor (none: no actor on it); a refused fact goes to refused(why) and the answer is false, never a throw */
+function put(S, type, key, payload, actor, refused) {
+  try { S.record(type, key, payload, actor ? { actor: actor } : undefined); return true; } catch (e) { if (refused) refused(e.message); return false; }
+}
+/* @fact @sync @employee — a kit's onSave: who() names the person once per save, every fact goes through rec under them, then sync().
+   o (each optional, each one kit's own need, named so the differences show): before(facts) runs first; stop: after a refused fact the
+   rest are not recorded; then(facts) runs after the facts and before the sync; after(facts) runs after the sync; ok: the answer is
+   whether every fact was recorded (a kit that raises an alarm on false asks for it) — without ok there is no answer, as before */
+function saver(rec, sync, who, o) {
+  o = o || {};
+  return function (facts) {
+    var w = who(), ok = true;
+    if (o.before) o.before(facts);
+    facts.forEach(function (f) { if (o.stop && !ok) return; if (!rec(f.type, f.key, f.payload, w)) ok = false; });
+    if (o.then) o.then(facts);
+    sync();
+    if (o.after) o.after(facts);
+    if (o.ok) return ok;
+  };
+}
+
+module.exports = { put: put, saver: saver };
+
+});
+__def("station/views.js", {}, function (module, exports, require) {
+'use strict';
+/* ============================================================================
+ * VIEWS — what every screen reads, folded from the tablet's facts once per new fact (moved out of station/app.js 2026-10-31)
+ * @fold @render @station — each aggregate's answer over the whole log, worked out once per new fact through its follower; the screen check; fresh top-level lists
+ * ----------------------------------------------------------------------------
+ * Moved here from station/app.js word for word (owner 10/31: "the point is for all the systems to grow stronger together...
+ * and to be sure that what i am sharing with people is functional because i use it daily"): the code Custom POS shares is the
+ * code this shop runs. What the shop folds stays on its page (views(), viewsAll()); how a fold is kept, reused and checked is here.
+ * The page hands in what this file used to reach for:
+ *   V2           the modules by name (V2[name].fold, V2[name].AGG), with V2.incfold and V2.registry when followers are wanted
+ *   log()        the tablet's log now (null before a station is open)
+ *   follow       the followers' setting (the tablet keeps two checkpoints: station/app.js TABLET_FOLLOW)
+ *   checkOn()    whether the screen check is on (the page's localStorage custompos-freeze-views = 1)
+ *   say(why)     where a difference the screen check found is said (the console and the tablet's error log)
+ *   setTimeout / clearTimeout   the page's timers, or null: without them the idle moment's work never starts by itself
+ * ========================================================================== */
+
+/* @fold @render — the folds a page reads, kept one fact at a time and reused until a fact arrives, with the screen check, over what the page hands in */
+function make(o) {
+  var V2 = o.V2, logOf = o.log, follow = o.follow, checkOn = o.checkOn || function () { return false; }, say = o.say || function () {},
+    later = o.setTimeout || null, cancel = o.clearTimeout || null;
+  var logFoldMemo = {}, follows = {}, checkMisses = [], checkNew = [];
+  /* @render @fold — a page's views made once per new fact: build() runs when the log grew (or was replaced) since the last answer;
+     each call gets a fresh wrapper and fresh top-level lists, so a caller that sorts or reassigns them changes nobody else's; what is
+     inside is READ-ONLY (a followed fold's records are its live state) */
+  function memo(build) {
+    var m = { log: null, n: -1, v: null };
+    return function () {
+      var lg = logOf(), n = lg ? lg.size() : 0;
+      if (!m.v || m.log !== lg || m.n !== n) { m = { log: lg, n: n, v: build() }; checkSay(); }
+      return freshTop(m.v);
+    };
+  }
+  /* @render @fold — one aggregate's answer over this tablet's whole log (V2[name]: 'till', 'inbox', 'textLog', 'punches' …), for
+     every screen, tick and kit that used to fold all history itself: its follower's answer, or a whole fold once per new fact */
+  function logFold(name) { var o = foldOnce(name); checkSay(); return freshTop(o); }
+  /* @fold — one aggregate's answer over the whole log, worked out once per new fact: through its follower when the aggregate
+     carries inc, else folded whole; the screen check looks it over (memoCheck) */
+  function foldOnce(name) {
+    var lg = logOf(), n = lg ? lg.size() : 0, k = logFoldMemo[name];
+    if (!k || k.log !== lg || k.n !== n) { var fw = followerOf(name); k = logFoldMemo[name] = { log: lg, n: n, out: memoCheck(name, fw ? fw(lg) : V2[name].fold(lg ? lg.all() : []), !!fw) }; if (fw) followMaintSoon(); }
+    return k.out;
+  }
+  var followMaintTimer = null;
+  /* @fold @render — the idle moment's work for the followers (core/incfold.js maintain; lazy: no copy of a fold's state ever lands
+     on a tap): 2.5 s after the last new fact, one aggregate's checkpoint per quiet moment, until none is due */
+  function followMaintSoon() {
+    if (typeof later !== 'function') return;
+    if (followMaintTimer && cancel) cancel(followMaintTimer);
+    followMaintTimer = later(function () { followMaintTimer = null;
+      var ks = Object.keys(follows); for (var i = 0; i < ks.length; i++) { var f = follows[ks[i]]; if (f && typeof f.maintain === 'function' && f.maintain()) { followMaintSoon(); return; } } }, 2500);
+    if (followMaintTimer && followMaintTimer.unref) followMaintTimer.unref();
+  }
+  /* @fold — the follower of one aggregate's fold over this tablet's log (core/incfold.js follower: fed only what the log gained
+     since the last call; a replaced log, or a shorter one, starts it over), made on first use; null while the aggregate has no inc */
+  function followerOf(name) {
+    if (!Object.prototype.hasOwnProperty.call(follows, name)) { var m = V2[name], def = (m && m.AGG && V2.incfold && V2.registry) ? V2.registry.aggregate(m.AGG) : null; follows[name] = (def && def.inc) ? V2.incfold.follower(def.inc, m.AGG, follow) : null; }
+    return follows[name];
+  }
+  /* @render @proof — the SCREEN CHECK (localStorage custompos-freeze-views = 1, for whoever clicks through every screen before the
+     switch). A whole fold's answer is deep-frozen, so a screen that writes into what the next screen reads throws and names
+     itself in the error log. A FOLLOWED fold's answer is its live state and is never frozen (the next step would throw):
+     it is compared with a fresh whole fold instead — a difference is named, aggregate and all, in the error log (checkSay) —
+     and the screens are handed that whole fold, deep-frozen. Off, nothing is frozen, nothing compared, nothing costs. */
+  function memoCheck(name, o, followed) {
+    if (!checkOn()) return o;
+    if (followed) { var lg = logOf(), full = V2[name].fold(lg ? lg.all() : []), a = canonOf(o), b = canonOf(full);
+      if (a !== b) { var at = 0; while (at < a.length && a[at] === b[at]) at++;
+        var why = 'screen check: the ' + name + ' fold (' + V2[name].AGG + '), followed one fact at a time, differs from its whole fold at ' + (lg ? lg.size() : 0) + ' facts — char ' + at + ': followed …' + a.slice(Math.max(0, at - 40), at + 60) + ' | whole …' + b.slice(Math.max(0, at - 40), at + 60);
+        checkMisses.push({ name: name, agg: V2[name].AGG, n: lg ? lg.size() : 0, why: why }); if (checkMisses.length > 50) checkMisses.shift(); checkNew.push(why); }
+      o = full; }
+    (function freeze(x) { if (!x || typeof x !== 'object' || Object.isFrozen(x)) return; Object.freeze(x); var t = Object.prototype.toString.call(x); if (t === '[object Map]' || t === '[object Set]') x.forEach(function (y) { freeze(y); }); else Object.keys(x).forEach(function (k) { freeze(x[k]); }); })(o);
+    return o;
+  }
+  /* @proof @error — the screen check's differences said once each, after the memo holds the answer (the page's say: the console,
+     and the tablet's error log, 🩹 Errors) */
+  function checkSay() { if (!checkNew.length) return; var said = checkNew.splice(0); said.forEach(function (w) { say(w); }); }
+  return { memo: memo, logFold: logFold, foldOnce: foldOnce, followerOf: followerOf, checkSay: checkSay, follows: follows, misses: checkMisses };
+}
+/* @proof — a fold's answer as one text for the screen check: Maps and Sets with their order (from any window), undefined kept apart */
+function canonOf(v) { return JSON.stringify(v, function (k, x) { var t = Object.prototype.toString.call(x); if (t === '[object Map]') return { __map: Array.from(x.entries()) }; if (t === '[object Set]') return { __set: Array.from(x.values()) }; return x === undefined ? '__undefined' : x; }); }
+/* @render — a fold's answer with its own top-level lists (what is inside them is shared, and read-only) */
+function freshTop(o) { if (Array.isArray(o)) return o.slice(); if (!o || typeof o !== 'object') return o; var c = {}; Object.keys(o).forEach(function (k) { c[k] = Array.isArray(o[k]) ? o[k].slice() : o[k]; }); return c; }
+
+module.exports = { make: make, canonOf: canonOf, freshTop: freshTop };
+
+});
 __def("modules/define.js", {"../core/registry":"core/registry.js"}, function (module, exports, require) {
 /* @facts @module — THE MODULE CONTRACT (docs/V2-MODULAR-IMPORT.md, Part 3): defineModule() checks one module's manifest and registers
    its fact types; assemble() puts a set of modules together and hands the hub ONE judge of who may write what.
@@ -2821,8 +2945,10 @@ function wageRule(p, who, staff) { return p.wage != null && !staff.isOwner(who) 
 /* @facts @timeclock — local HH:MM, as the clock station shows the wall clock */
 function hm(ms) { return new Date(ms).toTimeString().slice(0, 5); }
 /* @facts @timeclock @payroll — DB.punches' exact shape from the facts: [{staffId, name, in, inTs, out, outTs, breaks:[{start,startTs,end,endTs}], wage}].
-   staff: { byId } (the staff module's list) for names; a voided shift never pays, so it is left out, as DB.punches never held one. */
-function punches(facts, staff) {
+   staff: { byId } (the staff module's list) for names; a voided shift never pays, so it is left out, as DB.punches never held one.
+   ids (optional, rollout step 5): a Map this fills with each punch → its shift's id (the clock-in fact's), for the clock kit's adapter
+   (pos.html clockKitFor), which names the shift a clock-out or a break belongs to; the punch itself keeps DB.punches' exact shape. */
+function punches(facts, staff, ids) {
   const clock = facts.filter(function (e) { return /^clock\./.test(e.type); }), brk = foldBreaks(facts.filter(function (e) { return /^break\./.test(e.type); }));
   const view = TC.fold(clock), src = new Map(); clock.forEach(function (e) { if (e.type === 'clock.in' || e.type === 'clock.manual') src.set(e.id, e); });
   const byId = (staff && staff.byId) || new Map();
@@ -2833,8 +2959,10 @@ function punches(facts, staff) {
     /* a break ends no later than its shift: a closed shift with a break never ended would count as on break until NOW, and pos.html's
        paid time (clocked minus breaks, floored at 0) would fall to nothing (stage-2 review) */
     const cap = function (t) { return out != null ? Math.min(t, out) : t; };
-    return { staffId: s.empId, name: who ? who.name : String(s.empId), in: hm(s.in), inTs: s.in, out: out != null ? hm(out) : null, outTs: out,
+    const row = { staffId: s.empId, name: who ? who.name : String(s.empId), in: hm(s.in), inTs: s.in, out: out != null ? hm(out) : null, outTs: out,
       breaks: (brk.byShift[s.id] || []).map(function (b) { const st = cap(b.start), en = b.end != null ? cap(b.end) : (out != null ? out : null); return { start: hm(st), startTs: st, end: en != null ? hm(en) : null, endTs: en }; }), wage: wage };
+    if (ids) ids.set(row, s.id);
+    return row;
   }).sort(function (a, b) { return a.inTs - b.inTs; });
 }
 /* @facts @timeclock — the open shift of a person (its id is the clock.in fact's), or null */
@@ -2859,5 +2987,5 @@ const TIMECLOCK = defineModule({
 module.exports = { TIMECLOCK: TIMECLOCK, punches: punches, openShift: openShift, foldBreaks: foldBreaks };
 
 });
-G.CustomPOSFacts = { station: __load("core/station.js"), sync: __load("sync/sync.js"), http: __load("sync/http.js"), browserStore: __load("store/browser.js"), registry: __load("core/registry.js"), event: __load("core/event.js"), hlc: __load("core/hlc.js"), incfold: __load("core/incfold.js"), log: __load("core/log.js"), timeclock: __load("aggregates/timeclock.js"), modules: __load("modules/define.js"), staff: __load("modules/staff.js"), clock: __load("modules/timeclock.js") };
+G.CustomPOSFacts = { station: __load("core/station.js"), sync: __load("sync/sync.js"), http: __load("sync/http.js"), browserStore: __load("store/browser.js"), registry: __load("core/registry.js"), event: __load("core/event.js"), hlc: __load("core/hlc.js"), incfold: __load("core/incfold.js"), log: __load("core/log.js"), timeclock: __load("aggregates/timeclock.js"), modules: __load("modules/define.js"), staff: __load("modules/staff.js"), clock: __load("modules/timeclock.js"), record: __load("station/record.js"), views: __load("station/views.js") };
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -23,14 +23,14 @@ PIN, and the first module, the **time clock**. It runs in the app today: pick *S
 | `aggregates/staff.js`, `core/staff.js` | the shop's people as facts (`employee.set`, field by field; `staff.roles`, what each role may do) and the rules: roles, `can()`, PINs as PBKDF2 hashes (never the digits), and `PIN_CHECKED`, the facts the hub PIN-checks | imported (rollout step 4) |
 | `core/abilities.js` | **the business's own file**: the abilities a person may be given and each role's defaults. The first import brings the origin shop's list as a working start; edit it for your business, and no later import writes over it | imported once, then **yours** |
 | `hub/pingrant.js` | the PIN the hub checks itself: a 30-minute signed pass for one person on one tablet, renewed up to 12 hours from the PIN | imported (rollout step 4) |
-| `station/record.js`, `station/views.js` | the shop's tablet pattern: one door for a fact, one way a screen's save reaches it, and the folds a screen reads | imported (rollout step 5 uses them) |
+| `station/record.js`, `station/views.js` | the shop's tablet pattern: one door for a fact, one way a screen's save reaches it, and the folds a screen reads | imported; `pos.html`'s time clock records through the door and reads its staff through the folds (rollout step 5) |
 | `test/engine-laws.test.js`, `test/proofs/994–996` | the engine laws (114 proofs) and the shared files' own proofs from the shop's suite, each run here at exactly the count that passed upstream | imported |
 | `server.js` | the hub on HTTP: enrol, receive, pull, health, watch, and nothing else | **this repo** |
 | `bundle.js` | the engine for a browser, one file, zero dependencies | **this repo** |
 | `test/wire.test.js`, `test/bundle.test.js` | the hub over HTTP, the bundle | **this repo** |
 | `modules/define.js` | the module contract: `defineModule()` checks a manifest; `assemble()` gives the hub ONE judge of who may write what | **this repo** (Stage 2) |
 | `modules/staff.js` | the shop's staff files in this repo's module shape: who may write `employee.set` and `staff.roles` (the shop's rules, which it keeps in its own hub), and the one list of people the hub judges by | **this repo** (thin, since rollout step 4) |
-| `modules/timeclock.js` | the Time clock module: shared punches, breaks, corrections, and `punches()`, which rebuilds the app's own `DB.punches` | **this repo** (Stage 2) |
+| `modules/timeclock.js` | the Time clock module: shared punches, breaks, corrections, and `punches()`, which rebuilds the app's own `DB.punches` (and can say which shift each punch is, for the clock kit's adapter in `pos.html`) | **this repo** (Stage 2) |
 | `test/modules.test.js`, `staff.test.js`, `timeclock-module.test.js`, `cli.test.js` | the contract, the staff and PINs, the time clock (with a history fixture), the hub started as the docs say | **this repo** (Stage 2) |
 
 **Imported files are never edited here.** They arrive only through the origin shop's private exporter, which refuses while

@@ -431,6 +431,22 @@ in the same shape.
    The time clock's history fixture keeps its 14 saved facts unchanged; the same three people were added to it as `employee.set`.
 5. **Here:** the time clock as a kit and an adapter. Delete the FACTS MODE block and the `FACTS.on` checks. The parity tests
    (`tests/facts-clock.js`, `tests/builder-facts.js`) must pass, changed only where they name the old staff fact.
+   *Built 2026-11-01, not published.* `clockKit(env)` in `pos.html` is the punch code, written once against `DB.punches` and handed
+   its save: clock in, clock out, start and end a break. `clockKitFor()` is its adapter on a hub. It builds `DB.punches` from the facts
+   (the time clock module's projection, which now also reports each punch's shift), compares what the kit changed, and records the
+   differences through the shop's `station/record.js` saver, under the person punching. The staff list is folded one fact at a time
+   by the shop's `station/views.js`. The parity tests pass unchanged.
+   - **Kept, honestly named:** the FACTS MODE block is now the *station host*: connect, pull, the status line, the team card. That
+     is this repo's own, because the shop connects its tablets by setup codes, which are v1's code. The mode question is asked only
+     in the host's eight small functions (which kit, whose staff, whose PIN, the gate, the status, the team, the boot, and "not
+     connected yet"). The kit and the clock screen never ask; `tests/facts-clock-kit.js` checks that.
+   - **Finding 1.1, answered on the device:** a shift left open when a device joins a hub ends at that person's next clock-out. That
+     shift is the device's own history, so closing it writes no fact.
+   - **Still open: history as facts, the shop's way.** At the shop, v1's punches are facts (`punch.row`, `aggregates/punches.js`),
+     so every tablet sees them. Here they stay on the device that held them, as before. `punch.row` has no breaks and no wage, and
+     this repo's punches have both, so moving them is a design step of its own, with the exporter change it needs.
+   - **A fix found by the new test:** a refused punch kept the typed PIN, so the next PIN was added onto it. A refused clock-out also
+     kept the on-shift screen up, which hid the refusal. The old facts mode had both faults; the kit clears both.
 6. **One skeptic pass, then the owner's yes to publish.**
 
 ### 9. Risks

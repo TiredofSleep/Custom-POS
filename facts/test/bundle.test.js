@@ -49,7 +49,8 @@ H.test('the build refuses a require it cannot serve: outside the list, a Node mo
 /* the budget, stated as what is checked: the plan's ~150 KB was a guess before the engine's comments were counted; the bundle keeps them
    (they are the engine's documentation). The engine alone was ~187 KB raw, ~57 KB gzipped; with Stage 2's three modules (the contract,
    the staff, the time clock) it is ~216 KB raw, ~65 KB gzipped. Rollout step 4 (11/1) brought the origin shop's own staff files (its
-   rules, its fold and the business's list of abilities, comments kept) in place of the rebuilt staff module: ~242 KB raw, ~74 KB gzipped.
+   rules, its fold and the business's list of abilities, comments kept) in place of the rebuilt staff module: ~242 KB raw, ~74 KB gzipped;
+   step 5 its one door for a fact and the folds a screen reads (station/record.js, station/views.js): ~252 KB raw, ~77 KB gzipped.
    The plan raises this as shared files arrive, measured compressed (V2-MODULAR-IMPORT.md Part 3b, decision 5; the shop's own tablets
    load 912 KB compressed every day). The bound below catches growth, not the comments. */
 H.test('the bundle stays within its size budget: under 260 KB raw and 80 KB gzipped (the engine and its modules, comments kept)', function () {

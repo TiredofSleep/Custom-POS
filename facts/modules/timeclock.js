@@ -41,8 +41,10 @@ function wageRule(p, who, staff) { return p.wage != null && !staff.isOwner(who) 
 /* @facts @timeclock — local HH:MM, as the clock station shows the wall clock */
 function hm(ms) { return new Date(ms).toTimeString().slice(0, 5); }
 /* @facts @timeclock @payroll — DB.punches' exact shape from the facts: [{staffId, name, in, inTs, out, outTs, breaks:[{start,startTs,end,endTs}], wage}].
-   staff: { byId } (the staff module's list) for names; a voided shift never pays, so it is left out, as DB.punches never held one. */
-function punches(facts, staff) {
+   staff: { byId } (the staff module's list) for names; a voided shift never pays, so it is left out, as DB.punches never held one.
+   ids (optional, rollout step 5): a Map this fills with each punch → its shift's id (the clock-in fact's), for the clock kit's adapter
+   (pos.html clockKitFor), which names the shift a clock-out or a break belongs to; the punch itself keeps DB.punches' exact shape. */
+function punches(facts, staff, ids) {
   const clock = facts.filter(function (e) { return /^clock\./.test(e.type); }), brk = foldBreaks(facts.filter(function (e) { return /^break\./.test(e.type); }));
   const view = TC.fold(clock), src = new Map(); clock.forEach(function (e) { if (e.type === 'clock.in' || e.type === 'clock.manual') src.set(e.id, e); });
   const byId = (staff && staff.byId) || new Map();
@@ -53,8 +55,10 @@ function punches(facts, staff) {
     /* a break ends no later than its shift: a closed shift with a break never ended would count as on break until NOW, and pos.html's
        paid time (clocked minus breaks, floored at 0) would fall to nothing (stage-2 review) */
     const cap = function (t) { return out != null ? Math.min(t, out) : t; };
-    return { staffId: s.empId, name: who ? who.name : String(s.empId), in: hm(s.in), inTs: s.in, out: out != null ? hm(out) : null, outTs: out,
+    const row = { staffId: s.empId, name: who ? who.name : String(s.empId), in: hm(s.in), inTs: s.in, out: out != null ? hm(out) : null, outTs: out,
       breaks: (brk.byShift[s.id] || []).map(function (b) { const st = cap(b.start), en = b.end != null ? cap(b.end) : (out != null ? out : null); return { start: hm(st), startTs: st, end: en != null ? hm(en) : null, endTs: en }; }), wage: wage };
+    if (ids) ids.set(row, s.id);
+    return row;
   }).sort(function (a, b) { return a.inTs - b.inTs; });
 }
 /* @facts @timeclock — the open shift of a person (its id is the clock.in fact's), or null */
