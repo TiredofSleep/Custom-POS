@@ -2819,10 +2819,11 @@ function assemble(mods, opts) {
        whole send, which would wedge the tablet resending it) */
     if (r.rule) { try { why = r.rule(p, who, staff, e); } catch (x) { why = 'the ' + r.module + ' module\'s rule failed on this ' + e.type; } if (why) return why; }
     /* the PIN the hub checked: the send's grant for this person, judged as the origin shop's hub judges it (hub/authority.js) — signed by
-       this hub, for this tablet and this person, for a fact done before it ended, and sent within its grace */
+       this hub, for this tablet and this person, for a fact done before it ended, and sent within its grace; and earned with the PIN this
+       person has NOW (who: a changed PIN or an inactive person ends every pass made before — the shop's df9fc814) */
     if (r.pin && grantCheck) {
       const gs = (bundle && bundle.grants && typeof bundle.grants === 'object' && !Array.isArray(bundle.grants)) ? bundle.grants : {}, id = String(who.id);
-      const bad = grantCheck(Object.prototype.hasOwnProperty.call(gs, id) ? gs[id] : null, e.station, id, e.at);
+      const bad = grantCheck(Object.prototype.hasOwnProperty.call(gs, id) ? gs[id] : null, e.station, id, e.at, who);
       if (bad) return 'a ' + e.type + ' needs ' + who.name + '\'s PIN checked by the hub (' + bad + ') — ' + who.name + ' enters it again on this tablet';
     }
     return null;

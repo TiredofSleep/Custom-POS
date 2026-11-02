@@ -150,7 +150,8 @@ function startHubServer(opts) {
             const dev = hub.allowedDevice(String(j.token || ''));
             if (!dev) { refuse(req, res, 401, { refused: 'not enrolled' }); return; }
             if (!grants || !staffSource) { send(res, 200, { ok: false, refused: 'this hub checks no PINs (it runs no staff module)' }); return; }
-            if (j.grant) { send(res, 200, grants.renew(j.grant, dev.station)); return; }
+            /* a renewal hands in the hub's record of the person, so a pass earned with a PIN since changed is not renewed (the shop's renew route) */
+            if (j.grant) { const st0 = staffSource.provides.staff(hub.facts(), []); send(res, 200, grants.renew(j.grant, dev.station, (st0.byId && j.grant && typeof j.grant === 'object') ? (st0.byId.get(String(j.grant.emp)) || null) : null)); return; }
             grants.check(dev.station, String(j.empId || '').slice(0, 64), String(j.pin || '').slice(0, 32), staffSource.provides.staff(hub.facts(), []), staffRules.pinHash, staffRules.pinIter)
               .then(function (r) { send(res, 200, r); }, function () { send(res, 500, { ok: false, refused: 'the PIN could not be checked' }); });
             return;

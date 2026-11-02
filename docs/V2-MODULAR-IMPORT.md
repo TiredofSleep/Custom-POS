@@ -465,8 +465,11 @@ in the same shape.
      a pay figure rides along. That is how its Admin save works: a manager edits a person, the tablet re-asks a payroll person's PIN for
      the rate, and the whole save is one fact under the payroll person (the shop's suite pins it). Closing it means splitting that save
      into two facts, a change to the shop's Admin screen. This repo's rule is already the strict one.
-     The last two are in `hub/pingrant.js`, which this repo imports: they arrive here with the next export of the shop's live build,
-     after the shop deploys them.
+   - **The PIN-pass fixes arrived the way shared code does (2026-11-02).** The shop deployed them (v2 df9fc814, 6:57 AM), and the
+     export of that live build was imported: only `hub/pingrant.js` and its proofs changed (`996`, now 5). A pass names the PIN it was
+     earned with, and this repo's two callers hand in the hub's record of the person: the judge (`modules/define.js`) and the renewal
+     at `/v2/pin-grant` (`server.js`). So a changed PIN, or a person switched off, ends the pass for a change and for a renewal; a
+     burst of guesses gets five. `facts/test/staff.test.js` proves it over HTTP; undoing either wire, or the file, turns it red (4 of 4).
 
 ### 9. Risks
 

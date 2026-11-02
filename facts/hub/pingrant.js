@@ -16,12 +16,18 @@
  * later than GRACE (2 hours) after it ends — so a tablet that was offline a while still delivers, and a lost tablet's
  * leftover pass dies within hours. A clock-in or clock-out is NOT checked here: nobody is ever kept off the clock by the
  * internet. Wrong PINs: five free per tablet and person, then that pair is locked 15 minutes, and the owner is told once.
+ * 11/1 (a skeptic of Custom POS, which shares this file): a pass names the PIN it was earned with (pf: the first 16 hex of that person's
+ * PIN hash, signed in with the rest), so changing a PIN, or making the person inactive, ends every pass made before — wherever the caller
+ * hands in its record of the person (the hub's three do: hub/authority.js, the /v2/pin-grant renewal, hub/riskdoors.js). And the guesses
+ * still being checked count against the five free ones: a burst sent at once used to be hashed whole before the first wrong one counted.
  * ⚠️ What this cannot do (said plainly): a PIN is four digits and every tablet holds the PIN records, so someone with a stolen
  * tablet and time can still work a PIN out offline — revoke a lost tablet at once (POST /v2/admin/revoke).
  * ========================================================================== */
 const crypto = require('crypto'), fs = require('fs'), path = require('path');
 const TTL_MS = 30 * 60000, MAX_SESSION_MS = 12 * 3600000, GRACE_MS = 2 * 3600000, FREE_TRIES = 5, LOCK_MS = 15 * 60000;
 const DOOR_MS = 30 * 60000;   /* owner 10/18: a risky door (hub/riskdoors.js) takes a PIN entered within this long — never a renewed pass */
+/* @permission @employee — a PIN record's fingerprint in a pass: the first 16 hex of its hash (the hash itself never leaves the hub in one) */
+function pinPrint(rec) { return (rec && typeof rec.hash === 'string') ? rec.hash.slice(0, 16) : ''; }
 
 /* @permission @hub — the hub's PIN grants. o: {dataDir (the secret's folder), secret (a proof's own, instead of the file), now, alert(a)} */
 function grantsFor(o) {
@@ -36,9 +42,17 @@ function grantsFor(o) {
     if (file) { try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, s.toString('hex') + '\n', { mode: 0o600 }); } catch (e) {} }
     secret = s; return secret;
   }
-  const sign = function (g) { return crypto.createHmac('sha256', key()).update(['g1', g.emp, g.station, g.since, g.exp].join('|')).digest('hex'); };
-  const make = function (emp, station, since) { const g = { emp: String(emp), station: String(station), since: since, exp: now() + TTL_MS }; g.sig = sign(g); return g; };
-  const tries = new Map();   /* station|emp → {n, first, lockedUntil, told} — wrong PINs, in memory */
+  /* the pass's format is g2 since 11/1 (it names the PIN): a g1 pass from before reads as unsigned, and that person enters the PIN again */
+  const sign = function (g) { return crypto.createHmac('sha256', key()).update(['g2', g.emp, g.station, g.since, g.exp, typeof g.pf === 'string' ? g.pf : ''].join('|')).digest('hex'); };
+  const make = function (emp, station, since, pf) { const g = { emp: String(emp), station: String(station), since: since, exp: now() + TTL_MS, pf: String(pf || '') }; g.sig = sign(g); return g; };
+  const tries = new Map();   /* station|emp → {n, first, lockedUntil, told, flying} — wrong PINs, and the PINs being checked now, in memory */
+  /* @permission @hub — is the person this pass names still the one who earned it: active, with the same PIN? null, or why not. who: the
+     caller's current record of that person (null: none); a caller that hands in nothing (a proof of something else) is not asked */
+  function current(g, who) {
+    if (who === undefined) return null;
+    if (!who || who.active === false || !who.pin || pinPrint(who.pin) !== g.pf) return 'the PIN this pass was earned with has changed, or that person is no longer active';
+    return null;
+  }
   /* @permission @hub — is this a grant the hub signed, for this person on this tablet? null, or why not */
   function genuine(g, station, emp) {
     if (!g || typeof g !== 'object' || typeof g.sig !== 'string' || !Number.isInteger(g.exp) || !Number.isInteger(g.since)) return 'no PIN grant from the hub';
@@ -48,8 +62,8 @@ function grantsFor(o) {
     return null;
   }
   /* @permission @hub — may this fact (by emp, from station, dated at) pass on grant g? null, or why not */
-  function verify(g, station, emp, at) {
-    const bad = genuine(g, station, emp); if (bad) return bad;
+  function verify(g, station, emp, at, who) {
+    const bad = genuine(g, station, emp) || current(g, who); if (bad) return bad;
     if (Number(at) > g.exp) return 'the PIN grant had ended before this was done';
     if (now() > g.exp + GRACE_MS) return 'the PIN grant ended more than 2 hours ago';
     return null;
@@ -57,35 +71,41 @@ function grantsFor(o) {
   /* @permission @hub @employee — a PIN typed on a tablet, checked by the hub against the person's own record: a grant, or why not.
      staff: the hub's fold of the staff facts; pinHash(pin, salt, iter) → Promise<hex> (core/staff.js) */
   function check(station, empId, pin, staff, pinHash, pinIter) {
-    const k = String(station) + '|' + String(empId), t = now(), tr = tries.get(k);
-    if (tr && tr.lockedUntil > t) return Promise.resolve({ ok: false, refused: 'too many wrong PINs for this person on this tablet — try again in ' + Math.ceil((tr.lockedUntil - t) / 1000) + ' s', retryMs: tr.lockedUntil - t });
+    const k = String(station) + '|' + String(empId), t = now(); let x = tries.get(k);
+    if (x && x.lockedUntil > t) return Promise.resolve({ ok: false, refused: 'too many wrong PINs for this person on this tablet — try again in ' + Math.ceil((x.lockedUntil - t) / 1000) + ' s', retryMs: x.lockedUntil - t });
     const who = staff && staff.byId ? staff.byId.get(String(empId)) : null;
     if (!who || who.active === false || !who.pin || !who.pin.salt || !who.pin.hash) return Promise.resolve({ ok: false, refused: 'no active employee with a PIN by that id' });
+    if (!x || (t - x.first >= LOCK_MS && !x.flying)) { x = { n: 0, first: t, lockedUntil: 0, told: false, flying: 0 }; tries.set(k, x); }
+    /* the guesses still being checked count against the five free ones (skeptic 11/1: a burst sent at once was all hashed before the first wrong one counted) */
+    if (x.n + (x.flying || 0) >= FREE_TRIES) return Promise.resolve({ ok: false, refused: 'too many PINs for this person on this tablet are being checked at once — wait a moment and try again' });
+    x.flying = (x.flying || 0) + 1;
     return Promise.resolve(pinHash(String(pin == null ? '' : pin), who.pin.salt, pinIter ? pinIter(who.pin) : undefined)).then(function (h) {
-      if (h === who.pin.hash) { tries.delete(k); return { ok: true, grant: make(who.id, station, now()) }; }
-      const x = tries.get(k) && now() - tries.get(k).first < LOCK_MS ? tries.get(k) : { n: 0, first: now(), lockedUntil: 0, told: false }; x.n++;
+      x.flying--;
+      if (h === who.pin.hash) { x.n = 0; if (!x.flying && tries.get(k) === x) tries.delete(k); return { ok: true, grant: make(who.id, station, now(), pinPrint(who.pin)) }; }
+      if (now() - x.first >= LOCK_MS && x.lockedUntil <= now()) { x.n = 0; x.first = now(); }
+      x.n++;
       if (x.n >= FREE_TRIES) { x.lockedUntil = now() + LOCK_MS; if (!x.told && o.alert) { x.told = true; try { o.alert({ key: 'pin-grant-locked:' + k, kind: 'pin-locked', station: String(station), note: '🔒 ' + x.n + ' wrong PINs for ' + (who.name || empId) + ' on tablet ' + station + ' — the hub refuses that person\'s privileged changes from it for 15 minutes. If this was not a fumble, revoke the tablet (Admin → Devices).' }); } catch (e) {} } }
       tries.set(k, x);
       return { ok: false, refused: 'wrong PIN' };
-    });
+    }, function (e) { x.flying--; throw e; });
   }
   /* @permission @hub — a RISKY DOOR (owner 10/18: "Server checks PIN on risky actions" — a card refund or void, a group text, a new
      device's setup code, a saved card erased; hub/riskdoors.js): a grant the hub signed, for this tablet, still good NOW, from a PIN
      typed in the last DOOR_MS (30 minutes). A renewal keeps its PIN's time (since), so it never stretches a door the way it may
      stretch a privileged fact's pass — a lost tablet's leftover pass opens none of these. null, or why not */
-  function door(g, station) {
-    const bad = genuine(g, station, null); if (bad) return bad;
+  function door(g, station, who) {
+    const bad = genuine(g, station, null) || current(g, who); if (bad) return bad;
     if (now() > g.exp) return 'the PIN pass has ended';
     if (now() - g.since > DOOR_MS) return 'the PIN was entered more than 30 minutes ago';
     return null;
   }
   /* @permission @hub — a grant still good, renewed without the PIN (the person keeps working), up to 12 hours from the PIN */
-  function renew(g, station) {
-    const bad = genuine(g, station, null); if (bad) return { ok: false, refused: bad };
+  function renew(g, station, who) {
+    const bad0 = genuine(g, station, null), bad = bad0 || current(g, who); if (bad) return { ok: false, refused: bad0 ? bad : bad + ' — the PIN again, please' };
     if (now() > g.exp) return { ok: false, refused: 'the PIN grant has ended — the PIN again, please' };
     if (now() - g.since > MAX_SESSION_MS) return { ok: false, refused: 'twelve hours since the PIN — the PIN again, please' };
-    return { ok: true, grant: make(g.emp, station, g.since) };
+    return { ok: true, grant: make(g.emp, station, g.since, g.pf) };
   }
-  return { check: check, renew: renew, verify: verify, door: door, DOOR_MS: DOOR_MS, TTL_MS: TTL_MS, GRACE_MS: GRACE_MS, MAX_SESSION_MS: MAX_SESSION_MS, FREE_TRIES: FREE_TRIES, LOCK_MS: LOCK_MS };
+  return { check: check, renew: renew, verify: verify, door: door, current: current, DOOR_MS: DOOR_MS, TTL_MS: TTL_MS, GRACE_MS: GRACE_MS, MAX_SESSION_MS: MAX_SESSION_MS, FREE_TRIES: FREE_TRIES, LOCK_MS: LOCK_MS };
 }
-module.exports = { grantsFor: grantsFor, TTL_MS: TTL_MS, GRACE_MS: GRACE_MS, DOOR_MS: DOOR_MS };
+module.exports = { grantsFor: grantsFor, pinPrint: pinPrint, TTL_MS: TTL_MS, GRACE_MS: GRACE_MS, DOOR_MS: DOOR_MS };

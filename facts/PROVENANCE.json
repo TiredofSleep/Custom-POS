@@ -1,9 +1,9 @@
 {
   "what": "the facts engine, from the origin shop's v2 through its private exporter (docs/V2-MODULAR-IMPORT.md)",
   "unit": "0.3 engine + engine laws + the shared app files (views, record, staff, PIN pass)",
-  "sourceCommit": "873dc0eac3d1815da62704832245bacb3d8610e6",
-  "shopBuild": "873dc0eac3d1815da62704832245bacb3d8610e6",
-  "exported": "2026-11-02T01:03:29.885Z",
+  "sourceCommit": "df9fc814a34adeb0c3fa3ac27d7cafa9c00d57e5",
+  "shopBuild": "df9fc814a34adeb0c3fa3ac27d7cafa9c00d57e5",
+  "exported": "2026-11-02T12:58:18.891Z",
   "node": "v24.15.0",
   "proofs": [
     {
@@ -20,7 +20,7 @@
     },
     {
       "file": "facts/test/proofs/996-pin-grants.test.js",
-      "passed": 3
+      "passed": 5
     }
   ],
   "files": [
@@ -87,8 +87,8 @@
     },
     {
       "path": "facts/hub/pingrant.js",
-      "bytes": 8694,
-      "sha256": "c886b0a0e5ac0fb78290510a9ac15af05e635577fbb1b150392e60aec70b9006"
+      "bytes": 11065,
+      "sha256": "e2eab885ecbb90563733bc010b7ecc0d367d9e3ae73228cb3a6c36d3e5017f8b"
     },
     {
       "path": "facts/hub/projections.js",
@@ -157,8 +157,8 @@
     },
     {
       "path": "facts/test/proofs/996-pin-grants.test.js",
-      "bytes": 8320,
-      "sha256": "702f21a68a485a17f432dc525b854281368402793bd157503a55feb870f8b472"
+      "bytes": 11758,
+      "sha256": "0cbf18ade79040ceeb47a521bc950e903cdcfe00e90a1a7738715697ba602490"
     },
     {
       "path": "facts/test/shards.js",

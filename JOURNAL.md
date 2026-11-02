@@ -1738,3 +1738,17 @@ One more was the shop's by design. There, a person with payroll may save any fie
 permissions included. The fix was written, and the shop's own suite refused it: its Admin save records a manager's edit and the rate
 a payroll person re-approved as one fact, under the payroll person. Closing the gap means splitting that save in two, which is a
 change to the shop's screens and the owner's call. This repo never had the gap.
+
+### 2026-11-02, morning — The shop's PIN fixes come back through the front door
+
+The owner said "deploy now", and at 6:57 AM the shop's hub was running the two PIN-pass fixes the step 6 review had found. An hour
+earlier this repo could not have taken them: the exporter only ships a hub file the shop actually runs. Now it does, so the live build
+was exported and imported, and the only files that changed were the PIN pass and its proofs. That is the system working as planned:
+a flaw found here, fixed in the shop first, used there by real staff, then arriving here unedited.
+
+A pass now carries a short print of the PIN it was earned with. Two places in this repo hand the hub's record of the person to the
+pass check: the judge and the renewal. If someone's PIN is changed because a person watched them type it, every pass made with the
+old one stops working, for a change and for a renewal alike. A person switched off loses their pass the same way. Twelve guesses sent at
+once now get at most five checks; before, more than five went through.
+
+The new test runs over real HTTP. Undoing either wire, the burst count, or the whole file turned it red, four times out of four.

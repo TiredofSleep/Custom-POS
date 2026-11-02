@@ -75,6 +75,10 @@ H.testAsync('over HTTP: the first owner, then every change needs the right AND a
     /* the clerk: their own PIN, slip and language, nothing else */
     const C = await tablet(srv, 'tabC'); await C.pin('clk', '3333');
     H.ok(await put(C, 'clk', { pin: rec('4444'), lang: 'es' }, 'clk'), 'a clerk changes their own PIN and language');
+    /* the shop's df9fc814: a pass names the PIN it was earned with, so the change just made ends it (the rules below are then judged on a
+       pass from the new PIN, so each refusal is the rule's own) */
+    H.ok(!(await put(C, 'clk', { lang: 'en' }, 'clk')), 'the pass earned with the old PIN no longer works, even for their own language');
+    H.ok((await C.pin('clk', '4444')).grant, 'the new PIN earns a new pass');
     H.ok(!(await put(C, 'clk', { perms: { employees: true } }, 'clk')), 'but not their own permissions');
     H.ok(!(await put(C, 'clk', { name: 'Camille', pin: rec('5555') }, 'clk')), 'nor their own name, even beside their PIN');
     H.ok(!(await put(C, 'mgr', { pin: rec('0000') }, 'clk')), 'nor anyone else\'s PIN');
@@ -90,6 +94,38 @@ H.testAsync('over HTTP: the first owner, then every change needs the right AND a
     H.ok(/another tablet/.test(String((await post(srv.url, '/v2/pin-grant', { token: B.token, grant: A.passes.own })).json.refused)), 'not from another tablet');
     /* an unenrolled device cannot ask */
     H.eq((await post(srv.url, '/v2/pin-grant', { token: 'never-issued-token-00000000', empId: 'own', pin: '1111' })).status, 401, 'an unenrolled device cannot try PINs');
+  } finally { await srv.close(); rmDb(f); }
+});
+
+H.testAsync('the shop\'s df9fc814, over HTTP: a changed PIN or an inactive person ends the pass (fact and renewal); a burst of guesses gets five', async function () {
+  const f = dbFile('s5'), alerts = [];
+  const srv = await startHubServer({ db: f, adminKey: ADMIN, modules: [S.STAFF], grantSecret: SIGNER, notify: function (a) { alerts.push(a); } });
+  try {
+    const A = await tablet(srv, 'tabA'), M = await tablet(srv, 'tabM');
+    H.ok(await put(A, 'own', { name: 'Ola', role: 'owner', pin: rec('1111') }, null), 'the first owner');
+    await A.pin('own', '1111');
+    H.ok(await put(A, 'mgr', { name: 'Mo', role: 'manager', perms: { employees: true }, pin: rec('2222') }, 'own'), 'a manager');
+    await M.pin('mgr', '2222'); const old = M.passes.mgr;
+    const renew = async function (T, g) { return (await post(srv.url, '/v2/pin-grant', { token: T.token, grant: g })).json; };
+    H.ok((await renew(M, old)).ok, 'the negative control: before any change, the manager\'s pass renews');
+    /* the owner changes the manager's PIN (someone watched it typed): every pass made with the old one ends */
+    H.ok(await put(A, 'mgr', { pin: rec('2468') }, 'own'), 'the owner changes the manager\'s PIN');
+    const r1 = await renew(M, old);
+    H.ok(!r1.ok && /PIN this pass was earned with has changed/.test(String(r1.refused)) && /the PIN again/.test(String(r1.refused)), 'the old pass is not renewed: ' + r1.refused);
+    M.passes = { mgr: old };
+    H.ok(!(await put(M, 'clk', { name: 'Cam', pin: rec('3333') }, 'mgr')), 'nor does it carry a change');
+    H.ok((await M.pin('mgr', '2468')).grant && (await renew(M, M.passes.mgr)).ok, 'the new PIN\'s pass works and renews');
+    /* made inactive: the pass ends at its renewal */
+    const live = M.passes.mgr;
+    H.ok(await put(A, 'mgr', { active: false }, 'own'), 'the owner switches the manager off');
+    H.ok(/no longer active/.test(String((await renew(M, live)).refused)), 'an inactive person\'s pass is not renewed');
+    /* a burst of guesses sent at once: five are checked, no more (each one hashed costs the hub; the lock counted only finished ones) */
+    H.ok(await put(A, 'mgr', { active: true }, 'own'), 'back on');
+    const B = await tablet(srv, 'tabB');
+    const burst = await Promise.all(Array.from({ length: 12 }, function () { return post(srv.url, '/v2/pin-grant', { token: B.token, empId: 'mgr', pin: '0000' }); }));
+    const wrong = burst.filter(function (r) { return r.json.refused === 'wrong PIN'; }).length;
+    H.ok(wrong <= 5 && burst.every(function (r) { return !r.json.grant; }), '12 guesses at once: ' + wrong + ' checked (at most 5), none admitted');
+    H.ok(/too many wrong PINs/.test(String((await B.pin('mgr', '2468')).refused)), 'and then that person is locked on that tablet, even with the right PIN');
   } finally { await srv.close(); rmDb(f); }
 });
 

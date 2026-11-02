@@ -87,5 +87,35 @@ H.testAsync('wrong PINs: five on one tablet for one person lock that pair for 15
   H.ok((await typed996(h, 'tab-1', 'e1', '4821', PEOPLE996)).ok, 'after 15 minutes the right PIN works');
 });
 
+H.testAsync('11/1 (a Custom POS skeptic): a pass names the PIN it was earned with — a changed PIN, or the person made inactive, ends it at every check that hands in the person, and the name is signed; negative control: the same PIN still passes, renews and opens', async function () {
+  const h = hub996(), now = PEOPLE996.byId.get('e1'), g = (await typed996(h, 'tab-1', 'e1', '4821', PEOPLE996)).grant;
+  H.eq(g.pf, PG996.pinPrint(now.pin), 'the pass names its PIN');
+  H.ok(g.pf.length === 16 && now.pin.hash.indexOf(g.pf) === 0, 'by sixteen hex of its hash, never the hash itself');
+  const changed = { id: 'e1', active: true, pin: staff996.pinRecordSync('9999') }, gone = { id: 'e1', active: false, pin: now.pin };
+  H.eq(h.g.verify(g, 'tab-1', 'e1', h.t, now), null, 'the same person with the same PIN: a privileged fact passes');
+  H.eq(h.g.verify(g, 'tab-1', 'e1', h.t, changed), 'the PIN this pass was earned with has changed, or that person is no longer active', 'after a PIN change: refused');
+  H.eq(h.g.verify(g, 'tab-1', 'e1', h.t, gone), 'the PIN this pass was earned with has changed, or that person is no longer active', 'made inactive: refused');
+  H.eq(h.g.verify(g, 'tab-1', 'e1', h.t, null), 'the PIN this pass was earned with has changed, or that person is no longer active', 'no such person now: refused');
+  H.eq(h.g.door(g, 'tab-1', changed), 'the PIN this pass was earned with has changed, or that person is no longer active', 'it opens no risky door');
+  H.eq(h.g.door(g, 'tab-1', now), null, 'negative control: with the same PIN it opens');
+  h.at(h.t + 25 * 60000);
+  H.ok(/has changed.*the PIN again, please/.test(h.g.renew(g, 'tab-1', changed).refused || ''), 'nor is it renewed');
+  const r = h.g.renew(g, 'tab-1', now); H.ok(r.ok && r.grant.pf === g.pf, 'negative control: the same PIN renews, and the renewal still names it');
+  H.eq(h.g.verify(g, 'tab-1', 'e1', h.t), null, 'a check that hands in no person is not asked (each of the hub\'s callers hands in the person)');
+  H.eq(h.g.verify(Object.assign({}, g, { pf: PG996.pinPrint(changed.pin) }), 'tab-1', 'e1', h.t, changed), 'a PIN grant the hub did not sign', 'the name is signed: a pass rewritten to the new PIN is not one the hub gave');
+});
+
+H.testAsync('11/1 (a Custom POS skeptic): a burst of guesses sent at once gets the five free ones and no more — the PINs still being checked count — so the right PIN at the end of the burst earns nothing and the pair is locked; negative control: the right PIN alone earns a pass', async function () {
+  const h = hub996(), burst = [];
+  for (let i = 0; i < 20; i++) burst.push(typed996(h, 'tab-1', 'e1', i === 19 ? '4821' : String(1000 + i), PEOPLE996));
+  const out = await Promise.all(burst);
+  H.eq(out.filter(function (r) { return r.refused === 'wrong PIN'; }).length, 5, 'five guesses were checked');
+  H.ok(out.slice(5).every(function (r) { return !r.ok && /being checked at once/.test(r.refused); }), 'the other fifteen were refused before any hash, the right PIN among them');
+  const after = await typed996(h, 'tab-1', 'e1', '4821', PEOPLE996);
+  H.ok(!after.ok && /too many wrong PINs for this person on this tablet/.test(after.refused), 'and the pair is locked, even for the right PIN');
+  H.eq(h.told.length, 1, 'the owner is told once');
+  H.ok((await typed996(hub996(), 'tab-1', 'e1', '4821', PEOPLE996)).ok, 'negative control: on a fresh hub the right PIN alone earns a pass');
+});
+
 /* ── exported by the v2 exporter: the whole of the private suite's §996. */
 H.done();
