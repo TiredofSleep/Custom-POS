@@ -81,11 +81,11 @@ function check(ok, words) { console.log((ok ? '  ✓ ' : '  ✗ ') + words); if 
     /* the team, with PINs typed here */
     await A.fill('[data-pin="e1"]', '12'); await A.fill('[data-pin="e2"]', PINS.e2);
     await A.getByRole('button', { name: 'Add my team' }).click(); await A.waitForTimeout(400);
-    check(!srv.hub.facts().some(e => e.type === 'staff.set'), 'a PIN shorter than 4 digits writes nobody');
+    check(!srv.hub.facts().some(e => e.type === 'employee.set'), 'a PIN shorter than 4 digits writes nobody');
     await A.fill('[data-pin="e1"]', PINS.e1);
     await A.getByRole('button', { name: 'Add my team' }).click();
     check(await waitFor(A, /Enter your PIN/), 'the team is on the hub and the PIN pad shows');
-    const staffFacts = srv.hub.facts().filter(e => e.type === 'staff.set');
+    const staffFacts = srv.hub.facts().filter(e => e.type === 'employee.set');
     check(staffFacts.length === 2 && staffFacts[0].payload.set.role === 'owner' && staffFacts[1].actor === 'e1', 'two staff facts: the owner first, the second written by the owner (under the hub-checked pass)');
     check(Object.values(PINS).every(p => JSON.stringify(srv.hub.facts()).indexOf('"' + p + '"') < 0), 'no plain PIN reached the hub (only hashes)');
     /* A: Alex clocks in */
@@ -120,11 +120,11 @@ function check(ok, words) { console.log((ok ? '  ✓ ' : '  ✗ ') + words); if 
     await B.fill('[data-pin="e3"]', PINS.e3); await B.selectOption('#factsApprover', 'e1'); await B.fill('#factsApproverPin', '0000');
     await B.getByRole('button', { name: 'Add them' }).click();
     check(await waitFor(B, /did not accept Alex's PIN/), 'a wrong approving PIN is refused by the hub');
-    check(!srv.hub.facts().some(e => e.type === 'staff.set' && e.payload.staffId === 'e3'), 'and nobody was added');
+    check(!srv.hub.facts().some(e => e.type === 'employee.set' && e.payload.empId === 'e3'), 'and nobody was added');
     await B.getByRole('button', { name: 'Try again' }).click();
     await B.fill('[data-pin="e3"]', PINS.e3); await B.selectOption('#factsApprover', 'e1'); await B.fill('#factsApproverPin', PINS.e1);
     await B.getByRole('button', { name: 'Add them' }).click();
-    check(await until(() => srv.hub.facts().some(e => e.type === 'staff.set' && e.payload.staffId === 'e3' && e.actor === 'e1')), 'with Alex\'s PIN the hire is on the hub, written by Alex');
+    check(await until(() => srv.hub.facts().some(e => e.type === 'employee.set' && e.payload.empId === 'e3' && e.actor === 'e1')), 'with Alex\'s PIN the hire is on the hub, written by Alex');
     /* the hire's name is HTML: shown as text, never run */
     await waitFor(B, /Enter your PIN/);
     await enterPin(B, PINS.e3);

@@ -1,5 +1,5 @@
 {
- "note": "Time clock module, version 1: a saved fact log every later version must still fold to the same punches (docs/V2-MODULAR-IMPORT.md, law 1 and history fixtures). Times are America/Chicago. Generated once, 2026-10-31 — never regenerated.",
+ "note": "Time clock module, version 1: a saved fact log every later version must still fold to the same punches (docs/V2-MODULAR-IMPORT.md, law 1 and history fixtures). Times are America/Chicago. Generated once, 2026-10-31 — never regenerated. 11/1 (rollout step 4): the rebuilt staff.set its three people were written as was replaced by the origin shop's employee.set before any release, so the same three people were ADDED as employee.set facts at the end; the 14 facts above them are unchanged (a type no module registers is never folded).",
  "tz": "America/Chicago",
  "facts": [
   {
@@ -330,6 +330,83 @@
    "actor": "own",
    "at": 1793475009689,
    "hash": "5028b4845b966603da7cddd74a8d597cd1812fd09b51889a0eb8f6fd20afbdb3",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvykdk0j-1-99eb1a34dee2",
+   "type": "employee.set",
+   "aggregate": "staff",
+   "key": "own",
+   "payload": {
+    "empId": "own",
+    "set": {
+     "name": "Ola",
+     "role": "owner"
+    }
+   },
+   "hlc": {
+    "t": 1793475009689,
+    "c": 5,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": null,
+   "at": 1793475009686,
+   "hash": "0d70fa4de63e4be2e42e10d0c628420bb58577ff126a57f1ae6b9c35acf44b39",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvykdk0k-2-e45fab6dba64",
+   "type": "employee.set",
+   "aggregate": "staff",
+   "key": "mgr",
+   "payload": {
+    "empId": "mgr",
+    "set": {
+     "name": "Mo",
+     "role": "manager",
+     "perms": {
+      "payroll": true
+     }
+    }
+   },
+   "hlc": {
+    "t": 1793475009689,
+    "c": 6,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "own",
+   "at": 1793475009687,
+   "hash": "0e0952e213f9dfc7144fecf40be0b37fd304ecac3065d8541857df86f2d5bf3a",
+   "pos": null,
+   "epoch": null
+  },
+  {
+   "id": "fixture-v1/mvykdk0k-3-6a930b4a208c",
+   "type": "employee.set",
+   "aggregate": "staff",
+   "key": "clk",
+   "payload": {
+    "empId": "clk",
+    "set": {
+     "name": "Cam"
+    }
+   },
+   "hlc": {
+    "t": 1793475009689,
+    "c": 7,
+    "id": "fixture-v1"
+   },
+   "basedOn": null,
+   "station": "fixture-v1",
+   "actor": "own",
+   "at": 1793475009687,
+   "hash": "e340fb5371cbbeb5f285e38a949bf5788f9a76f9a2ebe0560c708a51f9cd3473",
    "pos": null,
    "epoch": null
   }

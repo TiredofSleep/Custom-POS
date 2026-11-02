@@ -11,7 +11,9 @@
      GET  /v2/health          alive, epoch, head — no secrets
      POST /v2/receive         a device proposes its own facts          body { station, token, events }
      POST /v2/pull            a device learns what came after its cursor  body { token, cursor, epoch, limit }
-     POST /v2/pin             a person's PIN, checked by the hub → a short pass   body { token, staffId, pin }   (Stage 2: only with a staff module)
+     POST /v2/pin-grant       a person's PIN, checked by the hub → a 30-minute pass  body { token, empId, pin }, or { token, grant } to renew
+                              one still good (up to 12 hours from the PIN) → { ok, grant } | { ok: false, refused }   (only with a staff module;
+                              the origin shop's own door and pass, facts/hub/pingrant.js)
      POST /v2/admin/enroll    the OPERATOR enrols a device             header x-custompos-admin; body { station, by }
      POST /v2/admin/revoke    the OPERATOR ends a device's access      header x-custompos-admin; body { station }
      GET  /v2/admin/watch     who is behind, refusing or revoked       header x-custompos-admin
@@ -29,7 +31,8 @@ const { openSqliteStore } = require('./hub/sqlite-store');
 const path = require('path');
 const fs = require('fs');
 const { assemble } = require('./modules/define');
-const { grantsFor } = require('./modules/pingrant');
+const { grantsFor } = require('./hub/pingrant');   /* the origin shop's own PIN pass (imported, unedited) */
+const staffRules = require('./core/staff');
 require('./aggregates/timeclock');   /* the fact types this hub knows; in Stage 2 each module registers its own */
 
 const MAX_BODY = 8 * 1024 * 1024;   /* a whole receive of 1000 facts fits many times over */
@@ -71,14 +74,17 @@ function startHubServer(opts) {
     store = opts.store || (opts.db ? openSqliteStore(opts.db) : null);
   } catch (e) { return Promise.reject(e); }
   /* Stage 2: the modules this hub runs (opts.modules, each from defineModule). With them, ONE judge decides who may write what, and the
-     hub checks PINs itself for the facts that need it (facts/modules/define.js, pingrant.js). Without them, it admits any registered type. */
+     hub checks PINs itself for the facts that need it (facts/modules/define.js, facts/hub/pingrant.js — the origin shop's). Without them, it
+     admits any registered type. */
   const mods = opts.modules || [];
+  /* @facts @hub — what the hub tells its operator (five wrong PINs for one person on one tablet, among others) */
+  const hubAlert = opts.notify || function (a) { console.error('[hub alert] ' + (a && (a.kind || a.type) || '') + ' ' + JSON.stringify(a).slice(0, 300)); };
   let grants = null, A = null;
   try {
-    if (mods.length) { grants = grantsFor({ secret: opts.grantSecret, dataDir: opts.dataDir || (opts.db ? path.dirname(path.resolve(opts.db)) : null), now: opts.now }); A = assemble(mods, { grantCheck: grants.check }); }
+    if (mods.length) { grants = grantsFor({ secret: opts.grantSecret, dataDir: opts.dataDir || (opts.db ? path.dirname(path.resolve(opts.db)) : null), now: opts.now, alert: function (a) { hubAlert(a); } }); A = assemble(mods, { grantCheck: grants.verify }); }
   } catch (e) { if (store && !opts.store) store.close(); return Promise.reject(e); }
   const staffSource = mods.filter(function (m) { return typeof m.provides.staff === 'function'; })[0] || null;
-  const hub = makeHub({ persist: store, authority: A ? A.judge : null, notify: opts.notify || function (a) { console.error('[hub alert] ' + (a && (a.kind || a.type) || '') + ' ' + JSON.stringify(a).slice(0, 300)); }, now: opts.now });
+  const hub = makeHub({ persist: store, authority: A ? A.judge : null, notify: hubAlert, now: opts.now });
   const operator = function (req) { return sameKey(req.headers['x-custompos-admin'], adminKey); };
 
   /* @facts @hub — the body as JSON, with the front door's limits: a sender with no known key (device token or operator key) gets 64 KB */
@@ -122,7 +128,7 @@ function startHubServer(opts) {
         send(res, bad ? 503 : 200, { ok: !bad, epoch: hub.epoch, head: hub.head, store: bad ? 'refusing writes' : 'ok' }); return;
       }
       if (req.method === 'GET' && url === '/v2/admin/watch') { if (!operator(req)) { refuse(req, res, 403, { refused: 'the operator key is needed' }); return; } send(res, 200, hub.watch()); return; }
-      if (req.method !== 'POST' || ['/v2/receive', '/v2/pull', '/v2/pin', '/v2/admin/enroll', '/v2/admin/revoke'].indexOf(url) < 0) { refuse(req, res, 404, { refused: 'no such route' }); return; }
+      if (req.method !== 'POST' || ['/v2/receive', '/v2/pull', '/v2/pin-grant', '/v2/admin/enroll', '/v2/admin/revoke'].indexOf(url) < 0) { refuse(req, res, 404, { refused: 'no such route' }); return; }
       if (url.indexOf('/v2/admin/') === 0 && !operator(req)) { refuse(req, res, 403, { refused: 'the operator key is needed' }); return; }
       readJson(req, res, function (j) {
         try {
@@ -137,11 +143,17 @@ function startHubServer(opts) {
           /* the pull carries `at` (the fact the tablet holds at its cursor — how a hub restored from an older copy is caught and takes a
              new identity) and `info` (the tablet's clock, build and scope, for the watch); both go to the hub (pre-push review: dropped) */
           if (url === '/v2/pull') { send(res, 200, hub.pull(j.token, j.cursor, j.epoch, j.limit, typeof j.at === 'string' ? j.at : undefined, (j.info && typeof j.info === 'object' && !Array.isArray(j.info)) ? j.info : undefined)); return; }
-          if (url === '/v2/pin') {   /* a person's PIN, checked by the hub: a pass for that person on this tablet (facts/modules/pingrant.js) */
+          /* the origin shop's door (its hub/server.js /v2/pin-grant): an enrolled tablet asks for a pass with the PIN just typed ({token, empId,
+             pin} — checked against the hub's own staff facts, never kept, never logged), or renews one still good ({token, grant}); the answer
+             is {ok, grant} or {ok: false, refused} (facts/hub/pingrant.js) */
+          if (url === '/v2/pin-grant') {
             const dev = hub.allowedDevice(String(j.token || ''));
             if (!dev) { refuse(req, res, 401, { refused: 'not enrolled' }); return; }
-            if (!grants || !staffSource) { send(res, 404, { refused: 'this hub checks no PINs (it runs no staff module)' }); return; }
-            send(res, 200, grants.issue(staffSource.provides.staff(hub.facts(), []), j.staffId, dev.station, j.pin)); return;
+            if (!grants || !staffSource) { send(res, 200, { ok: false, refused: 'this hub checks no PINs (it runs no staff module)' }); return; }
+            if (j.grant) { send(res, 200, grants.renew(j.grant, dev.station)); return; }
+            grants.check(dev.station, String(j.empId || '').slice(0, 64), String(j.pin || '').slice(0, 32), staffSource.provides.staff(hub.facts(), []), staffRules.pinHash, staffRules.pinIter)
+              .then(function (r) { send(res, 200, r); }, function () { send(res, 500, { ok: false, refused: 'the PIN could not be checked' }); });
+            return;
           }
           if (url === '/v2/admin/enroll') {
             /* a name the judge trusts (or a service's own) is never a device's: enrolled as one, a device would pass every rule (stage-2 review) */

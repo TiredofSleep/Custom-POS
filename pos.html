@@ -1231,7 +1231,7 @@ function fileIncident(staff, type, note, urgent){ DB=loadDB(); DB.incidents=DB.i
    read a wrong count and said "up to date" while the hub refused; connecting wiped this device's earlier punches; the team could be
    added only once; a mistyped device name could not be undone; staff names were drawn as HTML; the clock redrew every 5 s over typing;
    punches were not on the Activity log. */
-const FACTS = { on:false, ready:false, need:null, error:null, st:null, remote:null, hub:"", passes:[], staff:null, timer:null, busy:false, last:"" };
+const FACTS = { on:false, ready:false, need:null, error:null, st:null, remote:null, hub:"", passes:{}, staff:null, timer:null, busy:false, last:"" };
 function factsWanted(){ return !!(FLOW && FLOW.storage==="facts" && typeof globalThis.CustomPOSFacts==="object" && globalThis.CustomPOSFacts); }
 function factsKey(){ return "custompos_facts_"+flowId(); }
 function factsCfg(){ try{ return JSON.parse(localStorage.getItem(factsKey())||"null"); }catch(e){ return null; } }
@@ -1253,7 +1253,7 @@ async function factsBoot(token){
     if(token) st.setAccess(token);   // straight into the log's own store; never in the page's storage
     if(!st.accessToken){ try{ st.close(); }catch(e){} FACTS.need = "connect"; render(); return; }   // let go of the store: Connect opens it again
     const remote = F.http.httpHub(cfg.hub, { timeoutMs: 8000 });
-    st.setTransport(function(b){ b.grants = FACTS.passes; return remote.receive(b); });   // a hub-checked PIN pass rides with the facts that need one
+    st.setTransport(function(b){ b.grants = FACTS.passes; return remote.receive(b); });   // a hub-checked PIN pass rides with the facts that need one: { person: pass }, as the origin shop sends them
     FACTS.st = st; FACTS.remote = remote; FACTS.hub = cfg.hub.replace(/\/+$/,""); FACTS.ready = true; FACTS.need = null; FACTS.error = null; FACTS.last = "";
     await factsPull(true);
     FACTS.timer = setInterval(factsPull, 5000);
@@ -1326,7 +1326,7 @@ function factsStatusText(){
 function factsMissing(){ const on = new Set(FACTS.staff ? Array.from(FACTS.staff.byId.keys()) : []); return (FLOW.staff||[]).filter(s=>s && s.id && s.name && !on.has(String(s.id))); }
 /* the team onto the hub: each PIN is TYPED here and leaves only as a hash. A brand-new hub takes its owner first; everyone after is added
    under an owner's or manager's PIN, checked BY THE HUB for a short pass. It writes only who is missing, so it runs again after a hire or an
-   interrupted try (facts/modules/staff.js — a staff change needs the right and that pass) */
+   interrupted try (facts/modules/staff.js — a staff change needs the right and that pass; the facts are the origin shop's employee.set) */
 async function factsAddTeam(form){
   if(FACTS.busy || !FACTS.ready) return;
   const F = globalThis.CustomPOSFacts, missing = factsMissing(), empty = !(FACTS.staff && FACTS.staff.byId.size);
@@ -1335,20 +1335,21 @@ async function factsAddTeam(form){
   let approver = null, approverPin = "";
   if(empty){ approver = missing.find(s=>s.role==="owner") || missing[0]; approverPin = pins[approver.id]; }
   else { const id = (form.querySelector("#factsApprover")||{}).value; approver = factsStaff().find(s=>String(s.id)===id); approverPin = ((form.querySelector("#factsApproverPin")||{}).value||"").trim(); if(!approver){ flash("Choose who is adding them"); return; } }
-  FACTS.busy = true; FACTS.passes = []; render();
+  FACTS.busy = true; FACTS.passes = {}; render();
   try{
-    const setOf = async function(s){ const own = (empty && s===approver) || s.role==="owner"; return { name: String(s.name).slice(0,60), role: own ? "owner" : (s.role==="manager" ? "manager" : "staff"), rights: own ? [] : (s.role==="manager" ? ["payroll","employees"] : []), pin: await F.staff.pinRecordAsync(pins[s.id]) }; };
-    if(empty && !(await factsRecord("staff.set", approver.id, { staffId: approver.id, set: await setOf(approver) }, null))) throw new Error(FACTS.error || "the owner could not be added");
+    /* a manager here keeps payroll and employees as their own permissions (the business's default manager list, core/abilities.js, has neither) */
+    const setOf = async function(s){ const own = (empty && s===approver) || s.role==="owner"; const set = { name: String(s.name).slice(0,60), role: own ? "owner" : (s.role==="manager" ? "manager" : "staff"), pin: await F.staff.pinRecord(pins[s.id]) }; if(!own && s.role==="manager") set.perms = { payroll:true, employees:true }; return set; };
+    if(empty && !(await factsRecord("employee.set", approver.id, { empId: approver.id, set: await setOf(approver) }, null))) throw new Error(FACTS.error || "the owner could not be added");
     const rest = missing.filter(s=>!(empty && s===approver));
     if(rest.length){
-      const r = await fetch(FACTS.hub + "/v2/pin", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ token: FACTS.st.accessToken, staffId: approver.id, pin: approverPin }) }).then(x=>x.json());
+      const r = await fetch(FACTS.hub + "/v2/pin-grant", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ token: FACTS.st.accessToken, empId: approver.id, pin: approverPin }) }).then(x=>x.json());
       if(!r.grant) throw new Error("the hub did not accept " + approver.name + "'s PIN (" + (r.refused||"no answer") + ")");
-      FACTS.passes = [r.grant];
-      for(const s of rest){ if(!(await factsRecord("staff.set", s.id, { staffId: s.id, set: await setOf(s) }, approver.id))) throw new Error(FACTS.error || (s.name + " could not be added")); }
+      FACTS.passes = {}; FACTS.passes[approver.id] = r.grant;
+      for(const s of rest){ if(!(await factsRecord("employee.set", s.id, { empId: s.id, set: await setOf(s) }, approver.id))) throw new Error(FACTS.error || (s.name + " could not be added")); }
     }
     flash(missing.length===1 ? missing[0].name + " is on the hub" : "Your team is on the hub");
   }catch(e){ FACTS.error = String(e && e.message || e); }
-  finally{ FACTS.passes = []; FACTS.busy = false; factsRefresh(true); render(); }
+  finally{ FACTS.passes = {}; FACTS.busy = false; factsRefresh(true); render(); }
 }
 /* the four punches as facts: the person themselves is the actor, so the hub admits a clock-in without asking for anything else. No wage is
    written (a pay figure needs payroll): the person's wage from setup applies, as it always has */
@@ -1378,7 +1379,7 @@ function renderFactsTeam(app){
     : "<h2 style='margin:2px 0'>Add " + missing.length + " " + (missing.length===1?"person":"people") + " to the hub</h2><p class='muted'>They are in your setup but not on the hub yet. Type a PIN for each, then an owner or manager confirms with their own PIN.</p>";
   missing.forEach(function(s){ const l=document.createElement("label"); l.style.cssText="display:block;margin:4px 0"; l.textContent=s.name+(s.role==="owner"||(empty&&s===(missing.find(x=>x.role==="owner")||missing[0]))?" (owner)":"")+" — PIN"; const i=document.createElement("input"); i.type="password"; i.inputMode="numeric"; i.autocomplete="off"; i.setAttribute("data-pin", String(s.id)); i.style.cssText="display:block;max-width:160px"; l.appendChild(i); c.appendChild(l); });
   if(!empty){
-    const who=document.createElement("select"); who.id="factsApprover"; factsStaff().filter(s=>s.role==="owner"||(s.rights||[]).indexOf("employees")>=0).forEach(function(s){ const o=document.createElement("option"); o.value=s.id; o.textContent=s.name; who.appendChild(o); });
+    const who=document.createElement("select"); who.id="factsApprover"; factsStaff().filter(s=>globalThis.CustomPOSFacts.staff.can(s, "employees", FACTS.staff)).forEach(function(s){ const o=document.createElement("option"); o.value=s.id; o.textContent=s.name; who.appendChild(o); });
     const pin=document.createElement("input"); pin.id="factsApproverPin"; pin.type="password"; pin.inputMode="numeric"; pin.placeholder="their PIN"; pin.autocomplete="off"; pin.style.cssText="max-width:120px;margin-left:8px";
     const row=document.createElement("div"); row.style.margin="8px 0"; row.appendChild(document.createTextNode("Added by ")); row.appendChild(who); row.appendChild(pin); c.appendChild(row);
   }
@@ -1405,14 +1406,15 @@ function renderFactsGate(app, station, staff){
   if(!staff.length){ if(!renderFactsTeam(app)){ const e=document.createElement("div"); e.className="empty card"; e.textContent="Nobody is on staff yet, on the hub or in setup. Add your team in the builder."; app.appendChild(e); } return true; }
   return false;
 }
-/* who a typed PIN belongs to in facts mode: checked against the hub's PIN hashes (a several-stations download carries no PINs); ok() narrows who may match */
-async function factsWhoByPin(pin, ok){ if(!FACTS.ready) return null; const F=globalThis.CustomPOSFacts; for(const s of factsStaff()){ if((!ok||ok(s)) && s.pin && await F.staff.pinMatchesAsync(s.pin, String(pin))) return s; } return null; }
-/* the PIN pad's ✓: a plain compare in blob mode; in facts mode each person's PIN hash is checked (WebCrypto) — one check at a time */
+/* who a typed PIN belongs to in facts mode: checked against the hub's PIN hashes (a several-stations download carries no PINs) by the origin shop's empByPin
+   (core/staff.js: what was typed is trimmed, each record at its own cost, the first match in list order); ok() narrows who may match */
+async function factsWhoByPin(pin, ok){ if(!FACTS.ready) return null; return await globalThis.CustomPOSFacts.staff.empByPin(String(pin), factsStaff().filter(s=>!ok||ok(s))); }
+/* the PIN pad's ✓: a plain compare in blob mode; in facts mode each person's PIN hash is checked (WebCrypto, the shop's empByPin) — one ✓ at a time */
 let clockChecking = false;
 async function clockEnter(staff){
   if(clockChecking) return;
   const buf=pinBuf; let who=null;
-  if(FACTS.on){ clockChecking=true; flash("Checking…"); try{ const F=globalThis.CustomPOSFacts; for(const s of staff){ if(s.pin && await F.staff.pinMatchesAsync(s.pin, buf)){ who=s; break; } } } finally{ clockChecking=false; } }
+  if(FACTS.on){ clockChecking=true; flash("Checking…"); try{ who = await globalThis.CustomPOSFacts.staff.empByPin(buf, staff); } finally{ clockChecking=false; } }
   else who=staff.find(s=>String(s.pin)===buf)||null;
   if(who){ if(openPunch(who.id)){ clockAction={staffId:who.id}; pinBuf=""; render(); } else clockIn(who); } else { pinBuf=""; flash("PIN not recognized"); render(); }
 }

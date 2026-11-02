@@ -12,7 +12,9 @@
                   'needs:<right>'   an owner, or someone holding <right>
                   'owner'           an owner only
                   'hub-only'        only the hub's own stations (opts.trusted) — never a tablet
-     pin        true: the hub must also hold a PIN check it made itself for that person on that tablet (a grant), not just the tablet's word
+     pin        true: the hub must also hold a PIN check it made itself for that person on that tablet (a grant), not just the tablet's word.
+                The grants ride with a send as the origin shop's do: bundle.grants = { personId: grant }, and opts.grantCheck is
+                facts/hub/pingrant.js verify(grant, station, person, at) → null | why (imported, the shop's own file)
      rule       optional (p, who, staff, e) → null | reason: the module's own extra rule, run after the authority passes — it can only refuse more
    A type an imported aggregate already registered is ADOPTED ({ adopt: true, authority, pin }): the module gives it authority and
    leaves its validator and fold as imported.
@@ -123,7 +125,13 @@ function assemble(mods, opts) {
     /* the module's own extra rule: it may only refuse more — and a rule that throws refuses THIS fact only (closed, never open; never the
        whole send, which would wedge the tablet resending it) */
     if (r.rule) { try { why = r.rule(p, who, staff, e); } catch (x) { why = 'the ' + r.module + ' module\'s rule failed on this ' + e.type; } if (why) return why; }
-    if (r.pin && grantCheck && !grantCheck((bundle && bundle.grants) || [], String(who.id), e.station, e)) return 'a ' + e.type + ' needs a PIN the hub checked for ' + who.name + ' on this tablet';
+    /* the PIN the hub checked: the send's grant for this person, judged as the origin shop's hub judges it (hub/authority.js) — signed by
+       this hub, for this tablet and this person, for a fact done before it ended, and sent within its grace */
+    if (r.pin && grantCheck) {
+      const gs = (bundle && bundle.grants && typeof bundle.grants === 'object' && !Array.isArray(bundle.grants)) ? bundle.grants : {}, id = String(who.id);
+      const bad = grantCheck(Object.prototype.hasOwnProperty.call(gs, id) ? gs[id] : null, e.station, id, e.at);
+      if (bad) return 'a ' + e.type + ' needs ' + who.name + '\'s PIN checked by the hub (' + bad + ') — ' + who.name + ' enters it again on this tablet';
+    }
     return null;
   }
   return { rules: rules, pinChecked: pinChecked, judge: judge, config: config, modules: mods.map(function (m) { return m.name; }) };

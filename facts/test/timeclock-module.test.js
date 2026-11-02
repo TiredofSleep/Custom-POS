@@ -23,19 +23,19 @@ async function post(base, p, body, headers) { const r = await fetch(base + p, { 
 async function tablet(srv, id) {
   const token = (await post(srv.url, '/v2/admin/enroll', { station: id }, { 'x-custompos-admin': ADMIN })).json.token, remote = httpHub(srv.url);
   const T = makeStation({ id: id, persist: jstore() }); T.setAccess(token); attach(T, remote); T.remote = remote;
-  T.passes = []; T.setTransport(function (b) { b.grants = T.passes; return remote.receive(b); });
-  T.pin = async function (staffId, pin) { const r = await post(srv.url, '/v2/pin', { token: token, staffId: staffId, pin: pin }); if (r.json.grant) T.passes = [r.json.grant]; return r.json; };
+  T.passes = {}; T.setTransport(function (b) { b.grants = T.passes; return remote.receive(b); });
+  T.pin = async function (empId, pin) { const r = await post(srv.url, '/v2/pin-grant', { token: token, empId: empId, pin: pin }); if (r.json.grant) T.passes[empId] = r.json.grant; return r.json; };
   return T;
 }
 async function put(T, type, key, p, actor) { const e = T.record(type, key, p, { actor: actor }); await settle(T); return { ok: !!T.log.get(e.id).pos, id: e.id }; }
 /* @proof — a shop on a hub: an owner, a manager with payroll, a clerk */
 async function shop(srv) {
   const A = await tablet(srv, 'counter');
-  await put(A, 'staff.set', 'own', { staffId: 'own', set: { name: 'Ola', role: 'owner', pin: S.pinRecord('1111') } }, null);
+  await put(A, 'employee.set', 'own', { empId: 'own', set: { name: 'Ola', role: 'owner', pin: S.pinRecordSync('1111') } }, null);
   await A.pin('own', '1111');
-  await put(A, 'staff.set', 'mgr', { staffId: 'mgr', set: { name: 'Mo', role: 'manager', rights: ['payroll'], pin: S.pinRecord('2222') } }, 'own');
-  await put(A, 'staff.set', 'clk', { staffId: 'clk', set: { name: 'Cam', role: 'staff', pin: S.pinRecord('3333') } }, 'own');
-  A.passes = [];
+  await put(A, 'employee.set', 'mgr', { empId: 'mgr', set: { name: 'Mo', role: 'manager', perms: { payroll: true }, pin: S.pinRecordSync('2222') } }, 'own');
+  await put(A, 'employee.set', 'clk', { empId: 'clk', set: { name: 'Cam', role: 'staff', pin: S.pinRecordSync('3333') } }, 'own');
+  A.passes = {};
   return A;
 }
 
@@ -67,17 +67,17 @@ H.testAsync('who may punch and who may correct: a clerk only for themselves; a c
   try {
     const run = async function (server, judged) {
       const A = judged ? await shop(server) : await tablet(server, 'counter'), out = {}, t0 = Date.now() - 3 * HOUR;
-      if (!judged) { await put(A, 'staff.set', 'own', { staffId: 'own', set: { name: 'Ola', role: 'owner' } }, null); await put(A, 'staff.set', 'mgr', { staffId: 'mgr', set: { name: 'Mo', rights: ['payroll'] } }, 'own'); await put(A, 'staff.set', 'clk', { staffId: 'clk', set: { name: 'Cam' } }, 'own'); }
+      if (!judged) { await put(A, 'employee.set', 'own', { empId: 'own', set: { name: 'Ola', role: 'owner' } }, null); await put(A, 'employee.set', 'mgr', { empId: 'mgr', set: { name: 'Mo', perms: { payroll: true } } }, 'own'); await put(A, 'employee.set', 'clk', { empId: 'clk', set: { name: 'Cam' } }, 'own'); }
       const inn = await put(A, 'clock.in', 'clk', { empId: 'clk', at: t0 }, 'clk'); out.selfIn = inn.ok;
       out.clerkInsAnother = (await put(A, 'clock.in', 'mgr', { empId: 'mgr', at: t0 }, 'clk')).ok;
       out.managerInsAnother = (await put(A, 'clock.in', 'own', { empId: 'own', at: t0 }, 'mgr')).ok;
       if (judged) await A.pin('clk', '3333');
       out.clerkEdits = (await put(A, 'clock.edit', 'clk', { empId: 'clk', shiftId: inn.id, in: t0 - 600000 }, 'clk')).ok;
-      A.passes = [];
+      A.passes = {};
       out.managerEditsNoPin = (await put(A, 'clock.edit', 'clk', { empId: 'clk', shiftId: inn.id, in: t0 - 600000 }, 'mgr')).ok;
       if (judged) await A.pin('mgr', '2222');
       out.managerEditsWithPin = (await put(A, 'clock.edit', 'clk', { empId: 'clk', shiftId: inn.id, in: t0 - 600000 }, 'mgr')).ok;
-      A.passes = [];
+      A.passes = {};
       out.tabletAutocloses = (await put(A, 'clock.autoclose', 'clk', { empId: 'clk', at: t0 + 2 * HOUR, shiftId: inn.id }, 'own')).ok;
       out.breakSelf = (await put(A, 'break.start', 'clk', { empId: 'clk', shiftId: inn.id, at: t0 + HOUR }, 'clk')).ok;
       /* a wage on a clock-in is a pay figure: never from a clerk, from someone with payroll yes (stage-2 review) */
@@ -97,7 +97,7 @@ H.test('breaks and the compat projection: DB.punches\' exact shape, paid time mi
   const clock = hlc.makeClock('fx');
   const fact = function (type, key, payload, actor) { return EV.makeEvent({ type: type, aggregate: reg.typeDef(type).aggregate, key: key, payload: payload, hlc: clock.now(), station: 'fx', actor: actor || null }); };
   const t0 = new Date(2026, 9, 31, 9, 0).getTime();
-  const staff = [fact('staff.set', 'clk', { staffId: 'clk', set: { name: 'Cam' } }), fact('staff.set', 'mgr', { staffId: 'mgr', set: { name: 'Mo' } })];
+  const staff = [fact('employee.set', 'clk', { empId: 'clk', set: { name: 'Cam' } }), fact('employee.set', 'mgr', { empId: 'mgr', set: { name: 'Mo' } })];
   const in1 = fact('clock.in', 'clk', { empId: 'clk', at: t0, wage: 16 }, 'clk');
   const b1 = fact('break.start', 'clk', { empId: 'clk', shiftId: in1.id, at: t0 + 2 * HOUR }, 'clk'), b2 = fact('break.end', 'clk', { empId: 'clk', shiftId: in1.id, at: t0 + 2.5 * HOUR }, 'clk');
   const out1 = fact('clock.out', 'clk', { empId: 'clk', at: t0 + 4 * HOUR, shiftId: in1.id }, 'clk');
@@ -137,7 +137,7 @@ H.test('stage-2 review: a break naming shift "constructor" cannot break anyone\'
   const reg = require('../core/registry'), EV = require('../core/event'), hlc = require('../core/hlc'), clock = hlc.makeClock('rv');
   const fact = function (type, key, payload, actor) { return EV.makeEvent({ type: type, aggregate: reg.typeDef(type).aggregate, key: key, payload: payload, hlc: clock.now(), station: 'rv', actor: actor || null }); };
   H.ok(/clock-in.s id/.test(String(reg.typeDef('break.start').admit({ empId: 'clk', shiftId: 'constructor', at: 1 }, function () { return false; }))), 'a NEW break naming "constructor" is refused at the door');
-  const t0 = new Date(2026, 9, 31, 9, 0).getTime(), staff = [fact('staff.set', 'clk', { staffId: 'clk', set: { name: 'Cam' } })];
+  const t0 = new Date(2026, 9, 31, 9, 0).getTime(), staff = [fact('employee.set', 'clk', { empId: 'clk', set: { name: 'Cam' } })];
   const inn = fact('clock.in', 'clk', { empId: 'clk', at: t0 }, 'clk');
   /* history that already holds such a fact (made before the door rule): the fold must not throw */
   const poison = fact('break.start', 'clk', { empId: 'clk', shiftId: 'constructor', at: t0 + 1000 }, 'clk');

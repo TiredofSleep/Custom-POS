@@ -2203,6 +2203,361 @@ registry.registerAggregate(AGG, { fold: fold, inc: INC, detectConflicts: detectC
 module.exports = { fold: fold, detectConflicts: detectConflicts, openShiftId: openShiftId, AGG: AGG, RANK: RANK, LONG_SHIFT_MS: LONG_SHIFT_MS, LATE_TAP_MS: LATE_TAP_MS, ORPHAN_GRACE_MS: ORPHAN_GRACE_MS, TAP_WINDOW_MS: TAP_WINDOW_MS };
 
 });
+__def("core/abilities.js", {}, function (module, exports, require) {
+'use strict';
+/* ============================================================================
+ * THE SHOP'S ABILITIES — what a person here can be allowed to do, and what each role may do before the owner changes it
+ * @permission @employee @owner — the shop's own list (v1 verbatim); core/staff.js is the same for every business, and this file is the part a business writes for itself
+ * ----------------------------------------------------------------------------
+ * Owner, 11/1: "we are trying to build a modular system so nobody has to spend the money to do this work again... copy,
+ * paste, customize". core/staff.js (roles, PINs, can()) is shared as it is. This file is the shop's, a cleaner's: the
+ * twelve abilities v1's Admin lists, in v1's order, and v1's built-in role defaults (v1 ABILITIES / ROLE_PERMS, verbatim).
+ * Another business keeps core/staff.js as it is and writes its own copy of this file (start from this one). "unrack" is a
+ * cleaner's ability; a restaurant leaves it out. staff.abilitiesFrom(list) checks a list the way the start does.
+ *
+ *   · ABILITIES: [key, the words on the Admin screen], in the order the screen lists them.
+ *   · ROLE_PERMS: what owner, manager and staff may do until the shop changes a role (Admin → Roles). The owner may do
+ *     everything whatever this says (staff.can); the owner's list here only fills that role's boxes on the screen.
+ *   · At most 40 abilities, each with its words. A wrong key, a missing word, a role that is not owner, manager or staff,
+ *     or a default naming no ability stops the start and names this file (staff.abilitiesFrom).
+ *   · ONCE ANY FACT NAMES AN ABILITY, ITS KEY STAYS. Change its words freely, but never delete or rename the key: every
+ *     tablet set up later checks the shop's old facts by this list, and would refuse a person's old change that names a key
+ *     no longer here (with whatever else that change said, such as making them inactive). A new shop with no history may
+ *     write the list any way it likes.
+ *   · A module that brings its own action adds it when it loads: staff.addAbility(key, words, roles), called from the
+ *     module's aggregates/ file, which the hub loads too. An ability only the tablet knows makes the hub refuse every role
+ *     list and every person's change that names it.
+ * ========================================================================== */
+module.exports = {
+  ABILITIES: [['admin', 'Open the Admin area'], ['drawer', 'Cash drawer in/out'], ['void', 'Void orders'], ['unrack', 'Un-rack ready orders (send back to production)'], ['adjust', 'Discounts & manual adjustments'], ['reports', 'View reports'], ['customers', 'Edit customers'], ['payroll', 'Edit PAYROLL (time entries & pay rates) — official record, logged'], ['employees', 'Manage employees'], ['prices', 'Edit prices & upcharges'], ['settings', 'Change settings & tax'], ['reset', 'Reset data']],
+  ROLE_PERMS: { owner: ['admin', 'drawer', 'void', 'unrack', 'adjust', 'reports', 'customers', 'employees', 'payroll', 'prices', 'settings', 'reset'], manager: ['admin', 'drawer', 'void', 'unrack', 'adjust', 'reports', 'customers'], staff: ['unrack'] }
+};
+
+});
+__def("core/staff.js", {"./abilities":"core/abilities.js","crypto":"station/crypto-shim.js"}, function (module, exports, require) {
+'use strict';
+/* ============================================================================
+ * STAFF — who works here, what each may do, and the PIN that proves it is them (2026-09-23, plan A3).
+ * @employee @permission @owner — roles and abilities, PINs as salted hashes, a tablet's wrong-PIN lock, and the list of facts the hub PIN-checks; the same for every business
+ * ----------------------------------------------------------------------------
+ * Carried over rule for rule from v1's own code (rolePerms, can, isOwner, empByPin, saveEmployee) and proven against
+ * verbatim copies of those functions in the suite (§38).
+ *
+ *   · The owner can do everything. Anyone else: their own per-person override first, then the shop's role list, then
+ *     the built-in defaults.
+ *   · A PIN is at least 4 digits, unique, and a disabled employee's PIN never works. v1 trims what was typed.
+ *   · WHICH abilities there are is the business's own: core/abilities.js (the shop's is v1's twelve). A module adds
+ *     its own with addAbility(). Since 11/1 nothing of the shop's prices is in this file: discounts and voids are
+ *     core/discountvoid.js. That is what lets Custom POS share this file as it is (V2-MODULAR-IMPORT.md Part 3b, step 2).
+ *
+ * PINS ARE KEPT ONLY AS SALTED HASHES (PBKDF2-SHA256, a random salt per person). ⚠️ Be honest about what that buys:
+ * a 4-digit PIN has 10,000 possibilities, so no hash makes it secret from someone holding the whole log. What it
+ * does is keep PINs out of sight — nobody reading the log, a backup, a feed report or a screen sees one — and v1
+ * kept them in plain text on every station. The real guard is where the log lives: the shop's tablets and the hub.
+ * ========================================================================== */
+const ROLES = ['owner', 'manager', 'staff'];
+
+/* ---------------- the abilities: the business's own list (core/abilities.js), then what its modules add ----------------
+   ABILITIES ([key, words], in the Admin screen's order), ABILITY_KEYS and ROLE_PERMS (each role's defaults) are made
+   once from the business's file and only ever added to, never replaced, so every reader that took them at load sees the
+   same lists. abilitiesFrom() is the one way a list becomes them (a builder can check a business's file with it too). */
+/* review 11/1: at most 40 — the staff fold refuses a role list longer than that (aggregates/staff.js), and the owner's defaults hold
+   every ability, so a 41st would leave Admin → Roles unable to save; it stops the start instead */
+const MAX_ABILITIES = 40;
+/* @permission — one ability onto a set of lists: a short key (a letter, then letters, digits or _) and its words, never twice; `where` names who asked */
+function addOne(into, key, label, where) {
+  key = String(key == null ? '' : key);
+  if (!/^[a-z][A-Za-z0-9_]{0,31}$/.test(key)) throw new Error(where + ': "' + key + '" is not an ability key (a letter, then letters, digits or _)');
+  if (key in {}) throw new Error(where + ': "' + key + '" is a name every object already has (can() would read it off any person)');
+  if (into.ABILITY_KEYS.indexOf(key) >= 0) throw new Error(where + ': "' + key + '" is already an ability');
+  if (typeof label !== 'string' || !label.trim()) throw new Error(where + ': "' + key + '" needs its words (what the Admin screen shows)');
+  if (into.ABILITY_KEYS.length >= MAX_ABILITIES) throw new Error(where + ': "' + key + '" would be ability ' + (MAX_ABILITIES + 1) + ' — at most ' + MAX_ABILITIES + ' (a role\'s list holds no more)');
+  into.ABILITIES.push([key, label]); into.ABILITY_KEYS.push(key);
+}
+/* @permission @employee — a business's list as this file holds it: its abilities in its order, then each role's defaults in its order; anything the file gets wrong (a key, its words, a role, a default naming no ability) stops the start, naming the file */
+function abilitiesFrom(shop) {
+  const at = 'core/abilities.js', out = { ABILITIES: [], ABILITY_KEYS: [], ROLE_PERMS: { owner: [], manager: [], staff: [] } }, rp = (shop && shop.ROLE_PERMS) || {};
+  ((shop && shop.ABILITIES) || []).forEach(function (a, i) { if (!Array.isArray(a)) throw new Error(at + ': ABILITIES[' + i + '] is [key, words]'); addOne(out, a[0], a[1], at); });
+  Object.keys(rp).forEach(function (r) { if (ROLES.indexOf(r) < 0) throw new Error(at + ': ROLE_PERMS names "' + r + '", which is not a role (' + ROLES.join(', ') + ')'); });
+  ROLES.forEach(function (r) {
+    (rp[r] || []).forEach(function (k) {
+      if (out.ABILITY_KEYS.indexOf(k) < 0) throw new Error(at + ': ROLE_PERMS.' + r + ' names "' + k + '", which is not in its ABILITIES');
+      if (out.ROLE_PERMS[r].indexOf(k) < 0) out.ROLE_PERMS[r].push(k);
+    });
+  });
+  return out;
+}
+const START = abilitiesFrom(require('./abilities'));
+const ABILITIES = START.ABILITIES, ABILITY_KEYS = START.ABILITY_KEYS, ROLE_PERMS = START.ROLE_PERMS;
+/* @permission @employee @owner — a module's new ability: its key, the words the Admin screen shows, and the roles that have it until the shop changes them (the owner always).
+   ⚠️ Call it where the HUB loads it too — from the module's aggregates/ file, which the hub and the tablets both load — never only from
+   a core/ kit the tablet alone has. The hub judges every person's change and every role list by its own list (review 11/1): an
+   ability only the tablet knows makes the hub refuse the whole save that names it — a role list, or a person's change (even making
+   them inactive) — while the tablet that recorded it has already applied it. */
+function addAbility(key, label, roles) {
+  (roles || []).forEach(function (r) { if (ROLES.indexOf(r) < 0) throw new Error('staff.addAbility: "' + r + '" is not a role (' + ROLES.join(', ') + ')'); });
+  addOne(START, key, label, 'staff.addAbility');
+  ['owner'].concat(roles || []).forEach(function (r) { if (ROLE_PERMS[r].indexOf(key) < 0) ROLE_PERMS[r].push(key); });
+}
+
+/* v1 rolePerms: the shop's own list for the role, else the built-in default */
+/* @permission @employee — v1 rolePerms: what a role may do — the shop's own list for it, else v1's built-in default */
+function rolePerms(roles, role) { return (roles && roles[role]) || ROLE_PERMS[role] || []; }
+/* v1 can(): the owner always; a per-person override when there is one; else the role */
+/* @permission @employee @owner — v1 can(): may this person do this — the owner always, then their own override, then their role */
+function can(emp, a, roles) {
+  const r = emp ? emp.role : null; if (!r) return false; if (r === 'owner') return true;
+  if (emp.perms && emp.perms[a] !== undefined) return !!emp.perms[a];
+  return rolePerms(roles, r).indexOf(a) >= 0;
+}
+/* @permission @owner — v1 isOwner: is this person an owner (the role, never a per-person override) */
+function isOwner(emp) { return !!emp && emp.role === 'owner'; }
+
+/* ---------------- PINs ---------------- */
+const PIN_ITER = 20000;   /* the cost of every PIN hash made before 9/25 — a record without `iter` was made at this */
+/* E65 (9/25): a PIN hash made today costs PIN_ITER_NOW rounds (5× the old — about 25 ms on a desktop, a few times that on a
+   tablet; a PIN box checks the candidates at once, so a wrong PIN still answers in well under a second). The record carries
+   its own cost ({salt, hash, iter}), so an old hash keeps working and is made again at today's cost on its owner's next good
+   PIN (station/app.js pinRehash). ⚠️ Said plainly: no cost makes a 4-digit PIN secret from someone holding the log (10,000
+   tries); it multiplies their work by 5. Two more digits multiply it by 100 — an owner decision. */
+const PIN_ITER_NOW = 100000;
+const PIN_ITER_MAX = 1000000;   /* the most a record may ask for (aggregates/staff.js): a PIN box must never be made to hang */
+/* @employee @permission — E65: the rounds a PIN record was made with (an old record, or a nonsense one, is the old cost) */
+function pinIter(rec) { const n = rec && rec.iter; return (Number.isInteger(n) && n >= PIN_ITER && n <= PIN_ITER_MAX) ? n : PIN_ITER; }
+/* @employee @permission — E65: a PIN hash made at less than today's cost, to be made again on that person's next good PIN */
+function pinStale(rec) { return !!(rec && rec.salt && rec.hash) && pinIter(rec) < PIN_ITER_NOW; }
+/* @employee @input — a PIN as typed, trimmed (v1 empByPin / saveEmployee trim what was TYPED, never what is stored) */
+function pinText(pin) { return String(pin == null ? '' : pin).trim(); }           // v1 empByPin / saveEmployee trim what was TYPED
+/* @employee @permission — v1 saveEmployee's rule: a PIN is at least 4 digits, digits only */
+function pinValid(pin) { return /^[0-9]{4,}$/.test(pin); }                          // v1 saveEmployee: at least 4 digits
+/* @employee — hex text to bytes (a PIN record's salt, for the browser's PBKDF2) */
+function hexBytes(h) { const b = new Uint8Array(h.length / 2); for (let i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16); return b; }
+/* @employee — bytes to hex text (a PIN hash as the record keeps it) */
+function toHex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+/* the hash of a PIN exactly as it is held (v1 compares the stored PIN exactly; only what is typed is trimmed).
+   In Node (the feed, the tests) — the same bytes as the browser's: */
+/* @employee @permission — a PIN's hash at the record's own cost (E65: iter; none is the old 20,000); costs one PBKDF2 */
+function pinHashSync(pin, salt, iter) { return require('crypto').pbkdf2Sync(String(pin == null ? '' : pin), Buffer.from(salt, 'hex'), iter || PIN_ITER, 32, 'sha256').toString('hex'); }   /* iter: the record's own cost (pinIter) — none is the old cost */
+/* anywhere: the browser's own PBKDF2 (a station), else Node's */
+/* @employee @permission — the same hash on a tablet (the browser's own PBKDF2), at the record's own cost (E65) */
+async function pinHash(pin, salt, iter) {
+  const sub = typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.subtle;
+  if (!sub) return pinHashSync(pin, salt, iter);
+  const key = await sub.importKey('raw', new TextEncoder().encode(String(pin == null ? '' : pin)), 'PBKDF2', false, ['deriveBits']);
+  return toHex(await sub.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: hexBytes(salt), iterations: iter || PIN_ITER }, key, 256));
+}
+/* @employee @permission — 16 random bytes for a new PIN record's salt (the browser's crypto, else Node's) */
+function newSalt() {
+  const b = new Uint8Array(16);
+  if (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.getRandomValues) globalThis.crypto.getRandomValues(b);
+  else { const r = require('crypto').randomBytes(16); for (let i = 0; i < 16; i++) b[i] = r[i]; }
+  return toHex(b);
+}
+/* what the log keeps for a PIN: never the PIN */
+/* @employee @permission — a new PIN record {salt, hash, iter} at today's cost (E65); never the PIN */
+async function pinRecord(pin, salt) { salt = salt || newSalt(); return { salt: salt, hash: await pinHash(pin, salt, PIN_ITER_NOW), iter: PIN_ITER_NOW }; }   /* E65: today's cost, written down */
+/* @employee @permission — the same record, in Node (the feed, the proofs) */
+function pinRecordSync(pin, salt) { salt = salt || newSalt(); return { salt: salt, hash: pinHashSync(pin, salt, PIN_ITER_NOW), iter: PIN_ITER_NOW }; }
+/* @employee @permission — does this person have a PIN on file (a salted hash, never the PIN) */
+function hasPin(e) { return !!(e && e.pin && e.pin.salt && e.pin.hash); }
+/* v1 empByPin: the FIRST active employee (optionally owners only) whose PIN it is; nothing for an empty PIN */
+/* @employee @permission — who a typed PIN may belong to: active people with a PIN on file (owners only when asked), in v1's order */
+function pinCandidates(employees, opts) { opts = opts || {}; return (employees || []).filter(function (x) { return hasPin(x) && x.active !== false && (!opts.ownerOnly || x.role === 'owner'); }); }
+/* @employee @permission — v1 empByPin: who this PIN is, each record checked at its own cost, all at once (E65); v1's first match wins */
+async function empByPin(pin, employees, opts) {
+  pin = pinText(pin); if (!pin) return null;
+  const list = pinCandidates(employees, opts);
+  const got = await Promise.all(list.map(function (x) { return pinHash(pin, x.pin.salt, pinIter(x.pin)); }));   /* E65: all at once (the browser's crypto runs them side by side); still v1's FIRST match in list order */
+  for (let i = 0; i < list.length; i++) if (got[i] === list[i].pin.hash) return list[i];
+  return null;
+}
+/* @employee @permission — the same, in Node (the proofs against v1's own empByPin) */
+function empByPinSync(pin, employees, opts, hashFn) {
+  pin = pinText(pin); if (!pin) return null; hashFn = hashFn || pinHashSync;
+  const list = pinCandidates(employees, opts);
+  for (let i = 0; i < list.length; i++) if (hashFn(pin, list[i].pin.salt, pinIter(list[i].pin)) === list[i].pin.hash) return list[i];
+  return null;
+}
+/* is this PIN already someone else's? (v1 saveEmployee refuses it — against EVERY employee, active or not) */
+/* @employee @permission — v1 saveEmployee's taken-PIN check, each record at its own cost (E65) */
+async function pinTaken(pin, employees, exceptId) {
+  pin = pinText(pin);
+  const list = (employees || []).filter(function (x) { return hasPin(x) && x.id !== exceptId; });
+  for (let i = 0; i < list.length; i++) if (await pinHash(pin, list[i].pin.salt, pinIter(list[i].pin)) === list[i].pin.hash) return list[i];
+  return null;
+}
+
+/* ---------------- E65 (9/25 — v2's own guard; v1 has no limit): a tablet's wrong-PIN lock ----------------
+   FREE wrong PINs on one tablet, then each further wrong PIN locks every PIN box on that tablet for LOCK_MS, doubling each
+   time up to MAX_MS. The count starts again only after QUIET_MS with no wrong PIN — a good PIN does NOT clear it, or anyone
+   who knows their own PIN could reset the lock between guesses at the owner's. A mistyped PIN or two is never locked.
+   QUIET_MS is 15 minutes (skeptic, 9/25; the builder had an hour): with an hour, a shared counter tablet whose staff mistype a
+   PIN every half hour or so — an ordinary day — kept one count all day and locked the time clock and every approval for 15
+   minutes at a time by afternoon. With 15 minutes only a burst locks; a guesser at the counter still waits weeks for 10,000. */
+const PIN_GUARD = { FREE: 5, LOCK_MS: 30000, MAX_MS: 15 * 60000, QUIET_MS: 15 * 60000 };
+/* @permission @employee — E65: how long this tablet's PIN boxes stay locked, in ms (0: open). g = the tablet's guard, or nothing. */
+function pinLockLeft(g, now) { return (g && g.until > now) ? g.until - now : 0; }
+/* @permission @employee — E65: a wrong PIN on this tablet: the guard after it ({n, at, until, lockMs}). Costs nothing to keep. */
+function pinGuardWrong(g, now) {
+  const n = ((g && g.at && now - g.at < PIN_GUARD.QUIET_MS) ? (Number(g.n) || 0) : 0) + 1;
+  const lockMs = n >= PIN_GUARD.FREE ? Math.min(PIN_GUARD.MAX_MS, PIN_GUARD.LOCK_MS * Math.pow(2, n - PIN_GUARD.FREE)) : 0;
+  return { n: n, at: now, until: lockMs ? now + lockMs : 0, lockMs: lockMs };
+}
+
+/* v1 saveEmployee's refusals, in v1's order. change = {name, role, pin?, active}; pinTakenBy = who already has the
+   PIN (from pinTaken), or null. Returns the words v1 shows, or null when the save may go ahead. */
+/* @employee @permission @owner — v1 saveEmployee's refusals: a name, a 4-digit PIN nobody else has, and never the shop's last active owner removed */
+function employeeSaveCheck(employees, id, change, pinTakenBy) {
+  const name = String(change.name || '').trim();
+  if (!name) return 'Enter a name';
+  if (change.pin != null && !pinValid(pinText(change.pin))) return 'PIN must be at least 4 digits';
+  if (change.pin != null && pinTakenBy) return 'That PIN is already used by someone else';
+  const e = id ? (employees || []).filter(function (x) { return x.id === id; })[0] : null;
+  if (e && e.role === 'owner') {                                    // never leave the shop with no active owner
+    const others = (employees || []).filter(function (x) { return x.id !== id && x.role === 'owner' && x.active !== false; }).length;
+    if (others === 0 && (change.role !== 'owner' || change.active === false)) return 'You can\'t remove the last active owner';
+  }
+  return null;
+}
+
+/* @permission @hub @employee — THE PIN DOUBLE CHECK (E30; owner 9/25: "YES! PIN double check"): the privileged facts the HUB admits
+   only with a PIN it checked itself (hub/pingrant.js) — people, roles, store credit given or taken, payroll edits. A clock-in or
+   clock-out is not among them: nobody is kept off the clock by the internet. The station sends its grants for these; the hub asks.
+   Owner 9/26 ("build the refund rule"): money given back and debt taken off are privileged too — the owner's approval of a refund,
+   a refund, a payment voided or reversed, a correction to what a customer owes (hub/authority.js refundRule / adjustRule). Every
+   tablet door that writes one is behind a PIN — the PIN box at the button (refunds, approvals, reversals) or the PIN that opened
+   the screen (the owner's write-off and account credit). A grant that has ended holds the change on the tablet until that
+   person's next PIN sends it, as for the other privileged facts. */
+const PIN_CHECKED = ['employee.set', 'staff.roles', 'credit.issued', 'credit.removed', 'clock.manual', 'clock.edit', 'clock.void',
+  'order.refundDecided', 'payment.refunded', 'payment.voided', 'charge.adjusted'];
+PIN_CHECKED.push('card.removed');   /* owner 10/18 ("Server checks PIN on risky actions"): a saved card taken off file — the 🗑 asks a manager's PIN, and the hub erases the token of every card a fact says was removed */
+
+module.exports = {
+  PIN_CHECKED: PIN_CHECKED,
+  ROLE_PERMS: ROLE_PERMS, ABILITIES: ABILITIES, ABILITY_KEYS: ABILITY_KEYS, ROLES: ROLES, addAbility: addAbility, abilitiesFrom: abilitiesFrom, PIN_ITER: PIN_ITER,
+  PIN_ITER_NOW: PIN_ITER_NOW, PIN_ITER_MAX: PIN_ITER_MAX, pinIter: pinIter, pinStale: pinStale, PIN_GUARD: PIN_GUARD, pinLockLeft: pinLockLeft, pinGuardWrong: pinGuardWrong,   /* E65 */
+  rolePerms: rolePerms, can: can, isOwner: isOwner,
+  pinText: pinText, pinValid: pinValid, pinHash: pinHash, pinHashSync: pinHashSync, newSalt: newSalt, pinRecord: pinRecord, pinRecordSync: pinRecordSync, hasPin: hasPin,
+  empByPin: empByPin, empByPinSync: empByPinSync, pinTaken: pinTaken, employeeSaveCheck: employeeSaveCheck
+};
+
+});
+__def("aggregates/staff.js", {"../core/registry":"core/registry.js","../core/hlc":"core/hlc.js","../core/incfold":"core/incfold.js","../core/staff":"core/staff.js"}, function (module, exports, require) {
+'use strict';
+/* ============================================================================
+ * STAFF — the employees and what each role may do (2026-09-23 night, plan A3; v1 DB.employees, settings.rolePerms)
+ * @employee @permission @owner @fact — who works here and what each role may do: field by field, latest wins, never deleted; a PIN only as a salted hash, and never a shop without an owner
+ * ----------------------------------------------------------------------------
+ * The rules are core/staff.js; these facts record who works here.
+ *   · employee.set changes the fields it names; latest wins per field. Never deleted: a person who leaves is made
+ *     inactive, and their PIN stops working (v1: "Disabling an employee blocks their PIN (kept for history)").
+ *   · A PIN IS NEVER IN A FACT. Only {salt, hash} is accepted, and a field this validator does not know is refused —
+ *     so a plain PIN cannot ride in under another name.
+ *   · The shop's role lists (v1 Admin → Role permissions) are one fact, set whole.
+ *   · The shop is never left with no active owner: the station refuses it (v1 saveEmployee); the fold says so if
+ *     facts from two stations ever cross that line.
+ * ========================================================================== */
+const registry = require('../core/registry');
+const hlc = require('../core/hlc');
+const incfold = require('../core/incfold');
+const rules = require('../core/staff');
+
+const AGG = 'staff';
+const FIELDS = ['name', 'role', 'active', 'perms', 'pin', 'rate', 'dept', 'vacAnnual', 'vacUsed', 'lang', 'printSlip'];   /* printSlip: v1 setPrintSlip — a time slip at every clock-out */   // pay fields (plan C4): v1 saveEmployee's rate, department, annual vacation, the vacation used per pay period, and the language of their screens
+/* @employee @fact — a staff fact's required text: non-empty and no longer than max (64 unless told) */
+function isStr(v, max) { return typeof v === 'string' && v.length > 0 && v.length <= (max || 64); }
+/* @employee @permission @fact — a person's own permissions: only abilities the rules know, each true or false */
+function permsErr(p) {
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return 'perms is {ability: true|false}';
+  const ks = Object.keys(p); for (let i = 0; i < ks.length; i++) { if (rules.ABILITY_KEYS.indexOf(ks[i]) < 0) return 'perms: "' + ks[i] + '" is not an ability'; if (typeof p[ks[i]] !== 'boolean') return 'perms: ' + ks[i] + ' is true or false'; }
+  return null;
+}
+/* @employee @permission @fact — a PIN as the log keeps it: {salt, hash}, or (E65, 9/25 — widened, never tightened) {salt, hash,
+   iter} with the rounds it was made at, from the old cost up to PIN_ITER_MAX so no record can make a PIN box hang; never a PIN */
+function pinErr(p) {
+  if (p === null) return null;                                      // no PIN: this person cannot sign in
+  const ks = (p && typeof p === 'object') ? Object.keys(p).sort().join(',') : '';
+  if (ks !== 'hash,salt' && ks !== 'hash,iter,salt') return 'pin is {salt, hash} — never the PIN itself';
+  if (!/^[0-9a-f]{32}$/.test(p.salt) || !/^[0-9a-f]{64}$/.test(p.hash)) return 'pin is a 16-byte salt and a SHA-256 hash, in hex';
+  if ('iter' in p && !(Number.isInteger(p.iter) && p.iter >= rules.PIN_ITER && p.iter <= rules.PIN_ITER_MAX)) return 'pin.iter is the rounds it was hashed with, ' + rules.PIN_ITER + ' to ' + rules.PIN_ITER_MAX;
+  return null;
+}
+registry.registerType('employee.set', { creates: ['empId'], aggregate: AGG, tier: 'immediate',
+  doc: 'An employee added or changed, field by field. payload {empId, set: {name?, role? (owner|manager|staff), active?, perms? {ability: bool}, pin? {salt, hash, iter?} | null}, src?}. A PIN is only ever a salted hash.',
+  validate: function (p) {
+    if (!isStr(p.empId, 64) || p.empId === '__proto__') return 'empId names the employee';
+    if (p.src != null && !isStr(p.src, 120)) return 'src is a short note';
+    const s = p.set; if (!s || typeof s !== 'object' || Array.isArray(s)) return 'set lists what changed';
+    const ks = Object.keys(s); if (!ks.length) return 'set lists what changed';
+    for (let i = 0; i < ks.length; i++) if (FIELDS.indexOf(ks[i]) < 0) return 'set: "' + ks[i] + '" is not an employee field';
+    if (s.name != null && !isStr(String(s.name).trim() ? s.name : '', 80)) return 'name is 1..80 characters';
+    if (s.role != null && rules.ROLES.indexOf(s.role) < 0) return 'role is owner, manager or staff';
+    if (s.active != null && typeof s.active !== 'boolean') return 'active is true or false';
+    if (s.perms != null) { const b = permsErr(s.perms); if (b) return b; }
+    if (s.rate != null && !(typeof s.rate === 'number' && s.rate >= 0 && s.rate <= 1000)) return 'rate is dollars an hour';
+    if (s.dept != null && !(typeof s.dept === 'string' && s.dept.length <= 60)) return 'dept is a short name';
+    if (s.vacAnnual != null && !(typeof s.vacAnnual === 'number' && s.vacAnnual >= 0 && s.vacAnnual <= 2000)) return 'vacAnnual is hours a year';
+    if (s.vacUsed != null && !(typeof s.vacUsed === 'object' && !Array.isArray(s.vacUsed) && Object.keys(s.vacUsed).length <= 400 && Object.keys(s.vacUsed).every(function (k) { return /^[0-9]{10,15}$/.test(k) && typeof s.vacUsed[k] === 'number' && s.vacUsed[k] >= 0 && s.vacUsed[k] <= 1000; }))) return 'vacUsed is {pay period start (ms): hours}';
+    if (s.lang != null && !(typeof s.lang === 'string' && s.lang.length <= 5)) return 'lang is a language code';
+    if (s.printSlip != null && typeof s.printSlip !== 'boolean') return 'printSlip is true or false';
+    if ('pin' in s) { const b = pinErr(s.pin); if (b) return b; }
+    return null; } });
+registry.registerType('staff.roles', { aggregate: AGG, tier: 'immediate',
+  doc: 'What each role may do (the shop\'s own lists, over v1\'s defaults), set whole. payload {rolePerms: {owner?, manager?, staff?: [ability]}, src?}.',
+  validate: function (p) {
+    const r = p.rolePerms; if (!r || typeof r !== 'object' || Array.isArray(r)) return 'rolePerms is {role: [abilities]}';
+    const ks = Object.keys(r);
+    for (let i = 0; i < ks.length; i++) {
+      if (rules.ROLES.indexOf(ks[i]) < 0) return 'rolePerms: "' + ks[i] + '" is not a role';
+      if (!Array.isArray(r[ks[i]]) || r[ks[i]].length > 40 || !r[ks[i]].every(function (a) { return rules.ABILITY_KEYS.indexOf(a) >= 0; })) return 'rolePerms.' + ks[i] + ' lists abilities';
+    }
+    if (p.src != null && !isStr(p.src, 120)) return 'src is a short note';
+    return null; } });
+
+/* v1 empByPin 8/22 + denyMsg: a wrong PIN at a gate, and a person refused something their role does not allow, are
+   written down — "a silent refusal reads as a broken button, and an unlogged one hides somebody quietly testing where
+   the edges are". Never the PIN that was typed. */
+registry.registerType('staff.refused', { aggregate: AGG, tier: 'immediate',
+  doc: 'A gate said no: a PIN nobody has (or a disabled one), or a person without the right. payload {gate, why: pin|not-allowed, empId?}. Never the PIN typed.',
+  validate: function (p) { if (!isStr(p.gate, 120)) return 'gate names what was asked for'; if (p.why !== 'pin' && p.why !== 'not-allowed') return 'why is pin or not-allowed'; if (p.empId != null && !isStr(p.empId, 64)) return 'empId names the person'; return null; } });
+/* @audit @permission @log — v1 doLogin (8ce455c, owner 9/10: "activity log is supposed to catch every time someone clicks a tile
+   and has a successful pin entry"): a tile opened with a good PIN is written down — the person is the fact's actor, the tablet
+   its station, the screen here. Never the PIN typed. Nothing folds it but the Activity log (batch counterhome, S36). */
+registry.registerType('staff.signedIn', { aggregate: AGG, tier: 'immediate',
+  doc: 'Someone opened a screen with a good PIN (v1 logEvent \'Signed in\'). payload {gate: the screen, in its own words}; the actor is the person. Never the PIN typed.',
+  validate: function (p) { if (!isStr(p.gate, 120)) return 'gate names the screen that was opened'; if (Object.keys(p).some(function (k) { return k !== 'gate'; })) return 'a sign-in carries only the screen'; return null; } });
+
+/* 9/26 (core/incfold.js): the fold as init / step / view, kept up to date one fact at a time — fold() below is exactly these */
+const INC = {
+  /* @employee @permission @fold — nobody on staff, the default role lists, no refusal yet */
+  init: function () { return { byId: new Map(), employees: [], rolePerms: null, refused: [] }; },
+  /* @employee @permission @fold — one fact: the role lists set whole, a refusal written down, or a person changed field by field (a cleared PIN stays cleared) */
+  step: function (s, e) {
+    const p = e.payload || {};
+    if (e.type === 'staff.roles') { s.rolePerms = JSON.parse(JSON.stringify(p.rolePerms)); return; }
+    if (e.type === 'staff.refused') { s.refused.push({ gate: p.gate, why: p.why, empId: p.empId || null, station: e.station, at: e.at }); return; }
+    if (e.type !== 'employee.set') return;
+    let x = s.byId.get(p.empId);
+    if (!x) { x = { id: p.empId, name: '', role: 'staff', active: true, perms: {}, pin: null, rate: 0, dept: '', vacAnnual: 0, vacUsed: {}, lang: '', since: e.at }; s.byId.set(p.empId, x); s.employees.push(x); }
+    FIELDS.forEach(function (k) { if (k in p.set) x[k] = p.set[k] == null ? (k === 'pin' ? null : x[k]) : JSON.parse(JSON.stringify(p.set[k])); });
+    x.changedAt = e.at;
+  },
+  /* @employee @permission @owner @fold — the people in the order first seen, the role lists, the refusals; a note (fresh each time) when no active owner is left */
+  view: function (s) {
+    const employees = s.employees, notes = [];
+    if (employees.length && !employees.some(function (x) { return x.role === 'owner' && x.active !== false; })) notes.push({ kind: 'no-owner', why: 'no active owner is left — nobody can approve a discount or a void' });
+    return { employees: employees, byId: s.byId, rolePerms: s.rolePerms, refused: s.refused, notes: notes };
+  }
+};
+/* @employee @permission @fold — each person field by field (latest wins; a cleared PIN stays cleared), the role lists, the refused PINs; a note when no active owner is left */
+function fold(events) { return incfold.foldVia(INC, events, AGG); }
+/* @employee — one person by id from the staff fold, or null */
+function emp(staff, id) { return (staff && staff.byId && staff.byId.get(id)) || null; }
+registry.registerAggregate(AGG, { fold: fold, inc: INC, detectConflicts: function (events) { return fold(events).notes; }, describe: function (d) { return { kind: 'staff-note', note: String((d && d.why) || 'a staff question') }; },
+  doc: 'Who works here and what each may do. Field by field, latest wins; never deleted (made inactive); a PIN only as a salted hash.' });
+module.exports = { fold: fold, emp: emp, AGG: AGG, FIELDS: FIELDS };
+
+});
 __def("modules/define.js", {"../core/registry":"core/registry.js"}, function (module, exports, require) {
 /* @facts @module — THE MODULE CONTRACT (docs/V2-MODULAR-IMPORT.md, Part 3): defineModule() checks one module's manifest and registers
    its fact types; assemble() puts a set of modules together and hands the hub ONE judge of who may write what.
@@ -2218,7 +2573,9 @@ __def("modules/define.js", {"../core/registry":"core/registry.js"}, function (mo
                   'needs:<right>'   an owner, or someone holding <right>
                   'owner'           an owner only
                   'hub-only'        only the hub's own stations (opts.trusted) — never a tablet
-     pin        true: the hub must also hold a PIN check it made itself for that person on that tablet (a grant), not just the tablet's word
+     pin        true: the hub must also hold a PIN check it made itself for that person on that tablet (a grant), not just the tablet's word.
+                The grants ride with a send as the origin shop's do: bundle.grants = { personId: grant }, and opts.grantCheck is
+                facts/hub/pingrant.js verify(grant, station, person, at) → null | why (imported, the shop's own file)
      rule       optional (p, who, staff, e) → null | reason: the module's own extra rule, run after the authority passes — it can only refuse more
    A type an imported aggregate already registered is ADOPTED ({ adopt: true, authority, pin }): the module gives it authority and
    leaves its validator and fold as imported.
@@ -2329,7 +2686,13 @@ function assemble(mods, opts) {
     /* the module's own extra rule: it may only refuse more — and a rule that throws refuses THIS fact only (closed, never open; never the
        whole send, which would wedge the tablet resending it) */
     if (r.rule) { try { why = r.rule(p, who, staff, e); } catch (x) { why = 'the ' + r.module + ' module\'s rule failed on this ' + e.type; } if (why) return why; }
-    if (r.pin && grantCheck && !grantCheck((bundle && bundle.grants) || [], String(who.id), e.station, e)) return 'a ' + e.type + ' needs a PIN the hub checked for ' + who.name + ' on this tablet';
+    /* the PIN the hub checked: the send's grant for this person, judged as the origin shop's hub judges it (hub/authority.js) — signed by
+       this hub, for this tablet and this person, for a fact done before it ended, and sent within its grace */
+    if (r.pin && grantCheck) {
+      const gs = (bundle && bundle.grants && typeof bundle.grants === 'object' && !Array.isArray(bundle.grants)) ? bundle.grants : {}, id = String(who.id);
+      const bad = grantCheck(Object.prototype.hasOwnProperty.call(gs, id) ? gs[id] : null, e.station, id, e.at);
+      if (bad) return 'a ' + e.type + ' needs ' + who.name + '\'s PIN checked by the hub (' + bad + ') — ' + who.name + ' enters it again on this tablet';
+    }
     return null;
   }
   return { rules: rules, pinChecked: pinChecked, judge: judge, config: config, modules: mods.map(function (m) { return m.name; }) };
@@ -2338,121 +2701,80 @@ function assemble(mods, opts) {
 module.exports = { defineModule: defineModule, assemble: assemble, parseAuthority: parseAuthority };
 
 });
-__def("modules/staff.js", {"crypto":"station/crypto-shim.js","./define":"modules/define.js"}, function (module, exports, require) {
-/* @facts @module @permission — THE STAFF MODULE: the shop's people, their role, their rights and their PIN, as facts; the one list the hub
-   judges every person-naming fact by (facts/modules/define.js asks it). This repo's own file, rebuilt from the origin shop's rules.
-     staff.set  {staffId, set: {name?, role? (owner|manager|staff), rights? [word…], active?, pin? {salt, hash, iter} | null}}
-                — field by field, the latest of each wins. A PIN is only ever a salted PBKDF2-SHA256 hash, never the digits.
-   Who may write one (authority self-or:employees, with a PIN the hub checked):
-     · someone holding "employees", or an owner, may add or change anyone — except that only an OWNER makes or changes an owner;
-     · a person may change only their OWN PIN (any other field about themselves needs "employees").
-   A brand-new shop with nobody on staff admits its first facts, so the first owner can be written (define.js). */
+__def("modules/staff.js", {"./define":"modules/define.js","../core/staff":"core/staff.js","../aggregates/staff":"aggregates/staff.js"}, function (module, exports, require) {
+/* @facts @module @permission — THE STAFF MODULE: who works here, what each may do and the PIN that proves it is them — the origin shop's
+   own staff files (imported, unedited) given this repo's module shape, so the hub judges every person-naming fact by ONE list of people.
+   This repo's own file, and a thin one (docs/V2-MODULAR-IMPORT.md Part 3b, rollout step 4). What is the shop's, imported:
+     facts/aggregates/staff.js   the facts and their fold: employee.set (field by field, latest wins, never deleted; a PIN only as a salted
+                                 hash), staff.roles (what each role may do, set whole), staff.refused, staff.signedIn
+     facts/core/staff.js         the rules: roles, can() (the owner always, then the person's own override, then the role's list), PINs
+                                 (PBKDF2-SHA256, the same bytes in a browser and in Node), PIN_CHECKED (the facts the hub PIN-checks)
+     facts/core/abilities.js     THE BUSINESS'S OWN FILE (yours): the abilities a person may be given and each role's defaults — the first
+                                 import brings the origin shop's list as a working start; edit it, no later import writes over it
+     facts/hub/pingrant.js       the PIN the hub checks: a signed 30-minute pass for one person on one tablet
+   What this file adds is the shop's hub rules in this repo's module shape (the shop keeps them in its own hub/authority.js):
+     employee.set   that person (their own PIN, time slip and language only), an owner, or someone holding "employees" — and only an
+                    owner makes or changes an owner; the shop always keeps an active owner
+     staff.roles    an owner, or someone holding "employees"
+     both           with a PIN the hub checked (core/staff.js PIN_CHECKED), as at the shop
+     staff.refused, staff.signedIn   any enrolled tablet (the shop's hub admits them from any tablet: they record a gate, never a change)
+   A brand-new shop with nobody on staff admits its first fact only if it is its owner (define.js asks firstOk). */
 'use strict';
-const crypto = require('crypto');
 const { defineModule } = require('./define');
+const S = require('../core/staff');
+const AGG = require('../aggregates/staff');   /* registers employee.set, staff.roles, staff.refused, staff.signedIn */
 
-const ROLES = ['owner', 'manager', 'staff'];
-const RIGHT = /^[a-z][a-z0-9-]{0,39}$/;
-const PIN_ITER = 100000, PIN_ITER_MIN = 20000, PIN_ITER_MAX = 1000000;
-const HEX = function (n) { return new RegExp('^[0-9a-f]{' + n + '}$'); };
+const SELF_FIELDS = ['pin', 'printSlip', 'lang'];   /* the shop's own list (hub/authority.js): what a person may change about themselves */
 
-/* @facts @employee — why a staff.set payload is malformed, or null */
-function validate(p) {
-  if (typeof p.staffId !== 'string' || !/^[A-Za-z0-9_.:-]{1,64}$/.test(p.staffId)) return 'staffId names the person (letters, digits, _ . : -)';
-  const s = p.set; if (!s || typeof s !== 'object' || Array.isArray(s) || !Object.keys(s).length) return 'set names at least one field';
-  const bad = Object.keys(s).filter(function (k) { return ['name', 'role', 'rights', 'active', 'pin'].indexOf(k) < 0; }); if (bad.length) return 'unknown field: ' + bad[0];
-  if (s.name != null && !(typeof s.name === 'string' && s.name.trim() && s.name.length <= 60)) return 'name is 1 to 60 characters';
-  if (s.role != null && ROLES.indexOf(s.role) < 0) return 'role is ' + ROLES.join(', ');
-  if (s.rights != null && !(Array.isArray(s.rights) && s.rights.length <= 40 && s.rights.every(function (r) { return RIGHT.test(String(r)); }))) return 'rights is a list of short lower-case words';
-  if (s.active != null && typeof s.active !== 'boolean') return 'active is true or false';
-  if (s.pin != null && !(s.pin && HEX(32).test(String(s.pin.salt)) && HEX(64).test(String(s.pin.hash)) && Number.isInteger(s.pin.iter) && s.pin.iter >= PIN_ITER_MIN && s.pin.iter <= PIN_ITER_MAX)) return 'pin is {salt (32 hex), hash (64 hex), iter} — a hash, never the digits';
-  return null;
-}
-/* @facts @fold @employee — the people, from their facts: { byId: Map(id → {id, name, role, rights, active, pin}) } */
-function fold(evs) {
-  const byId = new Map();
-  evs.forEach(function (e) {
-    if (e.type !== 'staff.set') return;
-    const p = e.payload || {}, was = byId.get(p.staffId) || { id: p.staffId, name: p.staffId, role: 'staff', rights: [], active: true, pin: null };
-    const now = Object.assign({}, was, p.set); now.id = p.staffId; if (p.set.rights) now.rights = p.set.rights.slice();
-    byId.set(p.staffId, now);
-  });
-  return { byId: byId };
-}
-/* @facts @permission — an owner holds every right; anyone else, the rights written on them */
-function isOwner(who) { return !!who && who.role === 'owner' && who.active !== false; }
-function can(who, right) { return isOwner(who) || (!!who && who.active !== false && (who.rights || []).indexOf(right) >= 0); }
-
-/* @facts @permission @employee — the staff module's own rule, after self-or:employees passed: owners, and one's own PIN */
-function rule(p, who, staff) {
-  const s = p.set || {}, target = staff.byId.get(p.staffId) || null;
-  if ((s.role === 'owner' || (target && target.role === 'owner')) && !isOwner(who)) return 'only an owner makes or changes an owner';
-  if (String(p.staffId) === String(who.id) && !can(who, 'employees') && Object.keys(s).some(function (k) { return k !== 'pin'; })) return who.name + ' may change only their own PIN';
-  /* the shop always keeps an active owner: the last one may not be demoted or switched off (stage-2 review: it could, and then nobody
-     could ever make an owner again) */
-  /* any role key counts, null included: the fold copies a null in, and a role of null is no owner (skeptic pass: it slipped past) */
-  if (target && target.role === 'owner' && target.active !== false && ((Object.prototype.hasOwnProperty.call(s, 'role') && s.role !== 'owner') || s.active === false)) {
-    let others = 0; staff.byId.forEach(function (x) { if (x.id !== target.id && x.role === 'owner' && x.active !== false) others++; });
+/* @facts @permission @employee @owner — employee.set, after self-or:employees passed: owners, a person's own few fields, and never the last active owner */
+function employeeRule(p, who, staff) {
+  const s = (p.set && typeof p.set === 'object') ? p.set : {}, ks = Object.keys(s), target = staff.byId.get(p.empId) || null;
+  if ((s.role === 'owner' || (target && target.role === 'owner')) && !S.isOwner(who)) return 'only an owner makes or changes an owner';
+  if (String(p.empId) === String(who.id) && !staff.can(who, 'employees') && ks.some(function (k) { return SELF_FIELDS.indexOf(k) < 0; })) return who.name + ' may change only their own PIN, time slip and language';
+  /* the shop always keeps an active owner: its tablets refuse it (core/staff.js employeeSaveCheck) and its fold says so after the fact; here
+     the hub refuses it too (stage-2 review: without this nobody could ever make an owner again). A null role or active leaves the field
+     as it was (the shop's fold), so only a real other role, or active false, counts */
+  if (target && target.role === 'owner' && target.active !== false && ((s.role != null && s.role !== 'owner') || s.active === false)) {
+    const others = staff.employees.filter(function (x) { return x.id !== target.id && x.role === 'owner' && x.active !== false; }).length;
     if (!others) return 'the shop must keep an active owner — make someone else an owner first';
   }
   return null;
 }
 /* @facts @employee — what a brand-new shop's first fact must be: its owner, active (define.js asks before anyone is on staff) */
-function firstOk(e) { const s = e && e.type === 'staff.set' && e.payload && e.payload.set; return !!(s && s.role === 'owner' && s.active !== false); }
+function firstOk(e) { const s = e && e.type === 'employee.set' && e.payload && e.payload.set; return !!(s && s.role === 'owner' && s.active !== false); }
 
-/* @facts @employee — a PIN made into its record (Node; a browser makes the same with WebCrypto PBKDF2) */
-function pinRecord(pin, salt) { salt = salt || crypto.randomBytes(16).toString('hex'); return { salt: salt, hash: crypto.pbkdf2Sync(String(pin), Buffer.from(salt, 'hex'), PIN_ITER, 32, 'sha256').toString('hex'), iter: PIN_ITER }; }
-/* @facts @employee — does a PIN match its record (constant-time compare) */
-function pinMatches(rec, pin) {
-  if (!rec || !HEX(32).test(String(rec.salt)) || !HEX(64).test(String(rec.hash))) return false;
-  const iter = Number.isInteger(rec.iter) && rec.iter >= PIN_ITER_MIN && rec.iter <= PIN_ITER_MAX ? rec.iter : PIN_ITER;
-  const got = crypto.pbkdf2Sync(String(pin == null ? '' : pin), Buffer.from(rec.salt, 'hex'), iter, 32, 'sha256');
-  return crypto.timingSafeEqual(got, Buffer.from(rec.hash, 'hex'));
-}
-
-/* the same two in a BROWSER (Unit 2.4): WebCrypto's PBKDF2, asynchronous; Node 20+ has the same globalThis.crypto.subtle, so a proof
-   checks the browser's hash equals the hub's */
-const subtleOf = function (s) { const c = s || (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.subtle); if (!c) throw new Error('no WebCrypto here (crypto.subtle) — a PIN cannot be hashed'); return c; };
-const toHex = function (buf) { return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); };
-const fromHex = function (h) { const a = new Uint8Array(h.length / 2); for (let i = 0; i < a.length; i++) a[i] = parseInt(h.substr(i * 2, 2), 16); return a; };
-/* @facts @employee — a PIN's hash in a browser (WebCrypto PBKDF2-SHA256), the same bytes pinRecord makes in Node */
-async function pinHashAsync(pin, saltHex, iter, subtle) {
-  const s = subtleOf(subtle), key = await s.importKey('raw', new TextEncoder().encode(String(pin == null ? '' : pin)), 'PBKDF2', false, ['deriveBits']);
-  return toHex(await s.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: fromHex(saltHex), iterations: iter }, key, 256));
-}
-/* @facts @employee — a PIN made into its record, in a browser (a random salt from crypto.getRandomValues) */
-async function pinRecordAsync(pin, subtle) { const salt = new Uint8Array(16); globalThis.crypto.getRandomValues(salt); const sh = toHex(salt); return { salt: sh, hash: await pinHashAsync(pin, sh, PIN_ITER, subtle), iter: PIN_ITER }; }
-/* @facts @employee — does a PIN match its record, in a browser */
-async function pinMatchesAsync(rec, pin, subtle) {
-  if (!rec || !HEX(32).test(String(rec.salt)) || !HEX(64).test(String(rec.hash))) return false;
-  const iter = Number.isInteger(rec.iter) && rec.iter >= PIN_ITER_MIN && rec.iter <= PIN_ITER_MAX ? rec.iter : PIN_ITER;
-  const got = await pinHashAsync(pin, rec.salt, iter, subtle); let diff = 0; for (let i = 0; i < 64; i++) diff |= got.charCodeAt(i) ^ String(rec.hash).charCodeAt(i); return diff === 0;
-}
-
-/* the hub reads the list often (every person-naming fact): the facts already read are kept, and only new ones are added */
-const memo = { seen: 0, facts: [], first: null, list: null, n: -1 };
-/* @facts @fold @permission — the staff list as the hub judges by it: its facts so far, with this send's own laid on top */
+/* the hub reads the list often (every person-naming fact): the staff facts already read are kept, and only new ones are added */
+const memo = { seen: 0, facts: [], first: null, view: null, n: -1 };
+/* @facts @fold @permission — the staff list as the hub judges by it: the shop's fold of its facts so far, with this send's own laid on top */
 function staffNow(master, staged) {
   if (master.length < memo.seen || (master.length && memo.first !== master[0])) { memo.seen = 0; memo.facts = []; memo.n = -1; memo.first = master[0] || null; }
-  for (; memo.seen < master.length; memo.seen++) { const m = master[memo.seen]; if (m.type === 'staff.set') memo.facts.push(m); }
-  const mine = (staged || []).filter(function (x) { return x.type === 'staff.set'; });
-  let list;
-  if (mine.length) list = fold(memo.facts.concat(mine));
-  else { if (memo.n !== memo.facts.length) { memo.list = fold(memo.facts); memo.n = memo.facts.length; } list = memo.list; }
-  return { byId: list.byId, isOwner: isOwner, can: can };
+  for (; memo.seen < master.length; memo.seen++) { const m = master[memo.seen]; if (m.aggregate === AGG.AGG) memo.facts.push(m); }
+  const mine = (staged || []).filter(function (x) { return x.aggregate === AGG.AGG; });
+  let view;
+  if (mine.length) view = AGG.fold(memo.facts.concat(mine));
+  else { if (memo.n !== memo.facts.length) { memo.view = AGG.fold(memo.facts); memo.n = memo.facts.length; } view = memo.view; }
+  return { byId: view.byId, employees: view.employees, rolePerms: view.rolePerms, isOwner: S.isOwner, can: function (who, right) { return S.can(who, right, view.rolePerms); } };
 }
 
+/* the shop's list of facts its hub PIN-checks decides which of these need a pass, so the two can never disagree */
+const pinned = function (t) { return S.PIN_CHECKED.indexOf(t) >= 0; };
 const STAFF = defineModule({
-  name: 'staff', version: 1, layer: 'core',
-  aggregate: { name: 'staff', fold: fold, doc: 'the shop\'s people: name, role, rights, active, PIN hash' },
-  facts: { 'staff.set': { authority: 'self-or:employees', pin: true, rule: rule, validate: validate, creates: ['staffId'],
-    doc: 'A person added or changed, field by field. payload {staffId, set: {name?, role?, rights?, active?, pin? {salt, hash, iter}}}' } },
-  views: { list: function (facts) { return fold(facts); } },
+  name: 'staff', version: 2, layer: 'core',
+  facts: {
+    'employee.set': { adopt: true, authority: 'self-or:employees', self: 'empId', pin: pinned('employee.set'), rule: employeeRule },
+    'staff.roles': { adopt: true, authority: 'needs:employees', pin: pinned('staff.roles') },
+    'staff.refused': { adopt: true, authority: 'any' },
+    'staff.signedIn': { adopt: true, authority: 'any' }
+  },
+  views: { list: function (facts) { return AGG.fold(facts); } },
   provides: { staff: staffNow, firstOk: firstOk }
 });
 
-module.exports = { STAFF: STAFF, fold: fold, isOwner: isOwner, can: can, pinRecord: pinRecord, pinMatches: pinMatches, validate: validate, ROLES: ROLES,
-  pinRecordAsync: pinRecordAsync, pinMatchesAsync: pinMatchesAsync, pinHashAsync: pinHashAsync };
+/* @facts @permission — may this person do this, by a staff fold's role lists (the owner always, then their own override, then the role) */
+function can(who, right, view) { return S.can(who, right, view && view.rolePerms); }
+
+module.exports = { STAFF: STAFF, fold: AGG.fold, can: can, isOwner: S.isOwner, rules: S, employeeRule: employeeRule,
+  pinRecord: S.pinRecord, pinRecordSync: S.pinRecordSync, empByPin: S.empByPin, pinValid: S.pinValid, pinText: S.pinText, ABILITIES: S.ABILITIES };
 
 });
 __def("modules/timeclock.js", {"./define":"modules/define.js","../aggregates/timeclock":"aggregates/timeclock.js"}, function (module, exports, require) {

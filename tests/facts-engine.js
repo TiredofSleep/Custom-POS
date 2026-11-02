@@ -31,9 +31,16 @@ const upstream = (prov.proofs || []).reduce(function (n, p) { return n + (p.pass
   const os = require('os'), verifyAt = require('../tools/import-facts').verify;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'custompos-prov-'));
   const fresh = function () { const d = fs.mkdtempSync(path.join(tmp, 'c-')); fs.cpSync(FACTS, path.join(d, 'facts'), { recursive: true }); return d; };
-  const first = prov.files[0].path;
+  const first = prov.files.filter(function (f) { return !f.yours; })[0].path, yours = prov.files.filter(function (f) { return f.yours; }).map(function (f) { return f.path; });
   try {
     check(!verifyAt(fresh()).length, 'a clean copy of facts/ passes the provenance check');
+    /* a business's own file (yours: core/abilities.js, the list of what staff may be allowed to do) is theirs to edit — but never to lose */
+    yours.forEach(function (y) {
+      const d = fresh(); fs.appendFileSync(path.join(d, y), '\n/* this business\'s own edit */\n');
+      check(!verifyAt(d).length, 'a business may edit its own file (' + y + ') and the provenance check still passes');
+      const g = fresh(); fs.unlinkSync(path.join(g, y));
+      check(verifyAt(g).length > 0, 'a business\'s own file that is missing is named (' + y + ')');
+    });
     const plants = [
       ['an edited imported file', function (d) { fs.appendFileSync(path.join(d, first), '\n// a hand edit\n'); }],
       ['a deleted imported file', function (d) { fs.unlinkSync(path.join(d, first)); }],
@@ -53,7 +60,9 @@ const upstream = (prov.proofs || []).reduce(function (n, p) { return n + (p.pass
 })();
 
 const env = Object.assign({}, process.env); Object.keys(env).forEach(function (k) { if (/^CUSTOMPOS_(SHARD|SHARDS|SMOKE)/.test(k)) delete env[k]; });
-[['test/engine-laws.test.js', upstream, 'the engine laws'], ['test/wire.test.js', 14, 'the wire'], ['test/bundle.test.js', 3, 'the bundle'], ['test/modules.test.js', 5, 'the module contract'], ['test/staff.test.js', 6, 'the staff module and the PIN the hub checks'], ['test/timeclock-module.test.js', 5, 'the time clock module'], ['test/cli.test.js', 2, 'the hub as a shop starts it']].forEach(function (t) {
+/* every imported proof file runs here at exactly the count that passed inside the export upstream (Unit 0.3: the engine laws and the
+   shared files' own proofs, each its own file) */
+(prov.proofs || []).map(function (p) { return [p.file.replace(/^facts\//, ''), p.passed, 'the imported proofs, ' + p.file.replace(/^facts\/test\//, '') + ', as upstream']; }).concat([['test/wire.test.js', 14, 'the wire'], ['test/bundle.test.js', 3, 'the bundle'], ['test/modules.test.js', 5, 'the module contract'], ['test/staff.test.js', 6, 'the staff module and the PIN the hub checks'], ['test/timeclock-module.test.js', 5, 'the time clock module'], ['test/cli.test.js', 2, 'the hub as a shop starts it']]).forEach(function (t) {
   const r = spawnSync(process.execPath, [path.join(FACTS, t[0])], { cwd: FACTS, encoding: 'utf8', env: env, timeout: 600000 });
   const m = /(\d+) passed, (\d+) failed\s*$/.exec(String(r.stdout || '').trim());
   const ok = r.status === 0 && m && +m[2] === 0 && +m[1] === t[1];

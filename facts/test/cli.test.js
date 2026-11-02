@@ -46,14 +46,14 @@ H.testAsync('the documented command runs the modules, refuses a reserved name, s
     H.ok(wrong.json.refused && /different device name/.test(wrong.json.refused), 'a send under a name its token was not enrolled as is refused whole (how Connect catches a mistyped name)');
     H.ok(!(await post(hub.url, '/v2/receive', { station: 'tab', token: tok, events: [] })).json.refused, 'and under its own name it is not');
     const T = makeStation({ id: 'tab', persist: jstore() }); T.setAccess(tok); const remote = httpHub(hub.url); attach(T, remote);
-    T.passes = []; T.setTransport(function (b) { b.grants = T.passes; return remote.receive(b); });
+    T.passes = {}; T.setTransport(function (b) { b.grants = T.passes; return remote.receive(b); });
     const put = async function (type, key, p, actor) { const e = T.record(type, key, p, { actor: actor }); await settle(T); return { ok: !!T.log.get(e.id).pos, id: e.id }; };
-    H.ok((await put('staff.set', 'own', { staffId: 'own', set: { name: 'Ola', role: 'owner', pin: S.pinRecord('1111') } }, null)).ok, 'the owner is written first');
-    const pin = await post(hub.url, '/v2/pin', { token: tok, staffId: 'own', pin: '1111' });
+    H.ok((await put('employee.set', 'own', { empId: 'own', set: { name: 'Ola', role: 'owner', pin: S.pinRecordSync('1111') } }, null)).ok, 'the owner is written first');
+    const pin = await post(hub.url, '/v2/pin-grant', { token: tok, empId: 'own', pin: '1111' });
     H.ok(pin.status === 200 && pin.json.grant, 'a PIN pass is issued: the staff module runs (it answered 404 before the fix)');
-    T.passes = [pin.json.grant];
-    H.ok((await put('staff.set', 'clk', { staffId: 'clk', set: { name: 'Cam', pin: S.pinRecord('3333') } }, 'own')).ok, 'the owner adds a clerk under the pass');
-    T.passes = [];
+    T.passes = { own: pin.json.grant };
+    H.ok((await put('employee.set', 'clk', { empId: 'clk', set: { name: 'Cam', pin: S.pinRecordSync('3333') } }, 'own')).ok, 'the owner adds a clerk under the pass');
+    T.passes = {};
     const inn = await put('clock.in', 'clk', { empId: 'clk', at: Date.now() - 3600000 }, 'clk');
     H.ok(inn.ok && (await put('break.start', 'clk', { empId: 'clk', shiftId: inn.id, at: Date.now() - 1800000 }, 'clk')).ok, 'a clock-in and a break land: the time clock module runs');
     H.ok(!(await put('clock.edit', 'clk', { empId: 'clk', shiftId: inn.id, in: Date.now() - 7200000 }, 'clk')).ok, 'a clerk\'s correction is refused: the rules are on');
@@ -61,7 +61,7 @@ H.testAsync('the documented command runs the modules, refuses a reserved name, s
     H.eq((await fetch(hub.url + '/pos.html')).status, 200, 'the app itself is served');
     H.eq((await fetch(hub.url + '/api/db')).status, 200, 'and the shared records');
     H.eq((await fetch(hub.url + '/package.json')).status, 404, 'but not the folder\'s other files');
-    H.eq((await fetch(hub.url + '/facts/modules/pingrant.js')).status, 404, 'nor the hub\'s own code');
+    H.eq((await fetch(hub.url + '/facts/hub/pingrant.js')).status, 404, 'nor the hub\'s own code');
     H.ok([400, 404].indexOf(await rawGet(port, '/%E0%A4%A')) >= 0, 'a malformed escape is refused');
     H.eq((await (await fetch(hub.url + '/v2/health')).json()).ok, true, 'and the hub is still alive after it');
   } finally { hub.ch.kill(); await new Promise(function (r) { hub.ch.on('exit', r); setTimeout(r, 2000); }); fs.rmSync(dir, { recursive: true, force: true }); }

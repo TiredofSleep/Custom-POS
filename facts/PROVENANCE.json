@@ -1,20 +1,44 @@
 {
   "what": "the facts engine, from the origin shop's v2 through its private exporter (docs/V2-MODULAR-IMPORT.md)",
-  "unit": "0.2 engine + engine laws",
-  "sourceCommit": "9a984fb5fe0b84f76a7d581da23d944f3a10c86b",
-  "exported": "2026-10-31T19:54:03.707Z",
+  "unit": "0.3 engine + engine laws + the shared app files (views, record, staff, PIN pass)",
+  "sourceCommit": "873dc0eac3d1815da62704832245bacb3d8610e6",
+  "shopBuild": "873dc0eac3d1815da62704832245bacb3d8610e6",
+  "exported": "2026-11-02T01:03:29.885Z",
   "node": "v24.15.0",
   "proofs": [
     {
       "file": "facts/test/engine-laws.test.js",
       "passed": 114
+    },
+    {
+      "file": "facts/test/proofs/994-shared-station.test.js",
+      "passed": 4
+    },
+    {
+      "file": "facts/test/proofs/995-staff-shared.test.js",
+      "passed": 5
+    },
+    {
+      "file": "facts/test/proofs/996-pin-grants.test.js",
+      "passed": 3
     }
   ],
   "files": [
     {
+      "path": "facts/aggregates/staff.js",
+      "bytes": 10887,
+      "sha256": "c92e5a8310be2c9448eb1f3bf1d12091fdd22782f4cf5eaf087214eea6cbab29"
+    },
+    {
       "path": "facts/aggregates/timeclock.js",
       "bytes": 36855,
       "sha256": "0e61f2dc5abc08b07872ee240d7be8ec4a85f51d4d689caf0c05dc7bfa2c7e40"
+    },
+    {
+      "path": "facts/core/abilities.js",
+      "bytes": 3188,
+      "sha256": "824e65c9664f53bb1be76545430a212841f5e45cf0a3ea05cef070db5f0bba19",
+      "yours": "the business's own file: this copy is the origin shop's, a working start — edit it"
     },
     {
       "path": "facts/core/event.js",
@@ -42,6 +66,11 @@
       "sha256": "bc564a080a78cdd0939c33c0936a3ba7fe0ef5448799e19df54a7840fa9b8e92"
     },
     {
+      "path": "facts/core/staff.js",
+      "bytes": 18627,
+      "sha256": "88d3cd07ad6463a6e4bbd246039c9f7f48407d042a9e9d38a472000991ca8d21"
+    },
+    {
       "path": "facts/core/station.js",
       "bytes": 65767,
       "sha256": "a360690e6f1010c3a35b22e0e426f903ab113834715b421558eca8fc895d86e3"
@@ -57,6 +86,11 @@
       "sha256": "ad7f54a116513f98d592aa52bd7c8203e9b47ba3dbce05643dde794f53916fc9"
     },
     {
+      "path": "facts/hub/pingrant.js",
+      "bytes": 8694,
+      "sha256": "c886b0a0e5ac0fb78290510a9ac15af05e635577fbb1b150392e60aec70b9006"
+    },
+    {
       "path": "facts/hub/projections.js",
       "bytes": 10433,
       "sha256": "485f30ae9d84fab78c8b33f5ab596c87c7edac9b2798ac6cc1a60ac9a0018fa7"
@@ -70,6 +104,16 @@
       "path": "facts/station/crypto-shim.js",
       "bytes": 5774,
       "sha256": "7dfb734ee6b174f2914be0555ac76b668d01c93eb6927c0371159105dc2a68b7"
+    },
+    {
+      "path": "facts/station/record.js",
+      "bytes": 2350,
+      "sha256": "590dbd9957eb327fed38d1b5e1e3a2aa05abc8a243c4887ea786789c7457a571"
+    },
+    {
+      "path": "facts/station/views.js",
+      "bytes": 7954,
+      "sha256": "3e49f0b971f5081c698b060a6556fed0b711b2d626d551dc64c2dceb8524c17e"
     },
     {
       "path": "facts/store/browser.js",
@@ -100,6 +144,21 @@
       "path": "facts/test/harness.js",
       "bytes": 9278,
       "sha256": "ccd24aecf97d823aa5abfd6754231dad9b940bbb34482cf27ca8cbf31e16a5a9"
+    },
+    {
+      "path": "facts/test/proofs/994-shared-station.test.js",
+      "bytes": 10125,
+      "sha256": "777dc2037b8edf6adf16de4aad56b6ca0fbeeb2963bf94685dc0ea655d51483b"
+    },
+    {
+      "path": "facts/test/proofs/995-staff-shared.test.js",
+      "bytes": 13263,
+      "sha256": "9972120ec15de34ccd3f87867a96712714b89f78d7d8f2e9ca5becfaf8b61cb7"
+    },
+    {
+      "path": "facts/test/proofs/996-pin-grants.test.js",
+      "bytes": 8320,
+      "sha256": "702f21a68a485a17f432dc525b854281368402793bd157503a55feb870f8b472"
     },
     {
       "path": "facts/test/shards.js",

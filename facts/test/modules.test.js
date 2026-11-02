@@ -70,8 +70,9 @@ H.test('a set of modules that does not close is refused when it is assembled', f
 });
 
 H.test('over a real hub: the judge admits and refuses by authority, by right and by a hub-checked PIN; a hub with no judge admits them all', function () {
-  let grants = [];
-  const grantCheck = function (gs, staffId, station) { return gs.some(function (g) { return g.staffId === staffId && g.station === station && g.until > Date.now(); }); };
+  let grants = {};
+  /* a stand-in for facts/hub/pingrant.js verify (the shop's shape): the send's pass for the person named, or null — answers null (good) or why not */
+  const grantCheck = function (g, station, emp) { return (g && g.emp === emp && g.station === station && g.exp > Date.now()) ? null : 'no good pass'; };
   const A = assemble([STAFF, SHIFT], { grantCheck: grantCheck });
   const run = function (judge) {
     const hub = makeHub({ authority: judge ? A.judge : null }), out = {};   /* the hub on the real clock: it refuses a fact dated ahead of it */
@@ -90,15 +91,15 @@ H.test('over a real hub: the judge admits and refuses by authority, by right and
     put(tab, 'actor not on staff', 'tshift.in', 'zz', { staffId: 'zz' }, 'zz');
     put(tab, 'inactive actor', 'tshift.in', 'old', { staffId: 'old' }, 'old');
     put(tab, 'manager edits, no PIN grant', 'tshift.edit', 'clk', { staffId: 'clk' }, 'mgr');
-    grants = [{ staffId: 'mgr', station: 'tab', until: Date.now() + 60000 }];
+    grants = { mgr: { emp: 'mgr', station: 'tab', exp: Date.now() + 60000 } };
     put(tab, 'manager edits, with a grant', 'tshift.edit', 'clk', { staffId: 'clk' }, 'mgr');
-    grants = [{ staffId: 'clk', station: 'tab', until: Date.now() + 60000 }];
+    grants = { clk: { emp: 'clk', station: 'tab', exp: Date.now() + 60000 } };
     put(tab, 'clerk edits, with a grant', 'tshift.edit', 'clk', { staffId: 'clk' }, 'clk');
-    grants = [{ staffId: 'mgr', station: 'elsewhere', until: Date.now() + 60000 }];
+    grants = { mgr: { emp: 'mgr', station: 'elsewhere', exp: Date.now() + 60000 } };
     put(tab, 'a grant for another tablet', 'tshift.edit', 'clk', { staffId: 'clk' }, 'mgr');
-    grants = [{ staffId: 'mgr', station: 'tab', until: Date.now() - 1 }];
+    grants = { mgr: { emp: 'mgr', station: 'tab', exp: Date.now() - 1 } };
     put(tab, 'an expired grant', 'tshift.edit', 'clk', { staffId: 'clk' }, 'mgr');
-    grants = [];
+    grants = {};
     put(tab, 'anyone writes a note', 'tshift.note', 'n1', {}, null);
     put(tab, 'a tablet writes a hub-only fact', 'tshift.auto', 'a1', {}, 'own');
     put(svc, 'the hub writes a hub-only fact', 'tshift.auto', 'a2', {}, null);
@@ -118,13 +119,13 @@ H.test('over a real hub: the judge admits and refuses by authority, by right and
 });
 
 H.test('stage-2 review: a type no module in this hub claims is refused (never fail open); a rule that throws refuses only its own fact', function () {
-  const A = assemble([STAFF, SHIFT], { grantCheck: function () { return true; } });
+  const A = assemble([STAFF, SHIFT], { grantCheck: function () { return null; } });
   require('../aggregates/timeclock');
   const staffFacts = [{ type: 'tstaff.set', aggregate: 'tstaff', payload: { staffId: 'own', name: 'O', role: 'owner' } }];
   H.ok(/no module in this hub owns a clock.manual/.test(String(A.judge({ type: 'clock.manual', station: 'tab', actor: 'own', payload: { empId: 'own' } }, staffFacts, []))), 'an unclaimed (but registered) type is refused');
   H.eq(A.judge({ type: 'tshift.in', station: 'tab', actor: 'own', payload: { staffId: 'own' } }, staffFacts, []), null, 'the negative control: a claimed type by the right person is admitted');
   const BOOM = defineModule({ name: 'tboom', version: 1, requires: ['tstaff'], aggregate: { name: 'tboom', fold: function () { return {}; } }, facts: { 'tboom.x': { authority: 'any', validate: ok }, 'tboom.y': { authority: 'self-or:payroll', validate: ok, rule: function () { throw new Error('a bug in a rule'); } } } });
-  const B = assemble([STAFF, BOOM], { grantCheck: function () { return true; } });
+  const B = assemble([STAFF, BOOM], { grantCheck: function () { return null; } });
   const why = B.judge({ type: 'tboom.y', station: 'tab', actor: 'own', payload: { staffId: 'own' } }, staffFacts, []);
   H.ok(/rule failed/.test(String(why)) && String(why).indexOf('a bug in a rule') < 0, 'a rule that throws refuses that fact, and does not echo the error');
   H.eq(B.judge({ type: 'tboom.x', station: 'tab', actor: null, payload: {} }, staffFacts, []), null, 'and another fact in the same send is still judged normally');

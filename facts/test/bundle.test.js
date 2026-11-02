@@ -48,10 +48,13 @@ H.test('the build refuses a require it cannot serve: outside the list, a Node mo
 
 /* the budget, stated as what is checked: the plan's ~150 KB was a guess before the engine's comments were counted; the bundle keeps them
    (they are the engine's documentation). The engine alone was ~187 KB raw, ~57 KB gzipped; with Stage 2's three modules (the contract,
-   the staff, the time clock) it is ~216 KB raw, ~65 KB gzipped. The bound below catches growth, not the comments. */
-H.test('the bundle stays within its size budget: under 240 KB raw and 75 KB gzipped (the engine and its modules, comments kept)', function () {
+   the staff, the time clock) it is ~216 KB raw, ~65 KB gzipped. Rollout step 4 (11/1) brought the origin shop's own staff files (its
+   rules, its fold and the business's list of abilities, comments kept) in place of the rebuilt staff module: ~242 KB raw, ~74 KB gzipped.
+   The plan raises this as shared files arrive, measured compressed (V2-MODULAR-IMPORT.md Part 3b, decision 5; the shop's own tablets
+   load 912 KB compressed every day). The bound below catches growth, not the comments. */
+H.test('the bundle stays within its size budget: under 260 KB raw and 80 KB gzipped (the engine and its modules, comments kept)', function () {
   const code = B.build(), n = Buffer.byteLength(code), gz = require('zlib').gzipSync(code).length;
-  H.ok(n < 240 * 1024, 'the bundle is ' + n + ' bytes raw'); H.ok(gz < 75 * 1024, 'and ' + gz + ' bytes gzipped');
+  H.ok(n < 260 * 1024, 'the bundle is ' + n + ' bytes raw'); H.ok(gz < 80 * 1024, 'and ' + gz + ' bytes gzipped');
 });
 
 H.done();

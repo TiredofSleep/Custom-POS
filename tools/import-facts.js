@@ -11,7 +11,10 @@
    check on, and with the laws passing. It never reads the private repo.
 
    The imported files are not edited here. A change to one is made upstream and re-exported; --verify fails on a hand edit, so the
-   provenance stays true. Files this repo writes itself live beside them (OWN below) and are never touched by an import. */
+   provenance stays true. Files this repo writes itself live beside them (OWN below) and are never touched by an import.
+   A file the manifest marks "yours" (Unit 0.3: facts/core/abilities.js, the list of what staff may be allowed to do) is the business's
+   own: the first import brings the origin shop's copy as a working start, and no later import writes over it. --verify only checks it
+   is there (the owner, 11/1: "copy, paste, customize"). */
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -61,18 +64,25 @@ function importFrom(src) {
     if (b.length !== f.bytes) no(f.path + ' is ' + b.length + ' bytes; the manifest says ' + f.bytes);
     if (crypto.createHash('sha256').update(b).digest('hex') !== f.sha256) no(f.path + ' does not match its SHA-256');
     if (b.indexOf(13) >= 0) no(f.path + ' holds a carriage return — an export is LF, as git stores it (re-export)');
+    if (f.yours != null && typeof f.yours !== 'string') no(f.path + ': "yours" is the words that say why the file is the business\'s own');
   });
   const lower = new Map();
   m.files.forEach(function (f) { const l = f.path.toLowerCase(); if (lower.has(l)) no('two listed paths differ only in letter case: ' + lower.get(l) + ', ' + f.path); lower.set(l, f.path); });
   /* a file a previous import brought in that this one no longer lists would linger unvouched: refuse rather than guess */
   const stale = walk(FACTS).filter(function (p) { return !own(p) && !listed.has(p); });
   if (stale.length) no('facts/ holds files neither this import nor this repo owns (remove them on purpose first): ' + stale.slice(0, 5).join(', '));
-  m.files.forEach(function (f) { const to = path.join(ROOT, f.path); fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(path.join(src, f.path), to); });
+  const kept = [];
+  m.files.forEach(function (f) {
+    const to = path.join(ROOT, f.path);
+    if (f.yours && fs.existsSync(to)) { kept.push(f.path); return; }   /* the business's own file: its edits are never imported over */
+    fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(path.join(src, f.path), to);
+  });
   const prov = { what: 'the facts engine, from the origin shop\'s v2 through its private exporter (docs/V2-MODULAR-IMPORT.md)', unit: m.unit,
-    sourceCommit: m.sourceCommit, exported: m.made, node: m.node, proofs: m.proofs,
-    files: m.files.map(function (f) { return { path: f.path, bytes: f.bytes, sha256: f.sha256 }; }) };
+    sourceCommit: m.sourceCommit, shopBuild: m.shopBuild || null, exported: m.made, node: m.node, proofs: m.proofs,
+    files: m.files.map(function (f) { const o = { path: f.path, bytes: f.bytes, sha256: f.sha256 }; if (f.yours) o.yours = f.yours; return o; }) };
   fs.writeFileSync(PROV, JSON.stringify(prov, null, 2) + '\n');
-  console.log('imported ' + m.files.length + ' files from export ' + String(m.sourceCommit).slice(0, 8) + ' (' + m.unit + '; laws ' + m.proofs.map(function (p) { return p.passed; }).join('+') + ' passed upstream) → facts/');
+  console.log('imported ' + (m.files.length - kept.length) + ' files from export ' + String(m.sourceCommit).slice(0, 8) + (m.shopBuild ? ' (the shop runs ' + String(m.shopBuild).slice(0, 8) + ')' : '') + ' (' + m.unit + '; proofs ' + m.proofs.map(function (p) { return p.passed; }).join('+') + ' passed upstream) → facts/' +
+    (kept.length ? '\n  kept this business\'s own: ' + kept.join(', ') + ' (yours — never imported over)' : ''));
 }
 
 /* @facts @proof — facts/ still matches what was imported: every listed file present BY ITS EXACT NAME and unchanged, nothing unvouched
@@ -85,6 +95,7 @@ function verify(root) {
     listed.add(f.path);
     if (ownAnyCase(f.path)) { bad.push(f.path + ' is listed as imported but is this repo\'s own file'); return; }
     if (!have.has(f.path)) { bad.push(f.path + ' is missing (by its exact name)'); return; }
+    if (f.yours) return;   /* the business's own file: theirs to edit (the export's copy was only a start) */
     if (shaLF(fs.readFileSync(path.join(R, f.path))) !== f.sha256) bad.push(f.path + ' was changed after it was imported (change it upstream and re-export)');
   });
   have.forEach(function (q) { if (!own(q) && !listed.has(q)) bad.push(q + ' is in facts/ but neither imported nor this repo\'s own'); });

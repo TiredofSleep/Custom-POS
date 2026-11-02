@@ -1585,3 +1585,69 @@ with people is functional because i use it daily."* So Part 3b of [the plan](doc
 The rebuilt staff and PIN files will be replaced by the shop's own. The time clock becomes a kit, the way the shop runs its
 functions. The shop answers four of the first version's five open questions itself. The "Where it went" column above is that first
 version's; Part 3b section 5 has the answers now.
+
+## 2026-11-01 — The shop's own staff files, in place of ours
+
+The origin shop did its half first. In its v2, and live at its two stores by 9 AM:
+- the code every screen shares moved out of its 7,110-line tablet page, into `station/views.js` and `station/record.js`;
+- its staff rules were untangled from its prices: the discount helpers went to their own file;
+- the list of abilities became the business's own file, `core/abilities.js`;
+- its private exporter learned to ship those files, and to refuse any file that is not the build the shop is running.
+
+The owner's words for what this is for: *"we are trying to build a modular system so nobody has to spend the money to do this work
+again... copy, paste, customize."*
+
+### What came in
+
+One export of the shop's live build (873dc0ea): 28 files. Each of the shop's proofs runs here at exactly the count that passed
+upstream: the engine laws (114), then the shared files' own suite sections (4, 5 and 3). The engine files were already here and came
+back byte for byte. Seven are new:
+- the staff fold and the staff rules;
+- the business's list of abilities;
+- the PIN pass;
+- the two station files.
+
+`core/abilities.js` is marked *yours* in the export. The first import copies it as a working start. No later import writes over it,
+and the provenance check only asks that it is there. A restaurant writes its own list. A cleaner's "Un-rack ready orders" is in the
+start because the start is a cleaner's.
+
+### What went
+
+- **The rebuilt staff module, and its `staff.set`.** `facts/modules/staff.js` is now a thin module over the shop's `employee.set` and
+  `staff.roles`. The shop keeps its hub rules for them in its own `hub/authority.js`, so this repo writes the same rules in its own
+  module shape:
+  - a person changes only their own PIN, time slip and language;
+  - anything else needs `employees`;
+  - only an owner makes or changes an owner.
+
+  Which facts need a PIN the hub checked is asked of the shop's own list, `PIN_CHECKED`, so the two cannot disagree.
+- **The rebuilt PIN pass.** The shop's `hub/pingrant.js` replaces it, with the shop's door, `/v2/pin-grant`. That door renews a pass
+  without the PIN for up to 12 hours. A send carries its passes the shop's way, one per person, so a flood of junk passes is never
+  read: one signature per fact, for that fact's own person.
+
+### Two places this repo stays stricter than the shop
+
+Both refuse more, never less:
+- A pay rate needs `employees` here. At the shop, `payroll` may set one too.
+- The hub refuses a change that would leave no active owner. At the shop the tablets refuse it, and the fold reports it after the
+  fact.
+
+The skeptic pass's finding 0.4, a `role: null` that got past the last-owner rule, is gone the way the plan said it would be. In the
+shop's fold, a null leaves the field as it was. The test now proves exactly that: the owner is still an owner.
+
+### What it kept
+
+The time clock's history fixture was written as version 1 of the time clock and is never regenerated. Its people were written as
+`staff.set`, which never left this machine. The 14 saved facts stay as they were. The same three people are added at the end as
+`employee.set`. A type nobody registers is never folded, and the punches come out field for field the same.
+
+### How it was checked
+
+- The two browser tests drive the real page on several tablets. Both pass, changed only where they named the old fact:
+  - the team brought onto a hub;
+  - a hire approved by a PIN the hub checked;
+  - every shift and the tip pool equal to one computer's.
+- Thirteen deliberate breaks were made in a copy of `facts/`, one rule at a time. Twelve turned a test red. The thirteenth was a
+  send's earlier staff facts not counting for its later ones, which is the shop's own "lay this send on top". It needed a new test,
+  and now that break turns it red too.
+- The bundle grew to about 242 KB raw and 74 KB gzipped. The plan raises the limit as shared files arrive, measured compressed.

@@ -405,15 +405,30 @@ in the same shape.
 1. **In the shop's v2 (the owner's yes; deployed at 7 PM):** move the generic app code out of `station/app.js`, unchanged:
    `station/views.js` (the folds the screens read, the followers, the screen check) and `station/record.js` (the door and one
    `onSave` helper). The shop's full suite and the screen check prove it. Nothing changes at the counter.
-   *Built 2026-10-31, not deployed yet.* The 24 hand-written `onSave` wirings are now one `saveAs()`. The shop's suite passes 1,659
-   of 1,659, including a new section that pins what the two files promise. The tablet page loads in Chrome. The deploy waits for
-   the owner's yes, at 7 PM.
+   *Built 2026-10-31; live at the shop since 2026-11-01, 8:15 AM (v2 7576e4c1).* The 24 hand-written `onSave` wirings are now one
+   `saveAs()`. The shop's suite passed 1,659 of 1,659, including a new section that pins what the two files promise.
 2. **In the shop's v2, a separate deploy:** untangle the staff rules. The discount helpers leave `core/staff.js` (they reach into
    the shop's price rules), and the list of abilities (Void, Un-rack, Payroll…) becomes one a shop's modules add to, with the
    shop's own list added at start. This touches the shop's permissions, so it is its own step, with its own proofs.
+   *Live at the shop since 2026-11-01, 8:57 AM (v2 99e983d8):* `core/discountvoid.js` holds the discount helpers, and
+   `core/abilities.js` is the business's own list, which a module adds to with `staff.addAbility()`.
 3. **The exporter:** add those files and `hub/pingrant.js`, `aggregates/staff.js`, `core/staff.js` and `aggregates/punches.js`,
    with the suite sections that prove them. Add the check that a file has not changed since the build the shop is running.
+   *Live since 2026-11-01 (v2 74869929, Unit 0.3).* A real export refuses a station or hub file that is not the live build's. It
+   marks `core/abilities.js` as the business's own (`yours`). `aggregates/punches.js` is not exported yet: step 5 brings it, with
+   the suite section that proves it.
 4. **Here:** import them. Replace the rebuilt staff and PIN files, and the `staff.set` type.
+   *Built 2026-11-01, not published.* Imported from the export of the shop's live build 873dc0ea: 28 files, the shop's proofs
+   passing here at exactly their upstream counts (114 + 4 + 5 + 3). `facts/modules/staff.js` is now a thin module over the shop's
+   `employee.set` and `staff.roles`. It holds the shop's hub rules for them in this repo's module shape: their own PIN, slip and
+   language for a person, the rest for `employees`, an owner for an owner, and the shop always keeps an active owner. It asks the
+   shop's `PIN_CHECKED` which facts need a pass. `facts/hub/pingrant.js` replaces the rebuilt pass, with the shop's door
+   (`/v2/pin-grant`, renewal included) and the shop's send shape (`grants: { person: pass }`). `pos.html` writes
+   `employee.set` and finds a person by a PIN with the shop's `empByPin`. A manager added here keeps payroll and employees as
+   their own permissions, because the shop's default manager list has neither. Two places are deliberately stricter than the shop:
+   a pay rate needs `employees` here (the shop also lets `payroll` set one), and the hub refuses a change that would leave no active
+   owner (the shop's tablets refuse it, and its fold reports it after the fact).
+   The time clock's history fixture keeps its 14 saved facts unchanged; the same three people were added to it as `employee.set`.
 5. **Here:** the time clock as a kit and an adapter. Delete the FACTS MODE block and the `FACTS.on` checks. The parity tests
    (`tests/facts-clock.js`, `tests/builder-facts.js`) must pass, changed only where they name the old staff fact.
 6. **One skeptic pass, then the owner's yes to publish.**
