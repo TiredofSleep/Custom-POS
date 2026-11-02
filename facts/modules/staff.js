@@ -39,16 +39,24 @@ function employeeRule(p, who, staff) {
 /* @facts @employee — what a brand-new shop's first fact must be: its owner, active (define.js asks before anyone is on staff) */
 function firstOk(e) { const s = e && e.type === 'employee.set' && e.payload && e.payload.set; return !!(s && s.role === 'owner' && s.active !== false); }
 
-/* the hub reads the list often (every person-naming fact): the staff facts already read are kept, and only new ones are added */
-const memo = { seen: 0, facts: [], first: null, view: null, n: -1 };
+/* the hub reads the list often (every person-naming fact): the staff facts already read are kept, and only new ones are added. Only the two
+   types that change what the judge reads (people and the role lists) are kept: staff.refused and staff.signedIn change neither, and any
+   tablet may write them. Skeptic 11/1: with them kept and laid on top, one tablet flooded staff.refused, then sent one staff.signedIn and
+   999 facts, and the hub folded every staff fact again for each of them — about 20 s with every tablet waiting. A send's own staff changes
+   are folded once per change it adds (the `top` memo), never once per fact judged. */
+const CHANGES = { 'employee.set': 1, 'staff.roles': 1 };
+const memo = { seen: 0, facts: [], first: null, view: null, n: -1, top: null };
 /* @facts @fold @permission — the staff list as the hub judges by it: the shop's fold of its facts so far, with this send's own laid on top */
 function staffNow(master, staged) {
-  if (master.length < memo.seen || (master.length && memo.first !== master[0])) { memo.seen = 0; memo.facts = []; memo.n = -1; memo.first = master[0] || null; }
-  for (; memo.seen < master.length; memo.seen++) { const m = master[memo.seen]; if (m.aggregate === AGG.AGG) memo.facts.push(m); }
-  const mine = (staged || []).filter(function (x) { return x.aggregate === AGG.AGG; });
+  if (master.length < memo.seen || (master.length && memo.first !== master[0])) { memo.seen = 0; memo.facts = []; memo.n = -1; memo.first = master[0] || null; memo.top = null; }
+  for (; memo.seen < master.length; memo.seen++) { const m = master[memo.seen]; if (CHANGES[m.type]) memo.facts.push(m); }
+  const mine = (staged || []).filter(function (x) { return CHANGES[x.type]; });
   let view;
-  if (mine.length) view = AGG.fold(memo.facts.concat(mine));
-  else { if (memo.n !== memo.facts.length) { memo.view = AGG.fold(memo.facts); memo.n = memo.facts.length; } view = memo.view; }
+  if (mine.length) {
+    const key = memo.facts.length + '|' + mine.length + '|' + mine[mine.length - 1].id;
+    if (!memo.top || memo.top.key !== key) memo.top = { key: key, view: AGG.fold(memo.facts.concat(mine)) };
+    view = memo.top.view;
+  } else { if (memo.n !== memo.facts.length) { memo.view = AGG.fold(memo.facts); memo.n = memo.facts.length; } view = memo.view; }
   return { byId: view.byId, employees: view.employees, rolePerms: view.rolePerms, isOwner: S.isOwner, can: function (who, right) { return S.can(who, right, view.rolePerms); } };
 }
 
@@ -63,7 +71,7 @@ const STAFF = defineModule({
     'staff.signedIn': { adopt: true, authority: 'any' }
   },
   views: { list: function (facts) { return AGG.fold(facts); } },
-  provides: { staff: staffNow, firstOk: firstOk }
+  provides: { staff: staffNow, firstOk: firstOk, abilities: function () { return S.ABILITY_KEYS.slice(); } }
 });
 
 /* @facts @permission — may this person do this, by a staff fold's role lists (the owner always, then their own override, then the role) */

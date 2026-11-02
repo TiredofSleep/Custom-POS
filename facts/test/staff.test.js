@@ -167,4 +167,44 @@ H.testAsync('stage-2 review, in the shop\'s shape: a new shop starts with its ow
   H.ok(/PIN checked by the hub/.test(String(A.judge(fact('own', { lang: 'en' }, 'own'), master, [], { grants: [pass] }))), 'passes sent as a list (the rebuilt module\'s shape) are not read: refused');
 });
 
+H.testAsync('skeptic 11/1 (step 6): a pass for a fact done after it ended, or sent past its grace, is refused; payroll alone sets no rate; a flood of staff facts no tablet can stall the hub with; a right nobody can hold is a start-up error', async function () {
+  const { assemble, defineModule } = require('../modules/define');
+  let T = 1800000000000; const g = G.grantsFor({ secret: 's6', now: function () { return T; } }), A = assemble([S.STAFF], { grantCheck: g.verify });
+  let c = 0; const fact = function (type, key, payload, actor, at) { c++; return { id: 'tab/f' + c, type: type, aggregate: 'staff', station: 'tab', actor: actor, at: at == null ? T : at, payload: payload, hlc: { t: at == null ? T : at, c: c, id: 'tab' } }; };
+  const emp = function (empId, set, actor, at) { return fact('employee.set', empId, { empId: empId, set: set }, actor, at); };
+  const master = [emp('own', { name: 'Ola', role: 'owner', pin: rec('1111') }, null), emp('pay', { name: 'Pia', role: 'manager', perms: { payroll: true }, pin: rec('2222') }, 'own'), emp('clk', { name: 'Cam', pin: rec('3333') }, 'own')];
+  /* the judge hands the pass check the FACT's own time (parity-4: a constant there admitted a change made after the pass ended) */
+  const pass = (await g.check('tab', 'own', '1111', S.fold(master), S.rules.pinHash, S.rules.pinIter)).grant, b = { grants: { own: pass } };
+  H.eq(A.judge(emp('clk', { name: 'Cami' }, 'own', T + 60000), master, [], b), null, 'a change made inside the pass is admitted');
+  H.ok(/had ended before this was done/.test(String(A.judge(emp('clk', { name: 'Cami' }, 'own', pass.exp + 1000), master, [], b))), 'one made after the pass ended is refused, by the fact\'s own time');
+  T = pass.exp + G.GRACE_MS + 1000;
+  H.ok(/more than 2 hours ago/.test(String(A.judge(emp('clk', { name: 'Cami' }, 'own', pass.exp - 1000), master, [], b))), 'and one made inside it but sent after the grace is refused');
+  T = 1800000000000;
+  /* the stricter rule, against someone who holds payroll and not employees (parity-3: the default manager could not tell the two apart) */
+  const ppass = (await g.check('tab', 'pay', '2222', S.fold(master), S.rules.pinHash, S.rules.pinIter)).grant, pb = { grants: { pay: ppass } };
+  H.ok(/may write only their own|does not have/.test(String(A.judge(emp('clk', { rate: 18 }, 'pay'), master, [], pb))), 'payroll alone does not set another person\'s pay rate here (the shop\'s hub admits it)');
+  H.ok(/may change only their own PIN/.test(String(A.judge(emp('pay', { rate: 40 }, 'pay'), master, [], pb))), 'nor their own');
+  H.ok(/may change only their own PIN/.test(String(A.judge(emp('pay', { rate: 40, perms: { employees: true, reset: true } }, 'pay'), master, [], pb))), 'nor, with a rate riding along, their own permissions (the shop\'s hub admits that, by design of its Admin save: one fact under the payroll person who re-approved the rate)');
+  /* authority-1: staff.refused and staff.signedIn change nothing the judge reads, so a flood of them is never folded again per fact judged */
+  const flood = master.slice(); for (let i = 0; i < 3000; i++) flood.push(fact('staff.refused', 'x' + i, { gate: 'Time clock', why: 'pin' }, null));
+  const AGGs = require('../aggregates/staff'), realFold = AGGs.fold; let folds = 0;
+  AGGs.fold = function () { folds++; return realFold.apply(this, arguments); };
+  try {
+    const signed = fact('staff.signedIn', 'own', { gate: 'Office' }, 'own'), t0 = Date.now();
+    for (let i = 0; i < 300; i++) A.judge(emp('own', { lang: 'en' }, 'own'), flood, [signed], b);
+    H.ok(folds <= 1, '300 facts judged after a staff.signedIn in the same send, beside 3,000 staff.refused: ' + folds + ' fold(s) in ' + (Date.now() - t0) + ' ms (it was one per fact)');
+    folds = 0; const mixed = [];
+    for (let i = 0; i < 300; i++) { mixed.push(fact('staff.refused', 'y' + i, { gate: 'Time clock', why: 'pin' }, null)); A.judge(emp('own', { lang: 'en' }, 'own'), flood, mixed, b); }
+    H.ok(folds <= 1, 'nor when the send slips a new staff.refused before every fact judged: ' + folds + ' fold(s) (no tablet needs a PIN to write one, and none changes what the judge reads)');
+    folds = 0; const lift = emp('clk', { perms: { employees: true } }, 'own');
+    for (let i = 0; i < 300; i++) A.judge(emp('new' + i, { name: 'N' + i }, 'clk'), flood, [lift], { grants: {} });
+    H.eq(folds, 1, 'a send\'s own staff change is folded once, not once per fact judged after it');
+  } finally { AGGs.fold = realFold; }
+  /* authority-4: a right no person can be given stops the start */
+  const bad = function (right) { let m = ''; try { assemble([S.STAFF, defineModule({ name: 'risky-' + right.replace(/[^a-z]/g, ''), version: 1, aggregate: { name: 'risky' + right.replace(/[^a-z]/g, ''), fold: function () { return {}; } }, facts: { ['risky' + right.replace(/[^a-z]/g, '') + '.do']: { authority: 'needs:' + right, validate: function () { return null; } } } })], { noPins: true }); } catch (e) { m = String(e.message); } return m; };
+  H.ok(/every object already has/.test(bad('constructor')), '"constructor" is refused as a right (everyone would hold it)');
+  H.ok(/not among this business's abilities/.test(bad('fly')), 'a right that is not among the business\'s abilities is refused at start');
+  H.eq(bad('payroll'), '', 'the negative control: a right the business has is fine');
+});
+
 H.done();

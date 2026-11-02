@@ -20,7 +20,8 @@
    leaves its validator and fold as imported.
 
    The judge reads the person from the fact's actor (hashed into the fact, so it cannot be swapped after) and their rights from the
-   module that provides `staff` (its staff(master, staged) → { byId: Map, isOwner(who), can(who, right) }). A hub with no staff yet
+   module that provides `staff` (its staff(master, staged) → { byId: Map, isOwner(who), can(who, right) }, and optionally abilities() → the
+   rights a person here can be given, which every module's rights must be among). A hub with no staff yet
    (a brand-new shop) admits, so its first owner can be written; from the first staff fact on, every rule applies.
    Said plainly, as the origin shop says it: the hub cannot tell who is HOLDING a tablet. A person's name on a fact is what that tablet
    put there. The hub-checked PIN (pin: true) and an instant revoke are the defence for the facts that matter, not a guarantee. */
@@ -38,6 +39,9 @@ function parseAuthority(a, where) {
   if (KINDS.indexOf(kind) < 0) throw new Error(where + ': authority "' + s + '" is not one of ' + KINDS.join(', ') + ' (with :<right> for self-or and needs)');
   if ((kind === 'self-or' || kind === 'needs') !== !!right) throw new Error(where + ': authority "' + s + '" — self-or and needs take a right (self-or:payroll), the others take none');
   if (right && !RIGHT.test(right)) throw new Error(where + ': the right "' + right + '" is not a short lower-case word');
+  /* skeptic 11/1: "constructor" fits the word rule, and every person has it (can() reads perms[right] off a plain object) — the same refusal
+     core/staff.js addAbility makes */
+  if (right && right in {}) throw new Error(where + ': the right "' + right + '" is a name every object already has — everyone would hold it');
   return { kind: kind, right: right };
 }
 
@@ -93,6 +97,10 @@ function assemble(mods, opts) {
   if (needPeople.length && !staffers.length) throw new Error('these facts name a person, but no module provides staff: ' + needPeople.join(', '));
   const staffOf = staffers.length ? staffers[0].provides.staff : null;
   const firstOk = staffers.length && typeof staffers[0].provides.firstOk === 'function' ? staffers[0].provides.firstOk : null;   /* what a brand-new shop's first fact must be */
+  /* a right no person can ever be given is a mistake found at start, not a rule only owners pass (skeptic 11/1): when the staff module says
+     which abilities this business has (core/abilities.js, and what modules add), every right a module names must be one of them */
+  const abilities = staffers.length && typeof staffers[0].provides.abilities === 'function' ? staffers[0].provides.abilities() : null;
+  if (abilities) Object.keys(rules).forEach(function (t) { const r = rules[t].right; if (r && abilities.indexOf(r) < 0) throw new Error(t + ' (module ' + rules[t].module + ') names the right "' + r + '", which is not among this business\'s abilities (core/abilities.js, or a module\'s staff.addAbility)'); });
   const trusted = opts.trusted || ['hub-services'];
   const grantCheck = typeof opts.grantCheck === 'function' ? opts.grantCheck : null;
   const pinChecked = Object.keys(rules).filter(function (t) { return rules[t].pin; });

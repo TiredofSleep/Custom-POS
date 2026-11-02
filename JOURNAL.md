@@ -1601,7 +1601,7 @@ again... copy, paste, customize."*
 
 One export of the shop's live build (873dc0ea): 28 files. Each of the shop's proofs runs here at exactly the count that passed
 upstream: the engine laws (114), then the shared files' own suite sections (4, 5 and 3). The engine files were already here and came
-back byte for byte. Seven are new:
+back byte for byte. Nine are new: six files, and the three proofs that came with them (994 to 996). The six:
 - the staff fold and the staff rules;
 - the business's list of abilities;
 - the PIN pass;
@@ -1628,7 +1628,8 @@ start because the start is a cleaner's.
 ### Two places this repo stays stricter than the shop
 
 Both refuse more, never less:
-- A pay rate needs `employees` here. At the shop, `payroll` may set one too.
+- A pay rate needs `employees` here. At the shop, `payroll` may set one too — and, as the step 6 review found, anything else in the
+  same change, so long as a rate rides along (by design there: the shop's Admin save is one fact under the payroll person).
 - The hub refuses a change that would leave no active owner. At the shop the tablets refuse it, and the fold reports it after the
   fact.
 
@@ -1698,3 +1699,42 @@ history fact has no breaks and no wage, and these punches have both. Moving them
 - The new browser test checks the points above.
 - Eleven deliberate breaks were made in a copy of the page, one rule of the kit or its adapter at a time. Every one turned a browser
   test red.
+
+### A skeptic pass, again
+
+Step 6 of the plan: one review before anything is published. Three reviewers each took one angle:
+- the hub's judgement of who may write what, and the PIN the hub checks;
+- the clock kit and its adapter;
+- whether this repo matches the shop it copies, and whether its tests can fail.
+
+A checker then tried to refute every finding by running it. All 18 held. The reviewers also listed 42 attacks the code withstood.
+
+**New in step 5, and caught:** a device that had a shift open from before it joined the hub, while another tablet had clocked the same
+person in, closed the old shift and left the hub's running. The shop's own clock always takes its open shift first. Now this repo does
+too: the old shift ends when the person's shift on the hub begins.
+
+**Older faults the new eyes found:**
+- staff names from the hub were drawn as HTML on the Office, in five places;
+- a break named after a second clock-in vanished from the punches;
+- a device named "Front Counter" could never start a break;
+- one tablet could stall the hub for twenty seconds with a flood of staff facts;
+- a module could name "constructor" as a right, and everyone would hold it;
+- a wage could ride on a clock-in, the one fact that never needs a PIN;
+- the import trusted its "yours" mark file by file;
+- a proof dropped from the list stopped running without a word.
+
+Each is fixed with a test that failed before the fix. Then each fix was undone in a copy, one at a time, and a test turned red every
+time.
+
+**The shop's, fixed there first.** The review read the shop's code too, where it is shared or compared:
+- the same stall was in the shop's judge;
+- a changed PIN did not end the passes earned with the old one;
+- a burst of guesses got past the wrong-PIN lock.
+
+Those are fixed in the shop's v2, with its suite. The two in the PIN pass reach this repo the only way shared code does: in the next
+export of the build the shop is running.
+
+One more was the shop's by design. There, a person with payroll may save any field of a person as long as a pay rate rides along,
+permissions included. The fix was written, and the shop's own suite refused it: its Admin save records a manager's edit and the rate
+a payroll person re-approved as one fact, under the payroll person. Closing the gap means splitting that save in two, which is a
+change to the shop's screens and the owner's call. This repo never had the gap.

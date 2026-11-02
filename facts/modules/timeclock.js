@@ -7,8 +7,8 @@
                                     ever kept off the clock because the internet is down
      clock.edit, clock.void, clock.manual   "payroll" (or an owner) AND a PIN the hub checked (facts/modules/pingrant.js)
      clock.autoclose                the hub only
-   What Custom POS adds: unpaid breaks (break.start / break.end, the same authority as a punch), the wage carried on clock.in as
-   DB.punches carries it today (a shift with none written reads null, so the person's wage applies), and a COMPAT PROJECTION: punches(facts, staff) rebuilds DB.punches' exact shape from the facts, so the
+   What Custom POS adds: unpaid breaks (break.start / break.end, the same authority as a punch), the wage a clock-in already written
+   carries (no tablet writes one since 11/1 — wageRule; a shift with none reads null, so the person's wage applies), and a COMPAT PROJECTION: punches(facts, staff) rebuilds DB.punches' exact shape from the facts, so the
    existing tip-pool, labor-cost and report code reads shared punches without being rewritten first. */
 'use strict';
 const { defineModule } = require('./define');
@@ -30,13 +30,17 @@ function foldBreaks(evs) {
   });
   return { byShift: byShift };
 }
-/* a shift id a break may name: an event id (station/…), as every clock-in's is — judged on NEW facts only (law 1) */
-const SHIFT_ID = /^[A-Za-z0-9_.:-]{1,64}\/[A-Za-z0-9_.:-]{1,128}$/;
+/* a shift id a break may name: an event id (station/…), as every clock-in's is — judged on NEW facts only (law 1). The station part is the
+   hub's own rule for a station name (any text but "/", 1 to 64 characters): skeptic 11/1 found a device the hub enrolled as "Front Counter"
+   could clock in and out but never start a break, because this allowed no space */
+const SHIFT_ID = /^[^/]{1,64}\/[A-Za-z0-9_.:-]{1,128}$/;
 /* @facts @timeclock — a new break must name a real-looking shift id */
 function admitBreak(p) { return SHIFT_ID.test(String(p.shiftId)) ? null : 'a break names its shift by the clock-in\'s id'; }
-/* @facts @timeclock @payroll — a wage on a clock-in is a pay figure: only an owner or someone with "payroll" writes one (stage-2 review: a
-   clerk could set their own rate on every shift; the app now sends none, and the person's wage from setup applies) */
-function wageRule(p, who, staff) { return p.wage != null && !staff.isOwner(who) && !staff.can(who, 'payroll') ? 'only an owner or someone with "payroll" writes a wage' : null; }
+/* @facts @timeclock @payroll — a wage on a clock-in is a pay figure, and a clock-in is never PIN-checked (nobody is kept off the clock), so
+   no tablet writes one: the person's wage from setup applies, as the app has sent none since the stage-2 review. Skeptic 11/1: a lost
+   tablet's key could put any wage on a punch by naming the owner, while the same figure as a rate (employee.set) needs "employees" and
+   the owner's PIN checked by the hub. A punch the hub writes itself is not judged here. */
+function wageRule(p) { return p.wage != null ? 'a clock-in carries no wage from a tablet — a pay rate is set on the person (employee.set), with a PIN the hub checked' : null; }
 
 /* @facts @timeclock — local HH:MM, as the clock station shows the wall clock */
 function hm(ms) { return new Date(ms).toTimeString().slice(0, 5); }
@@ -45,8 +49,14 @@ function hm(ms) { return new Date(ms).toTimeString().slice(0, 5); }
    ids (optional, rollout step 5): a Map this fills with each punch → its shift's id (the clock-in fact's), for the clock kit's adapter
    (pos.html clockKitFor), which names the shift a clock-out or a break belongs to; the punch itself keeps DB.punches' exact shape. */
 function punches(facts, staff, ids) {
-  const clock = facts.filter(function (e) { return /^clock\./.test(e.type); }), brk = foldBreaks(facts.filter(function (e) { return /^break\./.test(e.type); }));
+  const clock = facts.filter(function (e) { return /^clock\./.test(e.type); });
   const view = TC.fold(clock), src = new Map(); clock.forEach(function (e) { if (e.type === 'clock.in' || e.type === 'clock.manual') src.set(e.id, e); });
+  /* a break names the clock-in its tablet saw open; a second clock-in from a tablet that had not yet seen the first is an extra tap of the
+     same shift (the engine's fold, extraIns), so each break is folded under the shift its clock-in belongs to — skeptic 11/1: a break named
+     after the extra tap vanished from the punches and was paid as worked time (a start and its end may name different taps) */
+  const shiftOf = new Map(); (view.shifts || []).forEach(function (s) { shiftOf.set(s.id, s.id); (s.extraIns || []).forEach(function (t) { if (t && t.id) shiftOf.set(t.id, s.id); }); });
+  const brk = foldBreaks(facts.filter(function (e) { return /^break\./.test(e.type); }).map(function (e) {
+    const to = shiftOf.get(e.payload.shiftId); return (to && to !== e.payload.shiftId) ? Object.assign({}, e, { payload: Object.assign({}, e.payload, { shiftId: to }) }) : e; }));
   const byId = (staff && staff.byId) || new Map();
   return (view.shifts || []).filter(function (s) { return s.status !== 'void' && !s.voided; }).map(function (s) {
     /* the wage written at punch time; none written is null (not 0), so pos.html falls back to the person's wage as DB.punches always did — a 0 would cost the shift nothing (10/31: the history fixture caught a manual shift costed at $0) */

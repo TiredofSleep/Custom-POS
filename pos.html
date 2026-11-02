@@ -1014,7 +1014,7 @@ function renderReport(app, station){
     const byStaff={}; let stillOn=false; let onBrk=false; let laborCost=0;
     DB.punches.forEach(pn=>{ if(!pn.out) stillOn=true; if(onBreak(pn)) onBrk=true; const h=workedMs(pn)/3600000; byStaff[pn.name]=(byStaff[pn.name]||0)+h; laborCost += h*((pn.wage!=null?pn.wage:staffWage(pn.staffId))||0); });   // paid time = clocked minus unpaid breaks
     const lc=document.createElement("div"); lc.className="card"; lc.innerHTML="<div class='row'><b>Labor — paid hours today</b></div>";
-    let tot=0; Object.keys(byStaff).forEach(n=>{ tot+=byStaff[n]; lc.innerHTML+=L(n, byStaff[n].toFixed(2)+" h"); });
+    let tot=0; Object.keys(byStaff).forEach(n=>{ tot+=byStaff[n]; lc.innerHTML+=L(factsEsc(n), byStaff[n].toFixed(2)+" h"); });   /* skeptic 11/1: a punch's name is the hub's on a hub — text, never HTML */
     lc.innerHTML+=L("Total hours", tot.toFixed(2)+" h", true) + (stillOn?"<div class='muted' style='margin-top:4px'>Some staff are still on the clock"+(onBrk?" (some on break)":"")+".</div>":"");
     // labor cost + labor as a share of sales — the number that tells an owner if payroll is sustainable
     if(laborCost>0){ lc.innerHTML+=L("Labor cost", money(laborCost), true);
@@ -1027,7 +1027,7 @@ function renderReport(app, station){
   // ---- tip pool: share the day's tips across everyone who worked, by hours (fair + transparent) ----
   if(tipPoolOn() && tips>0){ const {by,tot:totH}=poolHours();
     const tp=document.createElement("div"); tp.className="card"; tp.innerHTML="<div class='row'><b>Tip pool — shared by hours</b></div>";
-    if(totH>0){ Object.keys(by).sort().forEach(n=>{ tp.innerHTML+=L(n+" <span class='muted'>("+by[n].toFixed(2)+" h)</span>", money(tips*by[n]/totH)); }); tp.innerHTML+=L("Pool total", money(tips), true); }
+    if(totH>0){ Object.keys(by).sort().forEach(n=>{ tp.innerHTML+=L(factsEsc(n)+" <span class='muted'>("+by[n].toFixed(2)+" h)</span>", money(tips*by[n]/totH)); }); tp.innerHTML+=L("Pool total", money(tips), true); }
     else tp.innerHTML+="<div class='muted'>Tips collected, but no clocked hours to share them by.</div>";
     app.appendChild(tp);
   }
@@ -1036,7 +1036,7 @@ function renderReport(app, station){
   if(incs.length){ const open=incs.filter(i=>!i.ack);
     const ic=document.createElement("div"); ic.className="card"; ic.innerHTML="<div class='row'><b>Safety incidents</b>"+(open.length?" <span class='pill flag'>"+open.length+" open</span>":"")+"</div>";
     incs.slice(0,8).forEach(i=>{ const row=document.createElement("div"); row.className="line";
-      row.innerHTML="<span>"+(i.urgent?"🆘 ":"")+"<b>"+i.type+"</b> — "+i.name+" · "+i.day+" "+i.at+(i.note?" · "+i.note:"")+(i.ack?" <span class='muted'>✓ ack</span>":"")+"</span>";
+      row.innerHTML="<span>"+(i.urgent?"🆘 ":"")+"<b>"+factsEsc(i.type)+"</b> — "+factsEsc(i.name)+" · "+factsEsc(i.day)+" "+factsEsc(i.at)+(i.note?" · "+factsEsc(i.note):"")+(i.ack?" <span class='muted'>✓ ack</span>":"")+"</span>";   /* skeptic 11/1: as text — the name may be the hub's, the note is typed by anyone */
       if(!i.ack){ const sp=document.createElement("span"); sp.className="spacer"; row.appendChild(sp); const a=document.createElement("button"); a.textContent="Acknowledge"; a.onclick=()=>ackIncident(i.id); row.appendChild(a); }
       ic.appendChild(row); });
     app.appendChild(ic);
@@ -1112,7 +1112,7 @@ function renderReport(app, station){
     rc.appendChild(wrap); });
   app.appendChild(rc);
   if((DB.approvals||[]).length){ const ac=document.createElement("div"); ac.className="card"; ac.innerHTML="<div class='row'><b>Approvals (audit)</b></div>";
-    DB.approvals.slice(-8).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+a.at+" · "+a.action+" — "+(a.label||"")+"</span><span class='spacer'></span><span class='muted'>by "+a.by+"</span>"; ac.appendChild(row); }); app.appendChild(ac); }
+    DB.approvals.slice(-8).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line"; row.innerHTML="<span>"+factsEsc(a.at)+" · "+factsEsc(a.action)+" — "+factsEsc(a.label||"")+"</span><span class='spacer'></span><span class='muted'>by "+factsEsc(a.by)+"</span>";   /* skeptic 11/1: a name from the hub is text, here too */ ac.appendChild(row); }); app.appendChild(ac); }
   // ---- ID checks (audit): defensible record of every age-restricted sale that was verified ----
   { const idlog=(DB.ageLog||[]).filter(a=>a.day===todayStr());
     if(idlog.length){ const ic=document.createElement("div"); ic.className="card"; ic.innerHTML="<div class='row'><b>ID checks (audit)</b> <span class='pill'>"+idlog.length+" today</span></div>";
@@ -1158,8 +1158,9 @@ function renderReport(app, station){
     al.appendChild(chips);
     if(!shown.length){ const e=document.createElement("div"); e.className="muted"; e.textContent="No matching activity "+(isToday?"today":"on "+day)+"."; al.appendChild(e); }
     else { shown.slice(-60).reverse().forEach(a=>{ const row=document.createElement("div"); row.className="line"; row.style.fontSize="13px";
-        row.innerHTML="<span><span class='muted'>"+a.at+"</span> <span class='pill'>"+a.type+"</span> "+a.detail+(a.order!=null?" <span class='muted'>#"+a.order+"</span>":"")+"</span>"
-          +"<span class='spacer'></span><span class='muted'>"+[a.staff,a.station].filter(Boolean).join(" · ")+"</span>"; al.appendChild(row); }); }
+        /* skeptic 11/1: every part is drawn as text — a staff name from the hub (anyone with "employees" may write one) ran as script here */
+        row.innerHTML="<span><span class='muted'>"+factsEsc(a.at)+"</span> <span class='pill'>"+factsEsc(a.type)+"</span> "+factsEsc(a.detail)+(a.order!=null?" <span class='muted'>#"+factsEsc(a.order)+"</span>":"")+"</span>"
+          +"<span class='spacer'></span><span class='muted'>"+factsEsc([a.staff,a.station].filter(Boolean).join(" · "))+"</span>"; al.appendChild(row); }); }
     const exp=document.createElement("button"); exp.textContent="⬇ Activity "+day+" (CSV)"; exp.style.marginTop="8px"; exp.onclick=()=>downloadFile(slug()+"-activity-"+day+".csv", activityCSV(day), "text/csv"); al.appendChild(exp);
     app.appendChild(al); }
   // ---- data & backup: your data is yours — take it out any time, restore it any time ----
@@ -1303,15 +1304,32 @@ function factsRefresh(force){
   FACTS.staff = FACTS.vw.logFold("staff");
   const db = loadDB();
   if(!db.factsSince){ db.punchesBeforeFacts = (db.punches||[]).slice(); db.factsSince = Date.now(); }
-  const next = F.clock.punches(all, FACTS.staff).concat(db.punchesBeforeFacts||[]).sort((a,b)=>a.inTs-b.inTs);
+  const hubP = F.clock.punches(all, FACTS.staff), shut = factsCloseHistory(db, hubP);
+  const next = hubP.concat(db.punchesBeforeFacts||[]).sort((a,b)=>a.inTs-b.inTs);
   const sig = JSON.stringify([next, Array.from(FACTS.staff.byId.values()).map(s=>[s.id, s.name, s.active, s.role]), factsStatusText()]);
   if(!force && sig===FACTS.last) return;
   FACTS.last = sig; db.punches = next; persistDB(db);
   /* the page's in-memory copy too: a later save from another screen writes it back whole, and must never put back old punches or lose
      the before-the-hub marker (which would fold the hub's punches in twice) */
   if(DB && DB!==db){ DB.punches = next; DB.factsSince = db.factsSince; DB.punchesBeforeFacts = db.punchesBeforeFacts; }
+  shut.forEach(function(h){ try{ logActivity("clock", (h.name||h.staffId)+"'s shift from before the hub was closed at "+h.out+", when their shift on the hub began"); }catch(e){} });
   const app = document.getElementById("app"), typing = document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName) && app && app.contains(document.activeElement);
   const s = boundStation(); if(s && s.type==="timeclock" && !typing) render();
+}
+/* @facts @timeclock — a shift from before the hub, still open on this device, ends when that person's shift on the hub begins: the shop
+   prefers its own open shift (station/app.js openShifts), and two open shifts would pay the overlap twice. Skeptic 11/1: with both open
+   (the device held an old shift, and another tablet clocked the person in), a clock-out here closed the old one on this device only and
+   the hub shift ran on. An open break on it ends then too. Changes db in place; answers the punches it closed. */
+function factsCloseHistory(db, hubPunches){
+  const shut = [];
+  (db.punchesBeforeFacts||[]).forEach(function(h){
+    if(!h || h.outTs!=null) return;
+    const on = (hubPunches||[]).filter(p=>String(p.staffId)===String(h.staffId) && p.outTs==null)[0]; if(!on) return;
+    const t = Math.max(h.inTs, on.inTs), at = new Date(t).toTimeString().slice(0,5);
+    (h.breaks||[]).forEach(function(b){ if(b.endTs==null){ b.endTs = Math.max(b.startTs||t, t); b.end = new Date(b.endTs).toTimeString().slice(0,5); } });
+    h.out = at; h.outTs = t; shut.push(h);
+  });
+  return shut;
 }
 /* record now (the fact is in this device's log at once) and show it at once; send, then refresh again. Never a "Welcome" for a punch that
    was not recorded: a refusal becomes the error card */
@@ -1366,13 +1384,15 @@ async function factsAddTeam(form){
      a new punch → clock.in · an out time → clock.out · a new break → break.start · a break's end → break.end  (no wage is written: a pay
      figure needs payroll, and the person's wage from setup applies, as it always has)
    A punch from before the hub is history on this device: a change to it (its out, a break) is kept here, so a shift left open when the
-   device joined ends at that person's next clock-out (skeptic finding 1.1: it stayed open forever). saveDB answers whether every fact was
+   device joined ends at that person's next clock-out on THIS device (skeptic finding 1.1: it stayed open forever) — or when their shift on
+   the hub begins, whichever is first (factsCloseHistory: the hub's open shift always comes first, as at the shop). saveDB answers whether every fact was
    recorded, so the kit never shows a "Welcome" for a punch the device refused. */
 function clockKitFor(){
   if(!FACTS.ready || !FACTS.st) return clockKit({ DB: { punches: [] }, saveDB: function(){ FACTS.error = "This device is not connected to its hub yet — nothing was recorded"; render(); return false; } });
-  const F = globalThis.CustomPOSFacts, ids = new Map(), db = loadDB();
+  const F = globalThis.CustomPOSFacts, ids = new Map(), db = loadDB(), hubP = F.clock.punches(FACTS.st.log.all(), FACTS.staff, ids);
+  if(factsCloseHistory(db, hubP).length){ persistDB(db); if(DB && DB!==db) DB.punchesBeforeFacts = db.punchesBeforeFacts; }   // the hub's open shift first, as factsRefresh
   const hist = (db.punchesBeforeFacts||[]).map(p=>JSON.parse(JSON.stringify(p))), at = new Map(); hist.forEach((p,i)=>at.set(p,i));
-  const view = { punches: F.clock.punches(FACTS.st.log.all(), FACTS.staff, ids).concat(hist).sort((a,b)=>a.inTs-b.inTs) };
+  const view = { punches: hubP.concat(hist).sort((a,b)=>a.inTs-b.inTs) };
   const was = new Map(); view.punches.forEach(p=>was.set(p, { out: p.outTs, breaks: (p.breaks||[]).map(b=>b.endTs) }));
   return clockKit({ DB: view, saveDB: function(){
     const facts = [], kept = []; let who = null;

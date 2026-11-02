@@ -353,8 +353,8 @@ the id rule (letters, digits and `_ . : -`, 1 to 64 of them) for any id a new fa
 | `facts/modules/staff.js`, rebuilt, with its own fact type `staff.set` | the shop's `aggregates/staff.js` and `core/staff.js`: `employee.set`, field by field, and `staff.roles` |
 | `facts/modules/pingrant.js`, rebuilt | the shop's `hub/pingrant.js` (91 lines, nothing of the shop's in it) |
 | a planned `ids.js` | nothing new: the registry's id rule is already here |
-| a planned way to close old open shifts at the switch | the shop's way: old punches come over as history (`aggregates/punches.js`), and an open one ends at that person's next clock-out (`station/app.js`: "a shift begun on v1 ends here") |
-| the time clock module, `facts/modules/timeclock.js` | kept: it already uses the shop's `clock.*` types and fold. Breaks stay this repo's own (`clock.break`), because the shop has no breaks. |
+| a planned way to close old open shifts at the switch | the shop's way: old punches come over as history (`aggregates/punches.js`), and an open one ends at that person's next clock-out (`station/app.js`: "a shift begun on v1 ends here"). *As built (step 5):* the old punches stay on the device that held them; an open one ends at the next clock-out there, or when that person's shift on the hub begins |
+| the time clock module, `facts/modules/timeclock.js` | kept: it already uses the shop's `clock.*` types and fold. Breaks stay this repo's own (`break.start` / `break.end`), because the shop has no breaks. |
 | `define.js`: a module declares its facts, who may write them and which need a PIN | kept for this repo's own modules. In the shop the same rules are central lists (`hub/authority.js`, `PIN_CHECKED`); see section 6. |
 
 ### 4. The time clock, rebuilt in the shop's shape
@@ -364,7 +364,7 @@ the id rule (letters, digits and `_ . : -`, 1 to 64 of them) for any id a new fa
   so nothing changes.
 - **`clockKitFor(folds, ctx)`**: the adapter. It builds `DB.punches` from the clock fold and the breaks fold (Stage 2's compat
   projection already does this). Its `saveDB` compares the punches with what they were: a new punch becomes `clock.in`, an out time
-  becomes `clock.out`, a break becomes `clock.break`. Those go to `ctx.onSave(facts)`, then through the door, under the person
+  becomes `clock.out`, a break becomes `break.start` and its end `break.end`. Those go to `ctx.onSave(facts)`, then through the door, under the person
   whose PIN was entered.
 - **The wiring is the shop's.** The shop's page repeats the same few lines of `onSave` (record each fact under the right person,
   then sync) 24 times. That becomes one helper in v2 first, and this repo uses the same helper.
@@ -415,8 +415,8 @@ in the same shape.
 3. **The exporter:** add those files and `hub/pingrant.js`, `aggregates/staff.js`, `core/staff.js` and `aggregates/punches.js`,
    with the suite sections that prove them. Add the check that a file has not changed since the build the shop is running.
    *Live since 2026-11-01 (v2 74869929, Unit 0.3).* A real export refuses a station or hub file that is not the live build's. It
-   marks `core/abilities.js` as the business's own (`yours`). `aggregates/punches.js` is not exported yet: step 5 brings it, with
-   the suite section that proves it.
+   marks `core/abilities.js` as the business's own (`yours`). `aggregates/punches.js` is not exported: history as facts is still
+   open (see step 5).
 4. **Here:** import them. Replace the rebuilt staff and PIN files, and the `staff.set` type.
    *Built 2026-11-01, not published.* Imported from the export of the shop's live build 873dc0ea: 28 files, the shop's proofs
    passing here at exactly their upstream counts (114 + 4 + 5 + 3). `facts/modules/staff.js` is now a thin module over the shop's
@@ -440,14 +440,33 @@ in the same shape.
      is this repo's own, because the shop connects its tablets by setup codes, which are v1's code. The mode question is asked only
      in the host's eight small functions (which kit, whose staff, whose PIN, the gate, the status, the team, the boot, and "not
      connected yet"). The kit and the clock screen never ask; `tests/facts-clock-kit.js` checks that.
-   - **Finding 1.1, answered on the device:** a shift left open when a device joins a hub ends at that person's next clock-out. That
-     shift is the device's own history, so closing it writes no fact.
+   - **Finding 1.1, answered on the device:** a shift left open when a device joins a hub ends at that person's next clock-out on that
+     device, or when their shift on the hub begins, whichever comes first (the shop's order: its own open shift always comes first; the
+     step 6 review found the first build closed the old shift and left the hub's running). That shift is the device's own history, so
+     closing it writes no fact. Other tablets never see it, so on them that person reads as not on the clock until the device's shift ends.
    - **Still open: history as facts, the shop's way.** At the shop, v1's punches are facts (`punch.row`, `aggregates/punches.js`),
      so every tablet sees them. Here they stay on the device that held them, as before. `punch.row` has no breaks and no wage, and
      this repo's punches have both, so moving them is a design step of its own, with the exporter change it needs.
    - **A fix found by the new test:** a refused punch kept the typed PIN, so the next PIN was added onto it. A refused clock-out also
      kept the on-shift screen up, which hid the refusal. The old facts mode had both faults; the kit clears both.
 6. **One skeptic pass, then the owner's yes to publish.**
+   *Run 2026-11-01:* three reviewers, one per lens (the hub's judgement and the PIN pass; the clock kit and its adapter; shop parity,
+   provenance and test honesty), each followed by a checker who tried to refute every finding by running it. 6 agents, about 1.2 million
+   tokens. 18 findings, all confirmed; 42 attacks the code withstood.
+   - **Fixed here, each with a test that failed before it:** the kit closed an old device shift and left the hub's running (new in
+     step 5); staff names from the hub ran as HTML on the Office (Activity log, approvals, incidents, hours, tip pool); a break named
+     after a second clock-in vanished; a device named with a space could never start a break; one tablet could stall the hub by
+     flooding staff facts; "constructor", or a right nobody can hold, was accepted as a right; a wage could ride on a clock-in with no
+     PIN; the import trusted the "yours" mark per file; a dropped proof stopped running silently; plus the test gaps and the doc claims.
+     Undoing each fix in a copy turned a test red (10 of 10).
+   - **The shop's, fixed there first:** the same stall in the shop's judge; a changed PIN did not end the passes earned with the old
+     one; a burst of guesses got past the wrong-PIN lock.
+   - **The shop's, by design, and the owner's call:** at the shop, a person with payroll may save any field of a non-owner so long as
+     a pay figure rides along. That is how its Admin save works: a manager edits a person, the tablet re-asks a payroll person's PIN for
+     the rate, and the whole save is one fact under the payroll person (the shop's suite pins it). Closing it means splitting that save
+     into two facts, a change to the shop's Admin screen. This repo's rule is already the strict one.
+     The last two are in `hub/pingrant.js`, which this repo imports: they arrive here with the next export of the shop's live build,
+     after the shop deploys them.
 
 ### 9. Risks
 
@@ -463,7 +482,9 @@ in the same shape.
 The first version asked five questions. The shop already answers four of them, and the owner answered the fifth (2026-10-31).
 
 1. **Moving to several computers while people are on the clock.** *The shop's answer, adopted:* old punches come over as history,
-   and an open shift ends at that person's next clock-out. Nobody has to clock in again.
+   and an open shift ends at that person's next clock-out. Nobody has to clock in again. *As built:* the old punches stay on the device
+   that held them (not yet facts every tablet sees), and an open one there ends at the next clock-out on it or when the person's shift on
+   the hub begins.
 2. **Which actions wait for the hub.** *The shop's answer, adopted:* nothing waits when it is written. A privileged change needs a
    pass from a PIN the hub checked; one made without a pass waits on the tablet until that person's next PIN. Clock-in and
    clock-out never wait.

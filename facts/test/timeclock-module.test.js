@@ -80,15 +80,16 @@ H.testAsync('who may punch and who may correct: a clerk only for themselves; a c
       A.passes = {};
       out.tabletAutocloses = (await put(A, 'clock.autoclose', 'clk', { empId: 'clk', at: t0 + 2 * HOUR, shiftId: inn.id }, 'own')).ok;
       out.breakSelf = (await put(A, 'break.start', 'clk', { empId: 'clk', shiftId: inn.id, at: t0 + HOUR }, 'clk')).ok;
-      /* a wage on a clock-in is a pay figure: never from a clerk, from someone with payroll yes (stage-2 review) */
+      /* a wage on a clock-in is a pay figure, and a clock-in is never PIN-checked: no tablet writes one, a clerk or a manager with payroll
+         (stage-2 review: never a clerk; skeptic 11/1: nor anyone — a lost tablet's key could name the owner and skip the PIN a rate needs) */
       out.clerkWage = (await put(A, 'clock.in', 'clk', { empId: 'clk', at: t0 + 5 * HOUR, wage: 9999 }, 'clk')).ok;
       out.managerWage = (await put(A, 'clock.in', 'mgr', { empId: 'mgr', at: t0 + 5 * HOUR, wage: 22 }, 'mgr')).ok;
       return out;
     };
     const j = await run(srv, true), o = await run(open, false);
-    ['selfIn', 'managerInsAnother', 'managerEditsWithPin', 'breakSelf', 'managerWage'].forEach(function (k) { H.ok(j[k] === true, 'admitted: ' + k); });
-    ['clerkInsAnother', 'clerkEdits', 'managerEditsNoPin', 'tabletAutocloses', 'clerkWage'].forEach(function (k) { H.ok(j[k] === false, 'refused: ' + k); });
-    ['clerkInsAnother', 'clerkEdits', 'managerEditsNoPin', 'tabletAutocloses', 'clerkWage'].forEach(function (k) { H.ok(o[k] === true, 'a hub with no modules admits: ' + k); });
+    ['selfIn', 'managerInsAnother', 'managerEditsWithPin', 'breakSelf'].forEach(function (k) { H.ok(j[k] === true, 'admitted: ' + k); });
+    ['clerkInsAnother', 'clerkEdits', 'managerEditsNoPin', 'tabletAutocloses', 'clerkWage', 'managerWage'].forEach(function (k) { H.ok(j[k] === false, 'refused: ' + k); });
+    ['clerkInsAnother', 'clerkEdits', 'managerEditsNoPin', 'tabletAutocloses', 'clerkWage', 'managerWage'].forEach(function (k) { H.ok(o[k] === true, 'a hub with no modules admits: ' + k); });
   } finally { await srv.close(); await open.close(); rmDb(f); rmDb(f2); }
 });
 
@@ -122,15 +123,53 @@ H.test('breaks and the compat projection: DB.punches\' exact shape, paid time mi
   H.deepEq(TCM.foldBreaks([stray]).byShift.nope, [], 'an end with no open break changes nothing');
 });
 
-H.test('history: version 1\'s saved fact log still verifies and still folds to the same punches (law 1 — a later version must keep this passing)', function () {
+/* the fixture's 14 facts are version 1's, never changed; its three employee.set facts were added at rollout step 4 (the staff.set the people
+   were written as never left this machine) — so this proves the 17, and v1's own 14 are proved below, names aside (skeptic 11/1) */
+H.test('history: version 1\'s saved fact log still verifies and still folds to the same punches (law 1 — a later version must keep this passing; its people added as employee.set at step 4)', function () {
   const EV = require('../core/event');
   const fx = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'modules', 'fixtures', 'timeclock-v1.json'), 'utf8'));
   H.eq(process.env.TZ, fx.tz, 'the fixture\'s times are read on its own clock');
   H.ok(fx.facts.length >= 14 && fx.facts.every(function (e) { return EV.verify(e); }), 'every saved fact still verifies (' + fx.facts.length + ')');
   H.deepEq(TCM.punches(fx.facts, S.fold(fx.facts)), fx.punches, 'the same punches, field for field');
+  const v1 = fx.facts.slice(0, 14), noName = function (ps) { return ps.map(function (p) { const q = Object.assign({}, p); delete q.name; return q; }); };
+  H.ok(v1.every(function (e) { return e.type !== 'employee.set'; }), 'the first 14 are version 1\'s own facts');
+  H.deepEq(noName(TCM.punches(v1, S.fold(v1))), noName(fx.punches), 'version 1\'s own 14 facts alone fold to the same shifts, breaks, times and wages (only the names came from its old staff facts)');
   /* the negative control: one saved fact taken out changes the answer (the comparison can fail) */
   const less = fx.facts.filter(function (e) { return e.type !== 'clock.edit'; });
   H.ok(JSON.stringify(TCM.punches(less, S.fold(less))) !== JSON.stringify(fx.punches), 'without the manager\'s correction the punches differ');
+});
+
+H.testAsync('skeptic 11/1 (step 6): a break named after an extra clock-in is the shift\'s; a device named with a space can start a break; a wage on a punch is refused', async function () {
+  const reg = require('../core/registry'), EV = require('../core/event'), hlc = require('../core/hlc');
+  const ca = hlc.makeClock('tab-a'), cb = hlc.makeClock('tab-b');
+  const mk = function (clock, st, type, key, payload, actor) { return EV.makeEvent({ type: type, aggregate: reg.typeDef(type).aggregate, key: key, payload: payload, hlc: clock.now(), station: st, actor: actor || null }); };
+  const t0 = new Date(2026, 10, 2, 9, 0).getTime(), staff = [mk(ca, 'tab-a', 'employee.set', 'clk', { empId: 'clk', set: { name: 'Cam' } })];
+  /* kit-3: A clocks Cam in (X); B, not yet seeing it, clocks Cam in too (Y) and starts and ends a break on Y; then both sync */
+  const X = mk(ca, 'tab-a', 'clock.in', 'clk', { empId: 'clk', at: t0 }, 'clk'), Y = mk(cb, 'tab-b', 'clock.in', 'clk', { empId: 'clk', at: t0 + 60000 }, 'clk');
+  const bs = mk(cb, 'tab-b', 'break.start', 'clk', { empId: 'clk', shiftId: Y.id, at: t0 + 2 * HOUR }, 'clk'), be = mk(cb, 'tab-b', 'break.end', 'clk', { empId: 'clk', shiftId: Y.id, at: t0 + 2.5 * HOUR }, 'clk');
+  const out = mk(ca, 'tab-a', 'clock.out', 'clk', { empId: 'clk', at: t0 + 4 * HOUR, shiftId: X.id }, 'clk');
+  const all = staff.concat([X, Y, bs, be, out]), p = TCM.punches(all, S.fold(all));
+  H.eq(p.length, 1, 'one shift (the second clock-in is an extra tap of it)');
+  H.eq(JSON.stringify(p[0].breaks.map(function (b) { return [b.startTs, b.endTs]; })), JSON.stringify([[t0 + 2 * HOUR, t0 + 2.5 * HOUR]]), 'the break B named after its own clock-in is on that shift, not lost and paid as worked time');
+  /* A ends the break only after it has B's start (it is A's screen that shows the break), so A's clock has seen B's */
+  const bs2 = mk(cb, 'tab-b', 'break.start', 'clk', { empId: 'clk', shiftId: Y.id, at: t0 + HOUR }, 'clk'); ca.observe(bs2.hlc);
+  const mixed = staff.concat([X, Y, bs2, mk(ca, 'tab-a', 'break.end', 'clk', { empId: 'clk', shiftId: X.id, at: t0 + 1.25 * HOUR }, 'clk')]);
+  H.eq(JSON.stringify(TCM.punches(mixed, S.fold(mixed))[0].breaks.map(function (b) { return [b.startTs, b.endTs]; })), JSON.stringify([[t0 + HOUR, t0 + 1.25 * HOUR]]), 'a break started on one tap and ended on the other is one break');
+  const only = staff.concat([X, Y, bs, be]).filter(function (e) { return e !== X; });
+  H.eq(TCM.punches(only, S.fold(only))[0].breaks.length, 1, 'the negative control: with only B\'s clock-in, the break is on it as before');
+  /* kit-4: a station the hub enrolled as "Front Counter" clocks in, and its break names that clock-in */
+  const f = dbFile('c6'); const srv = await startHubServer({ db: f, adminKey: ADMIN, modules: [S.STAFF, TCM.TIMECLOCK], grantSecret: 'g6', notify: function () {} });
+  try {
+    const A = await shop(srv), FC = await tablet(srv, 'Front Counter');
+    const inn = await put(FC, 'clock.in', 'clk', { empId: 'clk', at: Date.now() - HOUR }, 'clk');
+    H.ok(inn.ok && /^Front Counter\//.test(inn.id), 'a device named with a space clocks in');
+    H.ok((await put(FC, 'break.start', 'clk', { empId: 'clk', shiftId: inn.id, at: Date.now() - 1800000 }, 'clk')).ok, 'and its break names that clock-in and lands (it was refused: no space allowed)');
+    let refused = ''; try { FC.record('break.start', 'clk', { empId: 'clk', shiftId: 'Front Counter', at: Date.now() }, { actor: 'clk' }); } catch (e) { refused = String(e.message); }
+    H.ok(/names its shift by the clock-in/.test(refused), 'the negative control: a shift id that is not a clock-in\'s is still refused');
+    /* authority-5: a wage on a punch is refused even naming the owner; the hub reads none */
+    H.ok(!(await put(A, 'clock.in', 'own', { empId: 'own', at: Date.now() - 600000, wage: 500 }, 'own')).ok, 'a wage on a clock-in naming the owner is refused (no PIN guards a punch)');
+    H.ok((await put(A, 'clock.in', 'own', { empId: 'own', at: Date.now() - 600000 }, 'own')).ok, 'the same clock-in with no wage lands');
+  } finally { await srv.close(); rmDb(f); }
 });
 
 H.test('stage-2 review: a break naming shift "constructor" cannot break anyone\'s punches; a skewed break end closes at its start; a break never outlasts its shift', function () {

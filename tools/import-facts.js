@@ -28,6 +28,20 @@ const OWN = ['facts/README.md', 'facts/PROVENANCE.json', 'facts/server.js', 'fac
   'facts/test/modules.test.js', 'facts/test/staff.test.js', 'facts/test/timeclock-module.test.js', 'facts/test/cli.test.js'];
 /* this repo's own folders under facts/: the modules (Stage 2) — an import never writes inside them */
 const OWN_DIRS = ['facts/modules/'];
+/* the files a business owns (Unit 0.3, "yours"): pinned HERE, never trusted per file from a manifest or PROVENANCE.json. Skeptic 11/1: with
+   the mark trusted per file, an export marking the hub yours would have skipped its hand-edit check from then on, and one dropping the
+   mark on core/abilities.js would have written over the business's edits without a word. An export must mark exactly these. */
+const YOURS = ['facts/core/abilities.js'];
+/* @facts @proof — the imported proof files: the engine laws and the shared files' suite sections (each must run, at its upstream count) */
+function isProof(p) { return p === 'facts/test/engine-laws.test.js' || /^facts\/test\/proofs\/[^/]+\.test\.js$/.test(p); }
+/* @facts @proof — what is wrong with a proofs list against the files it came with: a proof file listed but never run, run twice, or a proof
+   that names no listed file (skeptic 11/1: a dropped entry silently stopped that proof from running) */
+function proofsWrong(files, proofs) {
+  const listed = new Set(files.map(function (f) { return f.path; })), n = {}, out = [];
+  (proofs || []).forEach(function (p) { n[p.file] = (n[p.file] || 0) + 1; if (!listed.has(p.file)) out.push('the proof ' + p.file + ' is not a listed file'); });
+  files.forEach(function (f) { if (isProof(f.path) && n[f.path] !== 1) out.push(f.path + ' is ' + (n[f.path] ? 'in the proofs ' + n[f.path] + ' times' : 'never run (not in the proofs)')); });
+  return out;
+}
 /* @facts — is a path this repo's own (a listed file, or inside an own folder) */
 function own(p) { return OWN.indexOf(p) >= 0 || OWN_DIRS.some(function (d) { return p.indexOf(d) === 0; }); }
 
@@ -65,7 +79,10 @@ function importFrom(src) {
     if (crypto.createHash('sha256').update(b).digest('hex') !== f.sha256) no(f.path + ' does not match its SHA-256');
     if (b.indexOf(13) >= 0) no(f.path + ' holds a carriage return — an export is LF, as git stores it (re-export)');
     if (f.yours != null && typeof f.yours !== 'string') no(f.path + ': "yours" is the words that say why the file is the business\'s own');
+    if (f.yours && YOURS.indexOf(f.path) < 0) no(f.path + ' is marked yours, but only ' + YOURS.join(', ') + ' is a business\'s own file (tools/import-facts.js YOURS)');
+    if (!f.yours && YOURS.indexOf(f.path) >= 0) no(f.path + ' is not marked yours — importing it would write over this business\'s own edits');
   });
+  const pw = proofsWrong(m.files, m.proofs); if (pw.length) no(pw[0]);
   const lower = new Map();
   m.files.forEach(function (f) { const l = f.path.toLowerCase(); if (lower.has(l)) no('two listed paths differ only in letter case: ' + lower.get(l) + ', ' + f.path); lower.set(l, f.path); });
   /* a file a previous import brought in that this one no longer lists would linger unvouched: refuse rather than guess */
@@ -95,10 +112,13 @@ function verify(root) {
     listed.add(f.path);
     if (ownAnyCase(f.path)) { bad.push(f.path + ' is listed as imported but is this repo\'s own file'); return; }
     if (!have.has(f.path)) { bad.push(f.path + ' is missing (by its exact name)'); return; }
+    if (f.yours && YOURS.indexOf(f.path) < 0) { bad.push(f.path + ' is marked yours in PROVENANCE.json, but only ' + YOURS.join(', ') + ' is a business\'s own file'); return; }
+    if (!f.yours && YOURS.indexOf(f.path) >= 0) bad.push(f.path + ' is a business\'s own file, but PROVENANCE.json does not mark it yours');
     if (f.yours) return;   /* the business's own file: theirs to edit (the export's copy was only a start) */
     if (shaLF(fs.readFileSync(path.join(R, f.path))) !== f.sha256) bad.push(f.path + ' was changed after it was imported (change it upstream and re-export)');
   });
   have.forEach(function (q) { if (!own(q) && !listed.has(q)) bad.push(q + ' is in facts/ but neither imported nor this repo\'s own'); });
+  proofsWrong(p.files, p.proofs).forEach(function (w) { bad.push(w); });
   return bad;
 }
 
@@ -108,4 +128,4 @@ if (require.main === module) {
   else if (a) importFrom(path.resolve(a));
   else { console.error('usage: node tools/import-facts.js <export folder> | --verify'); process.exit(2); }
 }
-module.exports = { verify: verify, OWN: OWN, OWN_DIRS: OWN_DIRS, own: own };
+module.exports = { verify: verify, OWN: OWN, OWN_DIRS: OWN_DIRS, own: own, YOURS: YOURS, proofsWrong: proofsWrong };
