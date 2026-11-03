@@ -1,9 +1,9 @@
 {
   "what": "the facts engine, from the origin shop's v2 through its private exporter (docs/V2-MODULAR-IMPORT.md)",
   "unit": "0.3 engine + engine laws + the shared app files (views, record, staff, PIN pass)",
-  "sourceCommit": "df9fc814a34adeb0c3fa3ac27d7cafa9c00d57e5",
-  "shopBuild": "df9fc814a34adeb0c3fa3ac27d7cafa9c00d57e5",
-  "exported": "2026-11-02T12:58:18.891Z",
+  "sourceCommit": "c44bffaa48907bb4b539a3e6ee97d2d10458c7e3",
+  "shopBuild": "c44bffaa48907bb4b539a3e6ee97d2d10458c7e3",
+  "exported": "2026-11-03T01:03:47.960Z",
   "node": "v24.15.0",
   "proofs": [
     {
@@ -16,18 +16,18 @@
     },
     {
       "file": "facts/test/proofs/995-staff-shared.test.js",
-      "passed": 5
+      "passed": 10
     },
     {
       "file": "facts/test/proofs/996-pin-grants.test.js",
-      "passed": 5
+      "passed": 6
     }
   ],
   "files": [
     {
       "path": "facts/aggregates/staff.js",
-      "bytes": 10887,
-      "sha256": "c92e5a8310be2c9448eb1f3bf1d12091fdd22782f4cf5eaf087214eea6cbab29"
+      "bytes": 17635,
+      "sha256": "803241086b8fe7483b5b08e747ccb1baffd2e7f3583c94ca35aa60465847ecd1"
     },
     {
       "path": "facts/aggregates/timeclock.js",
@@ -82,13 +82,13 @@
     },
     {
       "path": "facts/hub/hub.js",
-      "bytes": 64722,
-      "sha256": "ad7f54a116513f98d592aa52bd7c8203e9b47ba3dbce05643dde794f53916fc9"
+      "bytes": 65130,
+      "sha256": "dc081198848fc03e6448af68a004cc6c26f41d30c02dc7017eb3a3e184ee5e05"
     },
     {
       "path": "facts/hub/pingrant.js",
-      "bytes": 11065,
-      "sha256": "e2eab885ecbb90563733bc010b7ecc0d367d9e3ae73228cb3a6c36d3e5017f8b"
+      "bytes": 12308,
+      "sha256": "7f9cd03c4601b279b3a43f121de00c84058b13edb2e242dc92d6f362f16aeabe"
     },
     {
       "path": "facts/hub/projections.js",
@@ -152,13 +152,13 @@
     },
     {
       "path": "facts/test/proofs/995-staff-shared.test.js",
-      "bytes": 13263,
-      "sha256": "9972120ec15de34ccd3f87867a96712714b89f78d7d8f2e9ca5becfaf8b61cb7"
+      "bytes": 26759,
+      "sha256": "279c3d288e034aac104ca690e500be81a4bf67859d53be7bd8b79813111e022a"
     },
     {
       "path": "facts/test/proofs/996-pin-grants.test.js",
-      "bytes": 11758,
-      "sha256": "0cbf18ade79040ceeb47a521bc950e903cdcfe00e90a1a7738715697ba602490"
+      "bytes": 13310,
+      "sha256": "bcf79ecfff9750208945232a2e4b5be5deb302de326d3998aeb07ea57c9c5bfb"
     },
     {
       "path": "facts/test/shards.js",

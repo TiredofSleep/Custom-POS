@@ -20,6 +20,12 @@
  * PIN hash, signed in with the rest), so changing a PIN, or making the person inactive, ends every pass made before — wherever the caller
  * hands in its record of the person (the hub's three do: hub/authority.js, the /v2/pin-grant renewal, hub/riskdoors.js). And the guesses
  * still being checked count against the five free ones: a burst sent at once used to be hashed whole before the first wrong one counted.
+ * 11/2 (round 2): "inactive" alone only paused a pass — switched back on within its life, it worked again. The print now also names how many
+ * times the person was switched back on (passPrint), so a switch-off ends every pass made before. A PIN change dated BEFORE a later-dated
+ * one does not take (the staff fold's one order); the hub's judge now says so (aggregates/staff.js outranked, hub/authority.js).
+ * ⚠️ Still true (round 2, F3 — the owner's call, todo 2026-11-02-pin-pass-round-2): a privileged change waiting on a tablet (offline,
+ * or refused) is sent by that person's NEXT pass on that tablet — the shop's offline design — so a change made there with a PIN since
+ * changed lands when the real person next enters theirs. A fact does not yet name the PIN that approved it.
  * ⚠️ What this cannot do (said plainly): a PIN is four digits and every tablet holds the PIN records, so someone with a stolen
  * tablet and time can still work a PIN out offline — revoke a lost tablet at once (POST /v2/admin/revoke).
  * ========================================================================== */
@@ -28,6 +34,9 @@ const TTL_MS = 30 * 60000, MAX_SESSION_MS = 12 * 3600000, GRACE_MS = 2 * 3600000
 const DOOR_MS = 30 * 60000;   /* owner 10/18: a risky door (hub/riskdoors.js) takes a PIN entered within this long — never a renewed pass */
 /* @permission @employee — a PIN record's fingerprint in a pass: the first 16 hex of its hash (the hash itself never leaves the hub in one) */
 function pinPrint(rec) { return (rec && typeof rec.hash === 'string') ? rec.hash.slice(0, 16) : ''; }
+/* @permission @employee — a person's print in a pass: their PIN's print, and (11/2, a Custom POS skeptic, round 2) how many times they were switched
+   back on (aggregates/staff.js reactivated) — so switching a person off and on again ends every pass made before, as a changed PIN does */
+function passPrint(who) { const p = pinPrint(who && who.pin); return (p && who.reactivated > 0) ? p + '.' + who.reactivated : p; }
 
 /* @permission @hub — the hub's PIN grants. o: {dataDir (the secret's folder), secret (a proof's own, instead of the file), now, alert(a)} */
 function grantsFor(o) {
@@ -50,7 +59,7 @@ function grantsFor(o) {
      caller's current record of that person (null: none); a caller that hands in nothing (a proof of something else) is not asked */
   function current(g, who) {
     if (who === undefined) return null;
-    if (!who || who.active === false || !who.pin || pinPrint(who.pin) !== g.pf) return 'the PIN this pass was earned with has changed, or that person is no longer active';
+    if (!who || who.active === false || !who.pin || passPrint(who) !== g.pf) return 'the PIN this pass was earned with has changed, or that person is no longer active';
     return null;
   }
   /* @permission @hub — is this a grant the hub signed, for this person on this tablet? null, or why not */
@@ -81,7 +90,7 @@ function grantsFor(o) {
     x.flying = (x.flying || 0) + 1;
     return Promise.resolve(pinHash(String(pin == null ? '' : pin), who.pin.salt, pinIter ? pinIter(who.pin) : undefined)).then(function (h) {
       x.flying--;
-      if (h === who.pin.hash) { x.n = 0; if (!x.flying && tries.get(k) === x) tries.delete(k); return { ok: true, grant: make(who.id, station, now(), pinPrint(who.pin)) }; }
+      if (h === who.pin.hash) { x.n = 0; if (!x.flying && tries.get(k) === x) tries.delete(k); return { ok: true, grant: make(who.id, station, now(), passPrint(who)) }; }
       if (now() - x.first >= LOCK_MS && x.lockedUntil <= now()) { x.n = 0; x.first = now(); }
       x.n++;
       if (x.n >= FREE_TRIES) { x.lockedUntil = now() + LOCK_MS; if (!x.told && o.alert) { x.told = true; try { o.alert({ key: 'pin-grant-locked:' + k, kind: 'pin-locked', station: String(station), note: '🔒 ' + x.n + ' wrong PINs for ' + (who.name || empId) + ' on tablet ' + station + ' — the hub refuses that person\'s privileged changes from it for 15 minutes. If this was not a fumble, revoke the tablet (Admin → Devices).' }); } catch (e) {} } }
@@ -108,4 +117,4 @@ function grantsFor(o) {
   }
   return { check: check, renew: renew, verify: verify, door: door, current: current, DOOR_MS: DOOR_MS, TTL_MS: TTL_MS, GRACE_MS: GRACE_MS, MAX_SESSION_MS: MAX_SESSION_MS, FREE_TRIES: FREE_TRIES, LOCK_MS: LOCK_MS };
 }
-module.exports = { grantsFor: grantsFor, pinPrint: pinPrint, TTL_MS: TTL_MS, GRACE_MS: GRACE_MS, DOOR_MS: DOOR_MS };
+module.exports = { grantsFor: grantsFor, pinPrint: pinPrint, passPrint: passPrint, TTL_MS: TTL_MS, GRACE_MS: GRACE_MS, DOOR_MS: DOOR_MS };

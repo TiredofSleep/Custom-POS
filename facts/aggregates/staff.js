@@ -94,7 +94,9 @@ const INC = {
     if (e.type !== 'employee.set') return;
     let x = s.byId.get(p.empId);
     if (!x) { x = { id: p.empId, name: '', role: 'staff', active: true, perms: {}, pin: null, rate: 0, dept: '', vacAnnual: 0, vacUsed: {}, lang: '', since: e.at }; s.byId.set(p.empId, x); s.employees.push(x); }
+    const wasOff = x.active === false;
     FIELDS.forEach(function (k) { if (k in p.set) x[k] = p.set[k] == null ? (k === 'pin' ? null : x[k]) : JSON.parse(JSON.stringify(p.set[k])); });
+    if (wasOff && x.active !== false) x.reactivated = (x.reactivated || 0) + 1;   /* 11/2: each time a person is switched back on — a PIN pass names it (hub/pingrant.js passPrint), so a pass from before a switch-off never works again */
     x.changedAt = e.at;
   },
   /* @employee @permission @owner @fold — the people in the order first seen, the role lists, the refusals; a note (fresh each time) when no active owner is left */
@@ -108,6 +110,65 @@ const INC = {
 function fold(events) { return incfold.foldVia(INC, events, AGG); }
 /* @employee — one person by id from the staff fold, or null */
 function emp(staff, id) { return (staff && staff.byId && staff.byId.get(id)) || null; }
+/* 11/2 (a Custom POS skeptic, round 2): the fields that decide who may do what. The fold reads the facts in their one order (the stamps
+   the tablets gave them), and a hub takes a stamp up to 5 minutes ahead — so a change dated ahead decides these over a later honest one */
+const SEC_FIELDS = ['pin', 'active', 'role', 'perms'];
+/* @employee @permission @fold — what a staff change will NOT decide, because a change dated later in the one order already does: [{field,
+   by: that fact}] — an employee.set's PIN, on/off, role or permissions, or a staff.roles's lists; [] when it takes. facts: the staff facts so far */
+function outranked(facts, e) {
+  const out = []; if (!e || !e.payload) return out;
+  const newest = function (ok) { let w = null; (facts || []).forEach(function (f) { if (f && f.id !== e.id && f.payload && ok(f) && hlc.compareEvents(f, e) > 0 && (!w || hlc.compareEvents(f, w) > 0)) w = f; }); return w; };
+  /* a later change to the very same value leaves what e asked for in force: nothing lost (round-2 skeptic: two people switching the same person off) */
+  const same = function (a, b) { return sameText(a) === sameText(b); };
+  if (e.type === 'staff.roles') { const w = newest(function (f) { return f.type === 'staff.roles'; }); if (w && !same(w.payload.rolePerms, e.payload.rolePerms)) out.push({ field: 'rolePerms', by: w }); return out; }
+  const p = e.payload, s = p.set; if (e.type !== 'employee.set' || !s || typeof s !== 'object') return out;
+  SEC_FIELDS.forEach(function (k) {
+    if (!(k in s) || (s[k] == null && k !== 'pin')) return;   /* null leaves a field as it was (a PIN set to null is cleared) */
+    const w = newest(function (f) { const fs = f.type === 'employee.set' && f.payload.empId === p.empId && f.payload.set; return !!fs && typeof fs === 'object' && (k in fs) && (fs[k] != null || k === 'pin'); });
+    if (w && !same(w.payload.set[k], s[k])) out.push({ field: k, by: w });
+  });
+  return out;
+}
+/* @permission @employee @hub @watchdog — 11/2 (a Custom POS skeptic, round 2): the hub's word on a staff change that a change dated later
+   already decides (outranked) — null, or the alert. Admitted, it is history, and told: a tablet with its clock set ahead could otherwise keep
+   an old PIN in force, or undo a switch-off, with nobody the wiser. A later change from the SAME tablet was made after this one (a tablet's
+   stamps only go forward): the newer decision, honestly — not told. Here, not in hub/authority.js, since 11/2 evening: a business built from
+   these files tells it in the same words (one copy). facts: the staff facts so far; staff: the fold (byId, for the names) */
+function outrankedAlert(facts, e, staff) {
+  const lost = outranked(facts, e).filter(function (l) { return l.by.station !== e.station; }); if (!lost.length) return null;
+  const nm = function (id) { const w = id != null && staff && staff.byId ? staff.byId.get(String(id)) : null; return w ? w.name : (id != null ? String(id).slice(0, 64) : 'nobody named'); };
+  const WORDS = { pin: 'PIN', active: 'on/off', role: 'role', perms: 'permissions', rolePerms: 'role lists' };
+  const what = lost.map(function (l) { return WORDS[l.field] || l.field; }).join(', ');
+  const whose = e.type === 'staff.roles' ? 'the shop\'s ' : nm(e.payload && e.payload.empId) + '\'s ';
+  /* every tablet that outranks a field is named, with what it decides (round-2 skeptic: a PIN from one tablet and on/off from another named only the first) */
+  /* and each is judged by what the hub saw (skeptic 11/2 evening): this change was made AFTER that tablet's change reached the hub, or that
+     change was dated more than a minute past its own arrival — its stamp ran ahead of the hub's clock (a clock set fast: revoke it). Made
+     BEFORE it arrived, by honest clocks, this change is the older one, delivered late (a tablet that was offline, or one re-offering to a
+     restored hub): the later change is simply the newer decision — said, with no revoke (telling the owner to revoke an honest tablet
+     and make the stale change again would put the stale value back) */
+  const madeAt = Number(e.hlc && e.hlc.t) || Number(e.at) || 0;
+  const byTab = {}; lost.forEach(function (l) {
+    const t = String(l.by.station), b = (byTab[t] = byTab[t] || { who: nm(l.by.actor), what: [], fast: false }), arrived = Number(l.by.hubAt) || 0;
+    b.what.push(WORDS[l.field] || l.field);
+    if (madeAt >= arrived || (Number(l.by.hlc && l.by.hlc.t) || 0) > arrived + 60000) b.fast = true;   /* no arrival known (0): the clock wording */
+  });
+  const say = function (t) { return byTab[t].what.join(', ') + ' from tablet ' + t + ' (by ' + byTab[t].who + ')'; };
+  const tabs = Object.keys(byTab), fast = tabs.filter(function (t) { return byTab[t].fast; }), late = tabs.filter(function (t) { return !byTab[t].fast; });
+  const head = '⚠ ' + nm(e.actor) + '\'s change to ' + whose + what + ' (tablet ' + e.station + ') did not take: ';
+  const lateSaid = 'it was made before, and reached the hub after, a change made later — ' + late.map(say).join('; ') + ' — so the later change is in force (a tablet that was offline, or a restored hub, delivers late)';
+  const revoke = 'If that is expected (two people changed the same person at about the same time), nothing to do. If not, revoke ' + (fast.length > 1 ? 'tablets ' : 'tablet ') + fast.join(' and ') + ' (Admin → Devices), then make the change again.';
+  const note = !late.length ? head + 'a change dated later is already on the hub — ' + fast.map(say).join('; ') + '. ' + revoke
+    : !fast.length ? head + lateSaid + '. Make it again only if the earlier change is the one you want.'
+    : head + lateSaid + '; and a change dated later was already on the hub when it was made — ' + fast.map(say).join('; ') + '. ' + revoke;
+  return { key: 'staff-outranked:' + e.id, kind: 'staff-outranked', station: e.station, note: note };
+}
+/* @employee @fold — a value as text with every object's keys in order, so {a, b} and {b, a} read the same (perms, role lists, a PIN record) */
+function sameText(v) {
+  if (v === undefined) return 'undefined';
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(sameText).join(',') + ']';
+  return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + sameText(v[k]); }).join(',') + '}';
+}
 registry.registerAggregate(AGG, { fold: fold, inc: INC, detectConflicts: function (events) { return fold(events).notes; }, describe: function (d) { return { kind: 'staff-note', note: String((d && d.why) || 'a staff question') }; },
   doc: 'Who works here and what each may do. Field by field, latest wins; never deleted (made inactive); a PIN only as a salted hash.' });
-module.exports = { fold: fold, emp: emp, AGG: AGG, FIELDS: FIELDS };
+module.exports = { fold: fold, emp: emp, outranked: outranked, outrankedAlert: outrankedAlert, AGG: AGG, FIELDS: FIELDS, SEC_FIELDS: SEC_FIELDS };

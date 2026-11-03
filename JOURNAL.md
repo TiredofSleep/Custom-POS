@@ -1752,3 +1752,29 @@ old one stops working, for a change and for a renewal alike. A person switched o
 once now get at most five checks; before, more than five went through.
 
 The new test runs over real HTTP. Undoing either wire, the burst count, or the whole file turned it red, four times out of four.
+
+### 2026-11-02, evening — What the morning entry overstated, and a warning that arrives the same way
+
+The morning entry said that when someone's PIN is changed, every pass made with the old one stops working. That holds for passes. It was
+not the whole story. A second review of this repo found three gaps in the code the two systems share.
+
+First, switching a person off and back on brought their old passes back to life. Now each switch back on is counted, and a pass names
+the count, so a pass from before a switch-off never works again.
+
+Second, a tablet with its clock set a few minutes fast could record a change to a person's PIN that sorts after the owner's real,
+later change. The owner's change was accepted but did not take, and nobody was told. Refusing such changes would not work: a tablet
+that keeps re-sending wins any time limit, and an honest tablet a minute fast would be turned away. So the hub now tells. A warning
+names the person, what did not take, and the tablet behind it, and says to revoke that tablet. A third review then caught the warning
+crying wolf: a change made on a tablet while it was offline, arriving after someone's later change, was also told to revoke the honest
+tablet. Now the hub only says "revoke" when it can see the clock ran ahead. A late delivery is told as the older change, with no revoke.
+
+Third, still open and the owner's call: a change waiting on a tablet goes through on that person's next PIN there, even if it was made
+with a PIN that has since changed.
+
+The warning first lived in the shop's own judge file, which is never exported. Rather than write it again here, the shop moved it into
+the shared staff file, ran it live, and the export of that build was imported unedited. To use it, the module contract gained one
+option, `tell`: a module may let a fact in and tell a person. The staff module tells with the shop's own words. The review also made
+the contract stricter: a warning with nothing to say, or one that crashes, is reported as a fault rather than dropped, and a rule that
+refuses with something other than words still refuses.
+
+Undoing each piece turned a test red, every time: 10 here, 12 in the shop.

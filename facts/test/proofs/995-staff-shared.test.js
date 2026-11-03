@@ -119,5 +119,105 @@ H.test('copy, paste, customize: another business\'s own core/abilities.js (a caf
   H.eq(wrong.join(' '), '', 'negative control: the shared lists answer by this business\'s own file');
 });
 
+/* @proof — a staff fact as a tablet makes it: its stamp t (ms) and the station that stamped it */
+function f995(type, payload, t, station, actor) { const st = station || 'tab-995'; return { id: st + '/' + type + '-' + t + '-' + JSON.stringify(payload).length, type: type, aggregate: 'staff', key: payload.empId || 'roles', station: st, actor: actor || null, at: t, payload: payload, hlc: { t: t, c: 0, id: st } }; }
+/* @proof — an employee.set at stamp t */
+function set995(empId, set, t, station, actor) { return f995('employee.set', { empId: empId, set: set }, t, station, actor); }
+
+H.test('11/2 (a Custom POS skeptic, round 2): the staff fold counts each time a person is switched back on (reactivated) — the PIN pass names it, so a pass from before a switch-off never works again — negative controls: a person never switched off has none; on while already on, or "active" left as it was, counts nothing', function () {
+  const T = 1800000000000, PIN = staff995.pinRecordSync('4821');
+  const base = [set995('e1', { name: 'Ann', role: 'staff', pin: PIN }, T)];
+  H.eq(staffAgg995.fold(base).byId.get('e1').reactivated, undefined, 'never switched off: no count');
+  const once = base.concat([set995('e1', { active: false }, T + 1000), set995('e1', { active: true }, T + 2000)]);
+  H.eq(staffAgg995.fold(once).byId.get('e1').reactivated, 1, 'off, then on: 1');
+  const twice = once.concat([set995('e1', { active: false }, T + 3000), set995('e1', { active: true }, T + 4000)]);
+  H.eq(staffAgg995.fold(twice).byId.get('e1').reactivated, 2, 'off and on again: 2');
+  const idle = base.concat([set995('e1', { active: true }, T + 1000), set995('e1', { active: null, lang: 'es' }, T + 2000)]);
+  H.eq(staffAgg995.fold(idle).byId.get('e1').reactivated, undefined, 'negative control: on while on, and "active" left as it was, count nothing');
+  H.eq(staffAgg995.fold(once.slice().reverse()).byId.get('e1').reactivated, 1, 'the count is the one order\'s, whatever order the facts came in');
+});
+
+H.test('11/2 (round 2): outranked() names what a staff change will NOT decide because a change dated later already does — a PIN, on/off, role or permissions of the same person, or the role lists — each with the change that decides it; the fold agrees — negative controls: the same change dated after takes; a later change to another field or another person outranks nothing; null leaves a field as it was', function () {
+  const T = 1800000000000, OLD = staff995.pinRecordSync('1111'), NEW = staff995.pinRecordSync('2468');
+  const ahead = set995('m1', { pin: OLD }, T + 240000, 'tab-fast', 'm1');   /* a re-set of the same PIN, dated 4 minutes ahead */
+  const facts = [set995('m1', { name: 'Mo', role: 'manager', pin: OLD }, T), ahead];
+  const owner = set995('m1', { pin: NEW, active: false }, T + 60000, 'tab-office', 'o1');
+  const lost = staffAgg995.outranked(facts, owner);
+  H.eq(lost.map(function (l) { return l.field; }).join(), 'pin', 'the owner\'s PIN change is outranked by the change dated ahead (on/off is not: nothing later decides it)');
+  H.ok(lost[0].by === ahead, 'and it names that change');
+  H.eq(staffAgg995.fold(facts.concat([owner])).byId.get('m1').pin.hash, OLD.hash, 'the fold agrees: the old PIN is still in force');
+  H.eq(staffAgg995.outranked(facts, set995('m1', { pin: NEW }, T + 300000, 'tab-office', 'o1')).length, 0, 'negative control: the same change dated after it takes');
+  H.eq(staffAgg995.outranked(facts.concat([set995('m1', { lang: 'es' }, T + 400000), set995('x9', { pin: OLD }, T + 400000)]), set995('m1', { role: 'staff' }, T + 60000)).length, 0, 'negative control: a later change to another field, or to another person, outranks nothing');
+  H.eq(staffAgg995.outranked(facts, set995('m1', { pin: NEW, role: null }, T + 60000)).map(function (l) { return l.field; }).join(), 'pin', 'a field left as it was (null) is not counted');
+  const roles = function (t, st, l) { return f995('staff.roles', { rolePerms: { staff: l || ['clock'] } }, t, st); };
+  H.eq(staffAgg995.outranked([roles(T + 240000, 'tab-fast', ['clock', 'rack'])], roles(T + 60000)).map(function (l) { return l.field; }).join(), 'rolePerms', 'the role lists the same');
+  H.eq(staffAgg995.outranked([roles(T, 'tab-fast')], roles(T + 60000)).length, 0, 'negative control: role lists dated after take');
+});
+
+H.test('11/2 (round-2 skeptic): outranked() covers on/off, role and permissions as it does the PIN — a switch-off, a demotion or a permission taken away, outranked by a change dated later, is named — and a later change to the very SAME value outranks nothing (what was asked for is in force, whatever order the keys came in) — negative controls: dated after, each takes; a later different value is named', function () {
+  const T = 1800000000000, PIN = staff995.pinRecordSync('1111');
+  const base = [set995('m1', { name: 'Mo', role: 'manager', perms: { employees: true, payroll: false }, pin: PIN }, T)];
+  const ahead = base.concat([set995('m1', { active: true, role: 'manager', perms: { employees: true } }, T + 240000, 'tab-fast', 'm1')]);
+  const owner = function (set, t) { return set995('m1', set, t == null ? T + 60000 : t, 'tab-office', 'o1'); };
+  const names = function (facts, e) { return staffAgg995.outranked(facts, e).map(function (l) { return l.field; }).join(); };
+  H.eq(names(ahead, owner({ active: false })), 'active', 'a switch-off outranked');
+  H.eq(names(ahead, owner({ role: 'staff' })), 'role', 'a demotion outranked');
+  H.eq(names(ahead, owner({ perms: { employees: false } })), 'perms', 'a permission taken away outranked');
+  H.eq(names(ahead, owner({ active: false, role: 'staff', perms: {} }, T + 300000)), '', 'negative control: dated after, all three take');
+  /* the same value, later: nothing lost */
+  const twice = base.concat([set995('m1', { active: false }, T + 240000, 'tab-2', 'x1'), set995('m1', { perms: { payroll: false, employees: true } }, T + 240000, 'tab-3', 'x2')]);
+  H.eq(names(twice, owner({ active: false, perms: { employees: true, payroll: false } })), '', 'two people switching the same person off, or setting the same permissions in another key order: nothing is outranked');
+  H.eq(names(twice, owner({ active: true, perms: { employees: false, payroll: false } })), 'active,perms', 'negative control: a later DIFFERENT value is named');
+  H.eq(staffAgg995.outranked([f995('staff.roles', { rolePerms: { staff: ['clock', 'rack'] } }, T + 240000, 'tab-2')], f995('staff.roles', { rolePerms: { staff: ['clock', 'rack'] } }, T + 60000)).length, 0, 'the same role lists later: nothing lost');
+});
+
+H.test('11/2 evening: outrankedAlert() is the hub\'s word on an outranked staff change, here in the shared file so a business built from it tells it the same way — it names the person, what did not take, and EVERY tablet whose later change decides it, with who made it — negative controls: a change nothing outranks, and one outranked only by the SAME tablet (made after it: the newer decision), tell nothing', function () {
+  const T = 1800000000000, PIN = staff995.pinRecordSync('1111'), NEW = staff995.pinRecordSync('2468');
+  const base = [set995('m1', { name: 'Mo', role: 'manager', pin: PIN }, T, 'tab-office', 'o1'), set995('o1', { name: 'Olive', role: 'owner' }, T, 'tab-office', 'o1')];
+  const staff = staffAgg995.fold(base);
+  const facts = base.concat([set995('m1', { pin: PIN }, T + 240000, 'tab-fast', 'm1'), set995('m1', { active: true }, T + 200000, 'tab-2', 'o1')]);
+  const owner = set995('m1', { pin: NEW, active: false }, T + 60000, 'tab-office', 'o1');
+  const a = staffAgg995.outrankedAlert(facts, owner, staff);
+  H.ok(a && a.kind === 'staff-outranked' && a.key === 'staff-outranked:' + owner.id && a.station === 'tab-office', 'an alert of its own kind, one per fact, from the tablet that sent it');
+  H.ok(a.note.indexOf('Olive\'s change to Mo\'s PIN, on/off (tablet tab-office) did not take') >= 0, 'who, whose, what: ' + a.note.slice(0, 120));
+  H.ok(a.note.indexOf('PIN from tablet tab-fast (by Mo)') >= 0 && a.note.indexOf('on/off from tablet tab-2 (by Olive)') >= 0 && a.note.indexOf('revoke tablets tab-fast and tab-2') >= 0, 'both tablets named, each with what it decides and who made it, and both to revoke');
+  H.eq(staffAgg995.outrankedAlert(facts, set995('m1', { pin: NEW }, T + 300000, 'tab-office', 'o1'), staff), null, 'negative control: dated after everything, it takes: nothing told');
+  const same = base.concat([set995('m1', { pin: PIN }, T + 240000, 'tab-office', 'o1')]);
+  H.eq(staffAgg995.outranked(same, owner).length, 1, 'negative control: outranked() does see the later change from the same tablet');
+  H.eq(staffAgg995.outrankedAlert(same, owner, staff), null, 'and the alert drops it: that tablet made it after (its stamps only go forward)');
+  H.ok(staffAgg995.outrankedAlert([f995('staff.roles', { rolePerms: { staff: ['clock', 'rack'] } }, T + 240000, 'tab-2', 'o1')], f995('staff.roles', { rolePerms: { staff: ['clock'] } }, T + 60000, 'tab-office', 'o1'), staff).note.indexOf('change to the shop\'s role lists') >= 0, 'the role lists are told as the shop\'s');
+});
+
+H.test('11/2 evening (skeptic): outrankedAlert() tells each outranking tablet by what the hub saw — a change already on the hub when this one was made, or one dated more than a minute past its arrival, is a clock set fast (revoke it); one that reached the hub after this change was made is the newer decision and this one was delivered late (no revoke) — negative controls: with no arrival time known, the clock wording as before; a mix names each its own way', function () {
+  const T = 1800000000000, PIN = staff995.pinRecordSync('1111');
+  const base = [set995('m1', { name: 'Mo', role: 'manager', pin: PIN }, T, 'tab-office', 'o1'), set995('o1', { name: 'Olive', role: 'owner' }, T, 'tab-office', 'o1')];
+  const staff = staffAgg995.fold(base);
+  const arrived = function (f, at) { f.hubAt = at; return f; };
+  /* late: made at T+5m on an offline tablet; the office's later change reached the hub at T+60m, before this one */
+  const later = arrived(set995('m1', { pin: staff995.pinRecordSync('2468') }, T + 3600000, 'tab-office', 'o1'), T + 3600000);
+  const late = set995('m1', { pin: staff995.pinRecordSync('1357') }, T + 300000, 'tab-back', 'o1');
+  const a = staffAgg995.outrankedAlert(base.concat([later]), late, staff);
+  H.ok(a && /did not take: it was made before, and reached the hub after, a change made later — PIN from tablet tab-office \(by Olive\)/.test(a.note) && /Make it again only if the earlier change is the one you want/.test(a.note) && !/revoke/.test(a.note), 'late: the older change, no revoke — ' + (a && a.note));
+  /* a clock set fast: the later-dated change arrived at T, before this one was made at T+1m */
+  const fast = arrived(set995('m1', { pin: PIN }, T + 240000, 'tab-fast', 'm1'), T);
+  const own = set995('m1', { pin: staff995.pinRecordSync('9753') }, T + 60000, 'tab-office', 'o1');
+  H.ok(/a change dated later is already on the hub — PIN from tablet tab-fast \(by Mo\)/.test(staffAgg995.outrankedAlert(base.concat([fast]), own, staff).note) && /revoke tablet tab-fast/.test(staffAgg995.outrankedAlert(base.concat([fast]), own, staff).note), 'fast: revoke it');
+  /* dated more than a minute past its own arrival, even if it arrived after this change was made: still a clock set fast */
+  const sneak = arrived(set995('m1', { pin: PIN }, T + 600000, 'tab-sneak', 'm1'), T + 400000);
+  H.ok(/revoke tablet tab-sneak/.test(staffAgg995.outrankedAlert(base.concat([sneak]), late, staff).note), 'a stamp 3 minutes past its own arrival: revoke it, however late this change came');
+  /* only 30 seconds past its arrival, but already on the hub when this change was made (10 s later): its stamp still ran ahead — revoke */
+  const first = arrived(set995('m1', { pin: PIN }, T + 30000, 'tab-near', 'm1'), T);
+  H.ok(/a change dated later is already on the hub — PIN from tablet tab-near/.test(staffAgg995.outrankedAlert(base.concat([first]), set995('m1', { pin: staff995.pinRecordSync('9753') }, T + 10000, 'tab-office', 'o1'), staff).note), 'on the hub before this change was made: the clock wording, whatever its stamp');
+  const drift = arrived(set995('m1', { pin: PIN }, T + 430000, 'tab-drift', 'm1'), T + 400000);
+  H.ok(!/revoke/.test(staffAgg995.outrankedAlert(base.concat([drift]), late, staff).note), 'negative control: 30 seconds past its arrival is honest drift — no revoke');
+  /* no arrival known (a fact as the proofs above build it): the clock wording, as before */
+  H.ok(/revoke tablet tab-fast/.test(staffAgg995.outrankedAlert(base.concat([set995('m1', { pin: PIN }, T + 240000, 'tab-fast', 'm1')]), own, staff).note), 'negative control: no arrival time: revoke, as before');
+  /* a mix: the PIN outranked by a late-honest tablet, on/off by a fast one */
+  const fastOff = arrived(set995('m1', { active: true }, T + 3700000, 'tab-fast', 'm1'), T);
+  const both = set995('m1', { pin: staff995.pinRecordSync('1357'), active: false }, T + 300000, 'tab-back', 'o1');
+  const m = staffAgg995.outrankedAlert(base.concat([later, fastOff]), both, staff).note;
+  H.ok(/reached the hub after, a change made later — PIN from tablet tab-office/.test(m) && /a change dated later was already on the hub when it was made — on\/off from tablet tab-fast/.test(m) && /revoke tablet tab-fast \(Admin/.test(m) && !/revoke tablets?[^.]*tab-office/.test(m), 'a mix: each tablet its own way, and only the fast one to revoke — ' + m);
+});
+
 /* ── exported by the v2 exporter: the staff laws end here; the shop's own proof (its list is v1's) follows in the private suite. */
 H.done();

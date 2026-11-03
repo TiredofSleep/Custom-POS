@@ -23,10 +23,11 @@ function rmDb(f) { ['', '-journal', '-wal', '-shm'].forEach(function (s) { try {
 function jstore() { const lines = []; let access = null; return { load: function () { return JSON.parse(JSON.stringify(lines)); }, append: function (row) { lines.push(JSON.parse(JSON.stringify(row))); }, loadAccess: function () { return access; }, saveAccess: function (a) { access = a; } }; }
 async function settle(T) { for (let i = 0; i < 300 && T.inFlight; i++) await new Promise(function (r) { setTimeout(r, 10); }); }
 async function post(base, p, body, headers) { const r = await fetch(base + p, { method: 'POST', headers: Object.assign({ 'content-type': 'application/json' }, headers || {}), body: JSON.stringify(body) }); return { status: r.status, json: await r.json() }; }
-/* @proof — a tablet the operator enrolled; its sends carry the passes it holds, by person (the shop's shape: tab.passes = {empId: grant}) */
-async function tablet(srv, id) {
+/* @proof — a tablet the operator enrolled; its sends carry the passes it holds, by person (the shop's shape: tab.passes = {empId: grant});
+   ahead (ms): its clock set that far fast */
+async function tablet(srv, id, ahead) {
   const token = (await post(srv.url, '/v2/admin/enroll', { station: id }, { 'x-custompos-admin': ADMIN })).json.token, remote = httpHub(srv.url);
-  const T = makeStation({ id: id, persist: jstore() }); T.setAccess(token); attach(T, remote); T.token = token;
+  const T = makeStation({ id: id, persist: jstore(), now: ahead ? function () { return Date.now() + ahead; } : undefined }); T.setAccess(token); attach(T, remote); T.token = token;
   T.passes = {}; T.setTransport(function (b) { b.grants = T.passes; return remote.receive(b); });
   T.pin = async function (empId, pin) { const r = await post(srv.url, '/v2/pin-grant', { token: token, empId: empId, pin: pin }); if (r.json.grant) T.passes[empId] = r.json.grant; return r.json; };
   return T;
@@ -126,6 +127,42 @@ H.testAsync('the shop\'s df9fc814, over HTTP: a changed PIN or an inactive perso
     const wrong = burst.filter(function (r) { return r.json.refused === 'wrong PIN'; }).length;
     H.ok(wrong <= 5 && burst.every(function (r) { return !r.json.grant; }), '12 guesses at once: ' + wrong + ' checked (at most 5), none admitted');
     H.ok(/too many wrong PINs/.test(String((await B.pin('mgr', '2468')).refused)), 'and then that person is locked on that tablet, even with the right PIN');
+  } finally { await srv.close(); rmDb(f); }
+});
+
+H.testAsync('the shop\'s 56c2967f, over HTTP: a staff change that a later-dated one outranks is admitted and TOLD, naming the tablet and who made it; a switch-off ends every pass made before — negative controls: a change dated after takes and tells nothing; a pass earned after the switch-on works; no alarm for honest changes', async function () {
+  const f = dbFile('s6'), alerts = [];
+  const srv = await startHubServer({ db: f, adminKey: ADMIN, modules: [S.STAFF], grantSecret: SIGNER, notify: function (a) { alerts.push(a); } });
+  const told = function () { return alerts.filter(function (a) { return a && a.kind === 'staff-outranked'; }); };
+  try {
+    const A = await tablet(srv, 'tabOffice'), F = await tablet(srv, 'tabFast', 240000);
+    H.ok(await put(A, 'own', { name: 'Ola', role: 'owner', pin: rec('1111') }, null), 'the first owner');
+    await A.pin('own', '1111');
+    H.ok(await put(A, 'mgr', { name: 'Mo', role: 'manager', perms: { employees: true }, pin: rec('2222') }, 'own'), 'a manager');
+    /* the manager, holding a good pass on a tablet set 4 minutes fast (the hub takes up to 5), re-sets his own PIN to the same digits */
+    await F.pin('mgr', '2222');
+    H.ok(await put(F, 'mgr', { pin: rec('2222') }, 'mgr'), 'the fast tablet\'s re-set is admitted (his own PIN, his own pass)');
+    H.eq(told().length, 0, 'nothing outranks it: nothing told');
+    /* the owner, minutes later by the real clock, changes it from the office: admitted, but the change dated ahead decides it — told */
+    H.ok(await put(A, 'mgr', { pin: rec('2468') }, 'own'), 'the owner\'s PIN change is admitted (it is history)');
+    const t = told();
+    H.eq(t.length, 1, 'and told, once');
+    H.ok(t[0] && /Ola's change to Mo's PIN \(tablet tabOffice\) did not take/.test(t[0].note) && /PIN from tablet tabFast \(by Mo\)/.test(t[0].note) && /revoke tablet tabFast/.test(t[0].note), 'in the shop\'s words, naming the tablet and who made it: ' + (t[0] && t[0].note.slice(0, 160)));
+    H.eq((await A.pin('mgr', '2468')).refused, 'wrong PIN', 'what it warns of: the old PIN is still in force');
+    /* the negative control: the same change dated after the fast one takes, and tells nothing */
+    await F.pin('own', '1111');
+    H.ok(await put(F, 'mgr', { pin: rec('2468') }, 'own'), 'made again, dated after it');
+    H.ok(!!(await A.pin('mgr', '2468')).grant, 'it takes: the new PIN works');
+    H.eq(told().length, 1, 'and nothing more is told');
+    /* a switch-off ends every pass made before, even after switching back on (the pass names how many times a person was switched back on) */
+    const M = await tablet(srv, 'tabM'); await M.pin('mgr', '2468'); const old = M.passes.mgr;
+    H.ok(await put(F, 'mgr', { active: false }, 'own') && await put(F, 'mgr', { active: true }, 'own'), 'the owner switches the manager off, then on');
+    const r = (await post(srv.url, '/v2/pin-grant', { token: M.token, grant: old })).json;
+    H.ok(!r.ok && /no longer active/.test(String(r.refused)), 'the pass from before is not renewed: ' + r.refused);
+    H.ok(!(await put(M, 'clk', { name: 'Cam', role: 'staff', pin: rec('3333') }, 'mgr')), 'nor does it carry a change');
+    await M.pin('mgr', '2468');
+    H.ok(await put(M, 'clk', { name: 'Cam', role: 'staff', pin: rec('3333') }, 'mgr'), 'the negative control: a pass earned after the switch-on carries it');
+    H.eq(told().length, 1, 'and none of these honest changes was told as outranked');
   } finally { await srv.close(); rmDb(f); }
 });
 
@@ -241,6 +278,47 @@ H.testAsync('skeptic 11/1 (step 6): a pass for a fact done after it ended, or se
   H.ok(/every object already has/.test(bad('constructor')), '"constructor" is refused as a right (everyone would hold it)');
   H.ok(/not among this business's abilities/.test(bad('fly')), 'a right that is not among the business\'s abilities is refused at start');
   H.eq(bad('payroll'), '', 'the negative control: a right the business has is fine');
+});
+
+H.testAsync('the module contract\'s tell (11/2 evening): a module may admit a fact and tell a person ({alert}, the shop\'s shape) — last, only on a fact every rule admitted; one that throws is told, never a refusal; the staff module tells nothing for a restored hub\'s re-offer (lost > 0) — negative controls: a refused fact is never told; tell on "any" or not a function stops the start', async function () {
+  const { assemble, defineModule } = require('../modules/define');
+  const T = 1800000000000, g = G.grantsFor({ secret: 'tl', now: function () { return T + 60000; } });
+  let c = 0; const fact = function (type, payload, actor, at, station) { c++; const st = station || 'tab-office'; return { id: st + '/t' + c, type: type, aggregate: 'staff', station: st, actor: actor, at: at, payload: payload, hlc: { t: at, c: 0, id: st } }; };
+  const emp = function (empId, set, actor, at, station) { return fact('employee.set', { empId: empId, set: set }, actor, at, station); };
+  const master = [emp('own', { name: 'Ola', role: 'owner', pin: rec('1111') }, null, T), emp('mgr', { name: 'Mo', role: 'manager', pin: rec('2222') }, 'own', T), emp('mgr', { pin: rec('2222') }, 'mgr', T + 240000, 'tab-fast')];
+  const pass = (await g.check('tab-office', 'own', '1111', S.fold(master), S.rules.pinHash, S.rules.pinIter)).grant, b = { grants: { own: pass } };
+  const A = assemble([S.STAFF], { grantCheck: g.verify });
+  const v = A.judge(emp('mgr', { pin: rec('2468') }, 'own', T + 60000), master, [], b);
+  H.ok(v && v.alert && v.alert.kind === 'staff-outranked' && /PIN from tablet tab-fast \(by Mo\)/.test(v.alert.note), 'the staff module tells the outranked change, admitted: ' + JSON.stringify(v).slice(0, 140));
+  H.eq(A.judge(emp('mgr', { pin: rec('2468') }, 'own', T + 60000), master, [], { grants: b.grants, lost: 2 }), null, 'a restored hub\'s re-offer (lost > 0) is admitted and never told as outranked');
+  H.ok(typeof A.judge(emp('mgr', { pin: rec('2468') }, 'own', T + 60000), master, [], {}) === 'string', 'the negative control: without the pass it is refused, and a refusal is never told');
+  H.eq(A.judge(emp('mgr', { pin: rec('2468') }, 'own', T + 300000), master, [], b), null, 'the negative control: dated after, it takes and tells nothing');
+  /* a module's own tell, throwing: told, not refused */
+  const boom = defineModule({ name: 'tellboom', version: 1, aggregate: { name: 'tellboom', fold: function () { return {}; } }, facts: { 'tellboom.do': { authority: 'self', validate: function () { return null; }, tell: function () { throw new Error('kaput'); } } } });
+  const quiet = defineModule({ name: 'tellquiet', version: 1, aggregate: { name: 'tellquiet', fold: function () { return {}; } }, facts: { 'tellquiet.do': { authority: 'self', validate: function () { return null; }, tell: function () { return null; } } } });
+  const B = assemble([S.STAFF, boom, quiet], { grantCheck: g.verify });
+  const w = B.judge(fact('tellboom.do', { staffId: 'own' }, 'own', T), master, [], b);
+  H.ok(w && w.alert && w.alert.kind === 'tell-fault' && /kaput/.test(w.alert.note) && !w.refuse, 'a tell that throws: admitted, and told — ' + JSON.stringify(w).slice(0, 120));
+  H.eq(B.judge(fact('tellquiet.do', { staffId: 'own' }, 'own', T), master, [], b), null, 'the negative control: a tell with nothing to say admits plainly');
+  H.ok(/may write a tellboom.do only about themselves/.test(String(B.judge(fact('tellboom.do', { staffId: 'mgr' }, 'own', T), master, [], b))), 'a fact the rules refuse never reaches its tell');
+  /* skeptic 11/2 evening: a tell's answer is checked, a thrown thing that cannot be shown is still said, and a rule's refusal is always words */
+  const mod = function (name, f) { const o = {}; o[name + '.do'] = Object.assign({ authority: 'self', validate: function () { return null; } }, f); return defineModule({ name: name, version: 1, aggregate: { name: name, fold: function () { return {}; } }, facts: o }); };
+  const nasty = {}; Object.defineProperty(nasty, 'message', { get: function () { throw new Error('no'); } });
+  const C = assemble([S.STAFF, mod('tellnokey', { tell: function () { return { note: 'something to say' }; } }), mod('tellmute', { tell: function () { return { kind: 'x' }; } }),
+    mod('tellnasty', { tell: function () { throw nasty; } }), mod('ruleerr', { rule: function () { return new Error('not on Sundays'); } }), mod('ruleobj', { rule: function () { return { refuse: true }; } })], { grantCheck: g.verify });
+  const k = C.judge(fact('tellnokey.do', { staffId: 'own' }, 'own', T), master, [], b);
+  H.ok(k && k.alert && k.alert.key === 'tell:tellnokey:' + 'tab-office/t' + c && k.alert.kind === 'tell' && k.alert.station === 'tab-office' && k.alert.note === 'something to say', 'an answer with no key gets one per fact (and a kind and the station): ' + JSON.stringify(k));
+  const mute = C.judge(fact('tellmute.do', { staffId: 'own' }, 'own', T), master, [], b);
+  H.ok(mute && mute.alert && mute.alert.kind === 'tell-fault' && /answered with nothing to say/.test(mute.alert.note), 'an answer with nothing to say is told as a fault, never dropped');
+  let nt = null, threw = '';
+  try { nt = C.judge(fact('tellnasty.do', { staffId: 'own' }, 'own', T), master, [], b); } catch (x) { threw = String(x && x.stack || x); }
+  H.ok(!threw && nt && nt.alert && nt.alert.kind === 'tell-fault' && /cannot be shown/.test(nt.alert.note), 'a thrown thing whose words throw: the judge does not throw, it says so — ' + (threw || JSON.stringify(nt)));
+  const re = C.judge(fact('ruleerr.do', { staffId: 'own' }, 'own', T), master, [], b), ro = C.judge(fact('ruleobj.do', { staffId: 'own' }, 'own', T), master, [], b);
+  H.ok(typeof re === 'string' && /ruleerr module's rule refused/.test(re) && /not on Sundays/.test(re), 'a rule refusing with an Error refuses, in words (the hub reads an object as admit): ' + re);
+  H.ok(typeof ro === 'string' && /ruleobj module's rule refused/.test(ro), 'and one refusing with an object: ' + ro);
+  const start = function (f) { try { defineModule({ name: 'tellbad', version: 1, aggregate: { name: 'tellbad', fold: function () { return {}; } }, facts: { 'tellbad.do': Object.assign({ validate: function () { return null; } }, f) } }); return ''; } catch (e) { return e.message; } };
+  H.ok(/tell is a function/.test(start({ authority: 'self', tell: 'yes' })), 'a tell that is not a function stops the start');
+  H.ok(/tell reads the person/.test(start({ authority: 'any', tell: function () { return null; } })), 'and so does a tell on a fact about no one in particular');
 });
 
 H.done();

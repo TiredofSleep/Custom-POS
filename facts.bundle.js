@@ -2539,7 +2539,9 @@ const INC = {
     if (e.type !== 'employee.set') return;
     let x = s.byId.get(p.empId);
     if (!x) { x = { id: p.empId, name: '', role: 'staff', active: true, perms: {}, pin: null, rate: 0, dept: '', vacAnnual: 0, vacUsed: {}, lang: '', since: e.at }; s.byId.set(p.empId, x); s.employees.push(x); }
+    const wasOff = x.active === false;
     FIELDS.forEach(function (k) { if (k in p.set) x[k] = p.set[k] == null ? (k === 'pin' ? null : x[k]) : JSON.parse(JSON.stringify(p.set[k])); });
+    if (wasOff && x.active !== false) x.reactivated = (x.reactivated || 0) + 1;   /* 11/2: each time a person is switched back on — a PIN pass names it (hub/pingrant.js passPrint), so a pass from before a switch-off never works again */
     x.changedAt = e.at;
   },
   /* @employee @permission @owner @fold — the people in the order first seen, the role lists, the refusals; a note (fresh each time) when no active owner is left */
@@ -2553,9 +2555,68 @@ const INC = {
 function fold(events) { return incfold.foldVia(INC, events, AGG); }
 /* @employee — one person by id from the staff fold, or null */
 function emp(staff, id) { return (staff && staff.byId && staff.byId.get(id)) || null; }
+/* 11/2 (a Custom POS skeptic, round 2): the fields that decide who may do what. The fold reads the facts in their one order (the stamps
+   the tablets gave them), and a hub takes a stamp up to 5 minutes ahead — so a change dated ahead decides these over a later honest one */
+const SEC_FIELDS = ['pin', 'active', 'role', 'perms'];
+/* @employee @permission @fold — what a staff change will NOT decide, because a change dated later in the one order already does: [{field,
+   by: that fact}] — an employee.set's PIN, on/off, role or permissions, or a staff.roles's lists; [] when it takes. facts: the staff facts so far */
+function outranked(facts, e) {
+  const out = []; if (!e || !e.payload) return out;
+  const newest = function (ok) { let w = null; (facts || []).forEach(function (f) { if (f && f.id !== e.id && f.payload && ok(f) && hlc.compareEvents(f, e) > 0 && (!w || hlc.compareEvents(f, w) > 0)) w = f; }); return w; };
+  /* a later change to the very same value leaves what e asked for in force: nothing lost (round-2 skeptic: two people switching the same person off) */
+  const same = function (a, b) { return sameText(a) === sameText(b); };
+  if (e.type === 'staff.roles') { const w = newest(function (f) { return f.type === 'staff.roles'; }); if (w && !same(w.payload.rolePerms, e.payload.rolePerms)) out.push({ field: 'rolePerms', by: w }); return out; }
+  const p = e.payload, s = p.set; if (e.type !== 'employee.set' || !s || typeof s !== 'object') return out;
+  SEC_FIELDS.forEach(function (k) {
+    if (!(k in s) || (s[k] == null && k !== 'pin')) return;   /* null leaves a field as it was (a PIN set to null is cleared) */
+    const w = newest(function (f) { const fs = f.type === 'employee.set' && f.payload.empId === p.empId && f.payload.set; return !!fs && typeof fs === 'object' && (k in fs) && (fs[k] != null || k === 'pin'); });
+    if (w && !same(w.payload.set[k], s[k])) out.push({ field: k, by: w });
+  });
+  return out;
+}
+/* @permission @employee @hub @watchdog — 11/2 (a Custom POS skeptic, round 2): the hub's word on a staff change that a change dated later
+   already decides (outranked) — null, or the alert. Admitted, it is history, and told: a tablet with its clock set ahead could otherwise keep
+   an old PIN in force, or undo a switch-off, with nobody the wiser. A later change from the SAME tablet was made after this one (a tablet's
+   stamps only go forward): the newer decision, honestly — not told. Here, not in hub/authority.js, since 11/2 evening: a business built from
+   these files tells it in the same words (one copy). facts: the staff facts so far; staff: the fold (byId, for the names) */
+function outrankedAlert(facts, e, staff) {
+  const lost = outranked(facts, e).filter(function (l) { return l.by.station !== e.station; }); if (!lost.length) return null;
+  const nm = function (id) { const w = id != null && staff && staff.byId ? staff.byId.get(String(id)) : null; return w ? w.name : (id != null ? String(id).slice(0, 64) : 'nobody named'); };
+  const WORDS = { pin: 'PIN', active: 'on/off', role: 'role', perms: 'permissions', rolePerms: 'role lists' };
+  const what = lost.map(function (l) { return WORDS[l.field] || l.field; }).join(', ');
+  const whose = e.type === 'staff.roles' ? 'the shop\'s ' : nm(e.payload && e.payload.empId) + '\'s ';
+  /* every tablet that outranks a field is named, with what it decides (round-2 skeptic: a PIN from one tablet and on/off from another named only the first) */
+  /* and each is judged by what the hub saw (skeptic 11/2 evening): this change was made AFTER that tablet's change reached the hub, or that
+     change was dated more than a minute past its own arrival — its stamp ran ahead of the hub's clock (a clock set fast: revoke it). Made
+     BEFORE it arrived, by honest clocks, this change is the older one, delivered late (a tablet that was offline, or one re-offering to a
+     restored hub): the later change is simply the newer decision — said, with no revoke (telling the owner to revoke an honest tablet
+     and make the stale change again would put the stale value back) */
+  const madeAt = Number(e.hlc && e.hlc.t) || Number(e.at) || 0;
+  const byTab = {}; lost.forEach(function (l) {
+    const t = String(l.by.station), b = (byTab[t] = byTab[t] || { who: nm(l.by.actor), what: [], fast: false }), arrived = Number(l.by.hubAt) || 0;
+    b.what.push(WORDS[l.field] || l.field);
+    if (madeAt >= arrived || (Number(l.by.hlc && l.by.hlc.t) || 0) > arrived + 60000) b.fast = true;   /* no arrival known (0): the clock wording */
+  });
+  const say = function (t) { return byTab[t].what.join(', ') + ' from tablet ' + t + ' (by ' + byTab[t].who + ')'; };
+  const tabs = Object.keys(byTab), fast = tabs.filter(function (t) { return byTab[t].fast; }), late = tabs.filter(function (t) { return !byTab[t].fast; });
+  const head = '⚠ ' + nm(e.actor) + '\'s change to ' + whose + what + ' (tablet ' + e.station + ') did not take: ';
+  const lateSaid = 'it was made before, and reached the hub after, a change made later — ' + late.map(say).join('; ') + ' — so the later change is in force (a tablet that was offline, or a restored hub, delivers late)';
+  const revoke = 'If that is expected (two people changed the same person at about the same time), nothing to do. If not, revoke ' + (fast.length > 1 ? 'tablets ' : 'tablet ') + fast.join(' and ') + ' (Admin → Devices), then make the change again.';
+  const note = !late.length ? head + 'a change dated later is already on the hub — ' + fast.map(say).join('; ') + '. ' + revoke
+    : !fast.length ? head + lateSaid + '. Make it again only if the earlier change is the one you want.'
+    : head + lateSaid + '; and a change dated later was already on the hub when it was made — ' + fast.map(say).join('; ') + '. ' + revoke;
+  return { key: 'staff-outranked:' + e.id, kind: 'staff-outranked', station: e.station, note: note };
+}
+/* @employee @fold — a value as text with every object's keys in order, so {a, b} and {b, a} read the same (perms, role lists, a PIN record) */
+function sameText(v) {
+  if (v === undefined) return 'undefined';
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(sameText).join(',') + ']';
+  return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + sameText(v[k]); }).join(',') + '}';
+}
 registry.registerAggregate(AGG, { fold: fold, inc: INC, detectConflicts: function (events) { return fold(events).notes; }, describe: function (d) { return { kind: 'staff-note', note: String((d && d.why) || 'a staff question') }; },
   doc: 'Who works here and what each may do. Field by field, latest wins; never deleted (made inactive); a PIN only as a salted hash.' });
-module.exports = { fold: fold, emp: emp, AGG: AGG, FIELDS: FIELDS };
+module.exports = { fold: fold, emp: emp, outranked: outranked, outrankedAlert: outrankedAlert, AGG: AGG, FIELDS: FIELDS, SEC_FIELDS: SEC_FIELDS };
 
 });
 __def("station/record.js", {}, function (module, exports, require) {
@@ -2701,6 +2762,11 @@ __def("modules/define.js", {"../core/registry":"core/registry.js"}, function (mo
                 The grants ride with a send as the origin shop's do: bundle.grants = { personId: grant }, and opts.grantCheck is
                 facts/hub/pingrant.js verify(grant, station, person, at) → null | why (imported, the shop's own file)
      rule       optional (p, who, staff, e) → null | reason: the module's own extra rule, run after the authority passes — it can only refuse more
+     tell       optional (e, staff, bundle) → null | {note, key?, kind?, station?}: the fact is ADMITTED and a person is told (the hub's
+                alerts, as the origin shop's hub does: {alert}) — run last, only on a fact every rule above admitted, and told only once the
+                hub admits it (its clock check comes after). It never refuses; one that throws, or answers with no note, is told as a
+                'tell-fault', never a refusal. A missing key is made per fact (tell:<module>:<fact id>)
+   A rule's refusal is always words: one that refuses with an Error or an object is turned into words, never read as "admit".
    A type an imported aggregate already registered is ADOPTED ({ adopt: true, authority, pin }): the module gives it authority and
    leaves its validator and fold as imported.
 
@@ -2751,7 +2817,9 @@ function defineModule(m) {
     const a = parseAuthority(f.authority, where);
     if (f.pin && (a.kind === 'any' || a.kind === 'hub-only')) throw new Error(where + ': a hub-checked PIN needs a person to check — not with "' + a.kind + '"');
     if (f.rule != null && typeof f.rule !== 'function') throw new Error(where + ': rule is a function (p, who, staff, e) → null | reason, or absent');
-    rules[t] = { kind: a.kind, right: a.right, pin: !!f.pin, self: f.self || 'staffId', rule: f.rule || null, module: m.name };
+    if (f.tell != null && typeof f.tell !== 'function') throw new Error(where + ': tell is a function (e, staff, bundle) → null | alert, or absent');
+    if (f.tell && (a.kind === 'any' || a.kind === 'hub-only')) throw new Error(where + ': tell reads the person — not with "' + a.kind + '"');
+    rules[t] = { kind: a.kind, right: a.right, pin: !!f.pin, self: f.self || 'staffId', rule: f.rule || null, tell: f.tell || null, module: m.name };
     if (f.adopt) { if (!registry.knows(t)) throw new Error(where + ': adopt names a type nobody registered'); return; }
     if (typeof f.validate !== 'function') throw new Error(where + ': validate(payload) → null | reason is required (law 7: validate at the door)');
     if (f.admit != null && typeof f.admit !== 'function') throw new Error(where + ': admit is a function or absent');
@@ -2767,6 +2835,23 @@ function defineModule(m) {
   });
   return Object.freeze({ name: m.name, version: m.version, layer: m.layer || 'operations', requires: requires, rules: rules, prefixes: Array.from(prefixes),
     aggregate: agg ? agg.name : null, views: m.views || {}, needsConfig: needsConfig, provides: m.provides || {}, hubServices: m.hubServices || [] });
+}
+
+/* @facts @module @permission — a module rule's refusal, always as words: the hub reads an object verdict as "admit (and tell)", so a rule
+   that refused with an Error or an object would have let the fact in (skeptic 11/2 evening) */
+function refusal(why, r, e) {
+  if (typeof why === 'string') return why;
+  return 'the ' + r.module + ' module\'s rule refused this ' + e.type + (why && typeof why.message === 'string' ? ' (' + said(why) + ')' : '');
+}
+/* @facts @error — a thrown thing as short text, never throwing itself (a value whose message or text throws is said as such) */
+function said(x) { try { return String((x && x.message) || x).slice(0, 160); } catch (y) { return 'an error that cannot be shown'; } }
+/* @facts @module @watchdog — a tell's answer as one alert the hub can keep, or null: words to say (note) are required; the key is made per
+   fact when the module gives none (the hub keeps one alert per key — a keyless one would have hidden every later keyless one), and the
+   kind and station are filled in (skeptic 11/2 evening). An answer with nothing to say is a fault in the module, told as one — never dropped */
+function alertOf(t, r, e) {
+  if (!t) return null;
+  if (typeof t !== 'object' || Array.isArray(t) || typeof t.note !== 'string' || !t.note) return { key: 'tell-fault:' + e.id, kind: 'tell-fault', station: e.station, note: '⚠ The ' + r.module + ' module\'s check on a ' + e.type + ' from ' + e.station + ' answered with nothing to say — the fact was admitted. Tell whoever looks after that module.' };
+  return { key: typeof t.key === 'string' && t.key ? t.key : 'tell:' + r.module + ':' + e.id, kind: typeof t.kind === 'string' && t.kind ? t.kind : 'tell', station: typeof t.station === 'string' && t.station ? t.station : e.station, note: t.note };
 }
 
 /* @facts @module @permission — a set of modules, put together: requires closed, every type judged once, ONE staff source; → {rules, pinChecked, judge, config} */
@@ -2792,7 +2877,7 @@ function assemble(mods, opts) {
   if (pinChecked.length && !grantCheck && !opts.noPins) throw new Error('these facts need a PIN the hub checks, but no grant check was given: ' + pinChecked.join(', '));
   const config = {}; mods.forEach(function (m) { Object.assign(config, m.needsConfig); });
 
-  /* @facts @permission — the verdict on one fact: null (admit) or why it is refused */
+  /* @facts @permission — the verdict on one fact: null (admit), why it is refused, or {alert} (admit, and a person is told) */
   function judge(e, master, staged, bundle) {
     const r = rules[e.type];
     /* a registered type no module in THIS hub claims is refused: a hub runs the rules it was given, it never fails open (stage-2
@@ -2817,7 +2902,7 @@ function assemble(mods, opts) {
     if (why) return why;
     /* the module's own extra rule: it may only refuse more — and a rule that throws refuses THIS fact only (closed, never open; never the
        whole send, which would wedge the tablet resending it) */
-    if (r.rule) { try { why = r.rule(p, who, staff, e); } catch (x) { why = 'the ' + r.module + ' module\'s rule failed on this ' + e.type; } if (why) return why; }
+    if (r.rule) { try { why = r.rule(p, who, staff, e); } catch (x) { why = 'the ' + r.module + ' module\'s rule failed on this ' + e.type; } if (why) return refusal(why, r, e); }
     /* the PIN the hub checked: the send's grant for this person, judged as the origin shop's hub judges it (hub/authority.js) — signed by
        this hub, for this tablet and this person, for a fact done before it ended, and sent within its grace; and earned with the PIN this
        person has NOW (who: a changed PIN or an inactive person ends every pass made before — the shop's df9fc814) */
@@ -2825,6 +2910,14 @@ function assemble(mods, opts) {
       const gs = (bundle && bundle.grants && typeof bundle.grants === 'object' && !Array.isArray(bundle.grants)) ? bundle.grants : {}, id = String(who.id);
       const bad = grantCheck(Object.prototype.hasOwnProperty.call(gs, id) ? gs[id] : null, e.station, id, e.at, who);
       if (bad) return 'a ' + e.type + ' needs ' + who.name + '\'s PIN checked by the hub (' + bad + ') — ' + who.name + ' enters it again on this tablet';
+    }
+    /* the module's own telling, on a fact every rule admitted: it stays admitted, and a person is told (the origin shop's {alert}) — a tell
+       that throws is told as well, never turned into a refusal (that would wedge the tablet resending it) */
+    if (r.tell) {
+      let told = null;
+      try { told = r.tell(e, staff, bundle); } catch (x) { told = { key: 'tell-fault:' + e.id, kind: 'tell-fault', note: '⚠ The hub could not run the ' + r.module + ' module\'s check on a ' + e.type + ' from ' + e.station + ' (' + said(x) + ') — it was admitted unchecked.' }; }
+      const a = alertOf(told, r, e);
+      if (a) return { alert: a };
     }
     return null;
   }
@@ -2849,7 +2942,8 @@ __def("modules/staff.js", {"./define":"modules/define.js","../core/staff":"core/
      employee.set   that person (their own PIN, time slip and language only), an owner, or someone holding "employees" — and only an
                     owner makes or changes an owner; the shop always keeps an active owner
      staff.roles    an owner, or someone holding "employees"
-     both           with a PIN the hub checked (core/staff.js PIN_CHECKED), as at the shop
+     both           with a PIN the hub checked (core/staff.js PIN_CHECKED), as at the shop; and one that a change dated later already
+                    decides is admitted and TOLD (staff-outranked, the shop's own words), never silent
      staff.refused, staff.signedIn   any enrolled tablet (the shop's hub admits them from any tablet: they record a gate, never a change)
    A brand-new shop with nobody on staff admits its first fact only if it is its owner (define.js asks firstOk). */
 'use strict';
@@ -2897,13 +2991,20 @@ function staffNow(master, staged) {
   return { byId: view.byId, employees: view.employees, rolePerms: view.rolePerms, isOwner: S.isOwner, can: function (who, right) { return S.can(who, right, view.rolePerms); } };
 }
 
+/* @facts @permission @employee @watchdog — a change to a person's PIN, on/off, role or permissions (or the role lists) that a change dated
+   later already decides: admitted, and said (the shop's 56c2967f, its words: aggregates/staff.js outrankedAlert, imported). A tablet with its
+   clock set ahead could otherwise keep an old PIN in force, or undo a switch-off, with nobody the wiser. The staff facts so far are the ones
+   staffNow just read (define.js asks for the staff before it tells); a send re-offering what a restored hub lost (lost > 0) comes back in
+   the tablet's order, not the order made, so it is never told as outranked — as at the shop */
+function outrankedTell(e, staff, bundle) { return (bundle && bundle.lost > 0) ? null : AGG.outrankedAlert(memo.facts, e, staff); }
+
 /* the shop's list of facts its hub PIN-checks decides which of these need a pass, so the two can never disagree */
 const pinned = function (t) { return S.PIN_CHECKED.indexOf(t) >= 0; };
 const STAFF = defineModule({
-  name: 'staff', version: 2, layer: 'core',
+  name: 'staff', version: 3, layer: 'core',
   facts: {
-    'employee.set': { adopt: true, authority: 'self-or:employees', self: 'empId', pin: pinned('employee.set'), rule: employeeRule },
-    'staff.roles': { adopt: true, authority: 'needs:employees', pin: pinned('staff.roles') },
+    'employee.set': { adopt: true, authority: 'self-or:employees', self: 'empId', pin: pinned('employee.set'), rule: employeeRule, tell: outrankedTell },
+    'staff.roles': { adopt: true, authority: 'needs:employees', pin: pinned('staff.roles'), tell: outrankedTell },
     'staff.refused': { adopt: true, authority: 'any' },
     'staff.signedIn': { adopt: true, authority: 'any' }
   },

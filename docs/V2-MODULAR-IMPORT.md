@@ -470,6 +470,28 @@ in the same shape.
      earned with, and this repo's two callers hand in the hub's record of the person: the judge (`modules/define.js`) and the renewal
      at `/v2/pin-grant` (`server.js`). So a changed PIN, or a person switched off, ends the pass for a change and for a renewal; a
      burst of guesses gets five. `facts/test/staff.test.js` proves it over HTTP; undoing either wire, or the file, turns it red (4 of 4).
+     *(Corrected the same evening: "a person switched off" ended the pass only while they stayed off, and a changed PIN does not stop a
+     change still waiting on a tablet. See the next entry.)*
+   - **Round 2 arrived the same way (2026-11-02, evening; the shop's live c44bffaa).** A second review of this repo found three gaps
+     in the code the two share, and the shop fixed two of them first:
+     - Switching a person off and back on brought their old passes back. The staff fold now counts each switch back on, and a pass
+       names that count, so a pass from before a switch-off never works again.
+     - A tablet with its clock set a few minutes fast could make the owner's later change to a PIN, on/off, role or permissions
+       silently not take (the latest stamp wins, and the hub takes stamps up to 5 minutes ahead). Such a change is now admitted and
+       told: an alert names the person, what did not take, and each tablet whose later-dated change decides it, with who made it.
+       It says "revoke it" only when that tablet's stamp ran ahead of the hub's clock. A change that was simply delivered late (a
+       tablet that was offline, or one re-offering to a restored hub) is told as the older change, with no revoke. The alert's
+       words live in the shared `facts/aggregates/staff.js` (`outrankedAlert`), imported, so both systems say the same thing.
+     - Still open, the owner's decision: a change waiting on a tablet goes through on that person's next pass there, even if it was
+       first made with a PIN that has since changed.
+     The module contract gained **`tell`** (`facts/modules/define.js`): a module may admit a fact and tell a person, the `{alert}`
+     shape the shop's hub already uses. It runs last, only on a fact every rule admitted, and the hub stages it only once the fact is
+     admitted (the shop's `hub.js`, imported). A tell that throws, or answers with nothing to say, is told as a fault, never a refusal.
+     A rule that refuses with an Error or an object is now turned into words (before, the hub would have read it as "admit").
+     `facts/modules/staff.js` tells with the imported `outrankedAlert`, and never for a restored hub's re-offer (`lost`).
+     `facts/test/staff.test.js` +2: over HTTP with a tablet 4 minutes fast, and the contract itself. Undoing each piece turned a test
+     red (10 of 10). The tablet bundle grew to ~267 KB raw, ~82 KB gzipped (+6.7 KB the shop's staff file, +4.6 KB the contract), so
+     its budget was raised to 280 / 86 KB, as the plan raises it when shared files arrive.
 
 ### 9. Risks
 

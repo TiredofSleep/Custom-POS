@@ -117,5 +117,21 @@ H.testAsync('11/1 (a Custom POS skeptic): a burst of guesses sent at once gets t
   H.ok((await typed996(hub996(), 'tab-1', 'e1', '4821', PEOPLE996)).ok, 'negative control: on a fresh hub the right PIN alone earns a pass');
 });
 
+H.testAsync('11/2 (round 2): switching a person off and on again ends every pass made before — the pass names how many times they were switched back on — at verify, renewal and a risky door; negative controls: a pass earned after the switch-on works at all three, and a person never switched off keeps the plain print', async function () {
+  const h = hub996(), before = staffOf996([{ id: 'e1', pin: '4821' }]);
+  const g = (await typed996(h, 'tab-1', 'e1', '4821', before)).grant;
+  H.eq(g.pf, PG996.pinPrint(before.byId.get('e1').pin), 'never switched off: the plain PIN print');
+  const p = before.byId.get('e1'), off = { id: 'e1', active: false, pin: p.pin }, back = { id: 'e1', active: true, pin: p.pin, reactivated: 1 };
+  H.ok(/no longer active/.test(h.g.verify(g, 'tab-1', 'e1', h.t, off) || ''), 'while off: refused');
+  H.ok(/no longer active/.test(h.g.verify(g, 'tab-1', 'e1', h.t, back) || ''), 'switched back on: the old pass still refused');
+  H.ok(/the PIN again, please/.test(h.g.renew(g, 'tab-1', back).refused || ''), 'not renewed');
+  H.ok(/no longer active/.test(h.g.door(g, 'tab-1', back) || ''), 'and it opens no risky door');
+  const g2 = (await typed996(h, 'tab-1', 'e1', '4821', { byId: new Map([['e1', back]]) })).grant;
+  H.eq(g2.pf, PG996.passPrint(back), 'negative control: a pass earned after the switch-on names it');
+  H.eq(h.g.verify(g2, 'tab-1', 'e1', h.t, back), null, 'and works for a fact');
+  H.ok(h.g.renew(g2, 'tab-1', back).ok, 'renews');
+  H.eq(h.g.door(g2, 'tab-1', back), null, 'and opens a door');
+});
+
 /* ── exported by the v2 exporter: the whole of the private suite's §996. */
 H.done();

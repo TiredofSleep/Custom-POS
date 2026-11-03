@@ -376,11 +376,15 @@ function makeHub(opts) {
         no1(e.id, 'id collision: this hub holds a different fact under that id'); return;
       }
       if (def.admit) { const no = def.admit(e.payload || {}, function (dotted, v) { return registry.heldIn(master, e.type, dotted, v); } /* 10/18: an id the shop's history already holds is a reference (THE ID RULE, core/registry.js) — every fact read, since a fact put back by reseed is not filed by aggregate until a restart; asked only when an id breaks the rule */); if (no) { stageAlert(stage, { key: 'not-admitted:' + e.station + ':' + e.type, kind: 'invalid-payload', station: e.station, note: 'Station ' + e.station + ' sent a NEW ' + e.type + ' the hub does not take (' + no + ') — an out-of-date page; refresh it.' }); no1(e.id, 'invalid payload: ' + no); return; } }   /* 10/1: a rule for NEW facts only — after the replay check, so a fact the hub already holds is never refused by a rule newer than it */
-      let why = authority ? authority(e, master, staged, b, readers) : null;   /* E30: judged by the hub's own fold of the staff facts — and (the PIN double check) the bundle's hub-checked PIN grants */
-      if (why && typeof why === 'object') { if (why.alert) stageAlert(stage, why.alert); why = why.refuse || null; }   /* 10/25 (§970): a verdict that tells a person and admits (money on a voided ticket) */
-      if (why) { stageAlert(stage, { key: 'not-allowed:' + e.station + ':' + e.type, kind: 'not-allowed', station: e.station, note: 'Station ' + e.station + ' sent a ' + e.type + ' the hub does not allow: ' + why + '. Held on the station, never admitted. If that tablet is lost or stolen, revoke it.' }); no1(e.id, 'not allowed: ' + why); return; }
+      let why = authority ? authority(e, master, staged, b, readers) : null, told = null;   /* E30: judged by the hub's own fold of the staff facts — and (the PIN double check) the bundle's hub-checked PIN grants */
+      /* 10/25 (§970): a verdict that tells a person and admits (money on a voided ticket). Its alert is staged once the fact is ADMITTED,
+         after the clock check below (skeptic 11/2 evening: a hand-made fact with an old stamp and a time far ahead was told outranked,
+         then refused — told about a fact the hub never took); a refusal that carries one says it with the refusal */
+      if (why && typeof why === 'object') { told = why.alert || null; why = why.refuse || null; }
+      if (why) { if (told) stageAlert(stage, told); stageAlert(stage, { key: 'not-allowed:' + e.station + ':' + e.type, kind: 'not-allowed', station: e.station, note: 'Station ' + e.station + ' sent a ' + e.type + ' the hub does not allow: ' + why + '. Held on the station, never admitted. If that tablet is lost or stolen, revoke it.' }); no1(e.id, 'not allowed: ' + why); return; }
       const ahead = aheadOf(e, tNow);   /* E35 (v1 stampSanitize): a stamp from the future is never admitted */
       if (ahead) { stageAlert(stage, { key: 'clock-ahead:' + dev.station + ':' + dayOf(tNow), kind: 'clock-ahead', station: dev.station, note: '⏰ Station ' + dev.station + ' sent facts dated ' + howFar(ahead) + ' AHEAD of the hub\'s clock — that tablet\'s clock is wrong. They were not admitted (held on the tablet, never lost). Set its date and time.' }); no1(e.id, 'clock: this fact is dated ' + howFar(ahead) + ' ahead of the hub — this tablet\'s clock is wrong; set its date and time (the fact is kept on this tablet)'); return; }
+      if (told) stageAlert(stage, told);   /* admitted: now it is told */
       e.pos = head + staged.length + 1; e.epoch = epoch; e.hubAt = hubNow();
       staged.push(e); stagedById.set(e.id, e);
       acks.push({ id: e.id, ok: true, hash: e.hash, pos: e.pos, epoch: epoch });

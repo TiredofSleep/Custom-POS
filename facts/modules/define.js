@@ -16,6 +16,11 @@
                 The grants ride with a send as the origin shop's do: bundle.grants = { personId: grant }, and opts.grantCheck is
                 facts/hub/pingrant.js verify(grant, station, person, at) → null | why (imported, the shop's own file)
      rule       optional (p, who, staff, e) → null | reason: the module's own extra rule, run after the authority passes — it can only refuse more
+     tell       optional (e, staff, bundle) → null | {note, key?, kind?, station?}: the fact is ADMITTED and a person is told (the hub's
+                alerts, as the origin shop's hub does: {alert}) — run last, only on a fact every rule above admitted, and told only once the
+                hub admits it (its clock check comes after). It never refuses; one that throws, or answers with no note, is told as a
+                'tell-fault', never a refusal. A missing key is made per fact (tell:<module>:<fact id>)
+   A rule's refusal is always words: one that refuses with an Error or an object is turned into words, never read as "admit".
    A type an imported aggregate already registered is ADOPTED ({ adopt: true, authority, pin }): the module gives it authority and
    leaves its validator and fold as imported.
 
@@ -66,7 +71,9 @@ function defineModule(m) {
     const a = parseAuthority(f.authority, where);
     if (f.pin && (a.kind === 'any' || a.kind === 'hub-only')) throw new Error(where + ': a hub-checked PIN needs a person to check — not with "' + a.kind + '"');
     if (f.rule != null && typeof f.rule !== 'function') throw new Error(where + ': rule is a function (p, who, staff, e) → null | reason, or absent');
-    rules[t] = { kind: a.kind, right: a.right, pin: !!f.pin, self: f.self || 'staffId', rule: f.rule || null, module: m.name };
+    if (f.tell != null && typeof f.tell !== 'function') throw new Error(where + ': tell is a function (e, staff, bundle) → null | alert, or absent');
+    if (f.tell && (a.kind === 'any' || a.kind === 'hub-only')) throw new Error(where + ': tell reads the person — not with "' + a.kind + '"');
+    rules[t] = { kind: a.kind, right: a.right, pin: !!f.pin, self: f.self || 'staffId', rule: f.rule || null, tell: f.tell || null, module: m.name };
     if (f.adopt) { if (!registry.knows(t)) throw new Error(where + ': adopt names a type nobody registered'); return; }
     if (typeof f.validate !== 'function') throw new Error(where + ': validate(payload) → null | reason is required (law 7: validate at the door)');
     if (f.admit != null && typeof f.admit !== 'function') throw new Error(where + ': admit is a function or absent');
@@ -82,6 +89,23 @@ function defineModule(m) {
   });
   return Object.freeze({ name: m.name, version: m.version, layer: m.layer || 'operations', requires: requires, rules: rules, prefixes: Array.from(prefixes),
     aggregate: agg ? agg.name : null, views: m.views || {}, needsConfig: needsConfig, provides: m.provides || {}, hubServices: m.hubServices || [] });
+}
+
+/* @facts @module @permission — a module rule's refusal, always as words: the hub reads an object verdict as "admit (and tell)", so a rule
+   that refused with an Error or an object would have let the fact in (skeptic 11/2 evening) */
+function refusal(why, r, e) {
+  if (typeof why === 'string') return why;
+  return 'the ' + r.module + ' module\'s rule refused this ' + e.type + (why && typeof why.message === 'string' ? ' (' + said(why) + ')' : '');
+}
+/* @facts @error — a thrown thing as short text, never throwing itself (a value whose message or text throws is said as such) */
+function said(x) { try { return String((x && x.message) || x).slice(0, 160); } catch (y) { return 'an error that cannot be shown'; } }
+/* @facts @module @watchdog — a tell's answer as one alert the hub can keep, or null: words to say (note) are required; the key is made per
+   fact when the module gives none (the hub keeps one alert per key — a keyless one would have hidden every later keyless one), and the
+   kind and station are filled in (skeptic 11/2 evening). An answer with nothing to say is a fault in the module, told as one — never dropped */
+function alertOf(t, r, e) {
+  if (!t) return null;
+  if (typeof t !== 'object' || Array.isArray(t) || typeof t.note !== 'string' || !t.note) return { key: 'tell-fault:' + e.id, kind: 'tell-fault', station: e.station, note: '⚠ The ' + r.module + ' module\'s check on a ' + e.type + ' from ' + e.station + ' answered with nothing to say — the fact was admitted. Tell whoever looks after that module.' };
+  return { key: typeof t.key === 'string' && t.key ? t.key : 'tell:' + r.module + ':' + e.id, kind: typeof t.kind === 'string' && t.kind ? t.kind : 'tell', station: typeof t.station === 'string' && t.station ? t.station : e.station, note: t.note };
 }
 
 /* @facts @module @permission — a set of modules, put together: requires closed, every type judged once, ONE staff source; → {rules, pinChecked, judge, config} */
@@ -107,7 +131,7 @@ function assemble(mods, opts) {
   if (pinChecked.length && !grantCheck && !opts.noPins) throw new Error('these facts need a PIN the hub checks, but no grant check was given: ' + pinChecked.join(', '));
   const config = {}; mods.forEach(function (m) { Object.assign(config, m.needsConfig); });
 
-  /* @facts @permission — the verdict on one fact: null (admit) or why it is refused */
+  /* @facts @permission — the verdict on one fact: null (admit), why it is refused, or {alert} (admit, and a person is told) */
   function judge(e, master, staged, bundle) {
     const r = rules[e.type];
     /* a registered type no module in THIS hub claims is refused: a hub runs the rules it was given, it never fails open (stage-2
@@ -132,7 +156,7 @@ function assemble(mods, opts) {
     if (why) return why;
     /* the module's own extra rule: it may only refuse more — and a rule that throws refuses THIS fact only (closed, never open; never the
        whole send, which would wedge the tablet resending it) */
-    if (r.rule) { try { why = r.rule(p, who, staff, e); } catch (x) { why = 'the ' + r.module + ' module\'s rule failed on this ' + e.type; } if (why) return why; }
+    if (r.rule) { try { why = r.rule(p, who, staff, e); } catch (x) { why = 'the ' + r.module + ' module\'s rule failed on this ' + e.type; } if (why) return refusal(why, r, e); }
     /* the PIN the hub checked: the send's grant for this person, judged as the origin shop's hub judges it (hub/authority.js) — signed by
        this hub, for this tablet and this person, for a fact done before it ended, and sent within its grace; and earned with the PIN this
        person has NOW (who: a changed PIN or an inactive person ends every pass made before — the shop's df9fc814) */
@@ -140,6 +164,14 @@ function assemble(mods, opts) {
       const gs = (bundle && bundle.grants && typeof bundle.grants === 'object' && !Array.isArray(bundle.grants)) ? bundle.grants : {}, id = String(who.id);
       const bad = grantCheck(Object.prototype.hasOwnProperty.call(gs, id) ? gs[id] : null, e.station, id, e.at, who);
       if (bad) return 'a ' + e.type + ' needs ' + who.name + '\'s PIN checked by the hub (' + bad + ') — ' + who.name + ' enters it again on this tablet';
+    }
+    /* the module's own telling, on a fact every rule admitted: it stays admitted, and a person is told (the origin shop's {alert}) — a tell
+       that throws is told as well, never turned into a refusal (that would wedge the tablet resending it) */
+    if (r.tell) {
+      let told = null;
+      try { told = r.tell(e, staff, bundle); } catch (x) { told = { key: 'tell-fault:' + e.id, kind: 'tell-fault', note: '⚠ The hub could not run the ' + r.module + ' module\'s check on a ' + e.type + ' from ' + e.station + ' (' + said(x) + ') — it was admitted unchecked.' }; }
+      const a = alertOf(told, r, e);
+      if (a) return { alert: a };
     }
     return null;
   }

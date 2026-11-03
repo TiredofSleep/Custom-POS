@@ -51,11 +51,13 @@ H.test('the build refuses a require it cannot serve: outside the list, a Node mo
    the staff, the time clock) it is ~216 KB raw, ~65 KB gzipped. Rollout step 4 (11/1) brought the origin shop's own staff files (its
    rules, its fold and the business's list of abilities, comments kept) in place of the rebuilt staff module: ~242 KB raw, ~74 KB gzipped;
    step 5 its one door for a fact and the folds a screen reads (station/record.js, station/views.js): ~252 KB raw, ~77 KB gzipped.
+   11/2 evening: the shop's PIN round 2 and its outranked warning in its shared staff file (+6.7 KB raw), and this repo's module
+   contract `tell` with its checks (+4.6 KB): ~267 KB raw, ~82 KB gzipped — the bound raised to 280 / 86.
    The plan raises this as shared files arrive, measured compressed (V2-MODULAR-IMPORT.md Part 3b, decision 5; the shop's own tablets
    load 912 KB compressed every day). The bound below catches growth, not the comments. */
-H.test('the bundle stays within its size budget: under 260 KB raw and 80 KB gzipped (the engine and its modules, comments kept)', function () {
+H.test('the bundle stays within its size budget: under 280 KB raw and 86 KB gzipped (the engine and its modules, comments kept)', function () {
   const code = B.build(), n = Buffer.byteLength(code), gz = require('zlib').gzipSync(code).length;
-  H.ok(n < 260 * 1024, 'the bundle is ' + n + ' bytes raw'); H.ok(gz < 80 * 1024, 'and ' + gz + ' bytes gzipped');
+  H.ok(n < 280 * 1024, 'the bundle is ' + n + ' bytes raw'); H.ok(gz < 86 * 1024, 'and ' + gz + ' bytes gzipped');
 });
 
 H.done();

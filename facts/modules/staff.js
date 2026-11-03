@@ -12,7 +12,8 @@
      employee.set   that person (their own PIN, time slip and language only), an owner, or someone holding "employees" — and only an
                     owner makes or changes an owner; the shop always keeps an active owner
      staff.roles    an owner, or someone holding "employees"
-     both           with a PIN the hub checked (core/staff.js PIN_CHECKED), as at the shop
+     both           with a PIN the hub checked (core/staff.js PIN_CHECKED), as at the shop; and one that a change dated later already
+                    decides is admitted and TOLD (staff-outranked, the shop's own words), never silent
      staff.refused, staff.signedIn   any enrolled tablet (the shop's hub admits them from any tablet: they record a gate, never a change)
    A brand-new shop with nobody on staff admits its first fact only if it is its owner (define.js asks firstOk). */
 'use strict';
@@ -60,13 +61,20 @@ function staffNow(master, staged) {
   return { byId: view.byId, employees: view.employees, rolePerms: view.rolePerms, isOwner: S.isOwner, can: function (who, right) { return S.can(who, right, view.rolePerms); } };
 }
 
+/* @facts @permission @employee @watchdog — a change to a person's PIN, on/off, role or permissions (or the role lists) that a change dated
+   later already decides: admitted, and said (the shop's 56c2967f, its words: aggregates/staff.js outrankedAlert, imported). A tablet with its
+   clock set ahead could otherwise keep an old PIN in force, or undo a switch-off, with nobody the wiser. The staff facts so far are the ones
+   staffNow just read (define.js asks for the staff before it tells); a send re-offering what a restored hub lost (lost > 0) comes back in
+   the tablet's order, not the order made, so it is never told as outranked — as at the shop */
+function outrankedTell(e, staff, bundle) { return (bundle && bundle.lost > 0) ? null : AGG.outrankedAlert(memo.facts, e, staff); }
+
 /* the shop's list of facts its hub PIN-checks decides which of these need a pass, so the two can never disagree */
 const pinned = function (t) { return S.PIN_CHECKED.indexOf(t) >= 0; };
 const STAFF = defineModule({
-  name: 'staff', version: 2, layer: 'core',
+  name: 'staff', version: 3, layer: 'core',
   facts: {
-    'employee.set': { adopt: true, authority: 'self-or:employees', self: 'empId', pin: pinned('employee.set'), rule: employeeRule },
-    'staff.roles': { adopt: true, authority: 'needs:employees', pin: pinned('staff.roles') },
+    'employee.set': { adopt: true, authority: 'self-or:employees', self: 'empId', pin: pinned('employee.set'), rule: employeeRule, tell: outrankedTell },
+    'staff.roles': { adopt: true, authority: 'needs:employees', pin: pinned('staff.roles'), tell: outrankedTell },
     'staff.refused': { adopt: true, authority: 'any' },
     'staff.signedIn': { adopt: true, authority: 'any' }
   },
