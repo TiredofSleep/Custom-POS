@@ -31,8 +31,9 @@ const FLOW = {
   const gated = await T();
   const blockedOk = /Age-restricted order/.test(gated) && /21\+/.test(gated) && !/Take payment/.test(gated);
 
-  // check the ID -> payment unlocks
-  await p.getByRole('button',{name:/ID checked/}).click();
+  // type an of-age birthdate -> payment unlocks
+  await p.locator('#dobInput').fill('06/20/1990');
+  await p.getByRole('button',{name:/Verify age/}).click();
   const unlocked = await T();
   const unlockedOk = /Take payment/.test(unlocked) && !/Age-restricted order/.test(unlocked);
   await p.getByRole('button',{name:/Take payment/}).first().click();
